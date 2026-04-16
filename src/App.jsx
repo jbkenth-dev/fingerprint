@@ -1,0 +1,3177 @@
+import React from "react";
+import { createPortal } from "react-dom";
+import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import clsx from "clsx";
+import { Activity, Asterisk, BadgeCheck, BookOpenText, BookUser, CalendarRange, ChevronDown, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, LayoutDashboard, LockKeyhole, LogOut, Moon, ScanLine, ShieldUser, Sun, UserCog, UserRound, Users } from "lucide-react";
+import { panelContent, roleLabels, roles, routeConfig, sampleAttendance } from "./data/mockData";
+import { useMockLoading } from "./hooks/useMockLoading";
+import { useManilaClock } from "./hooks/useManilaClock";
+import { useAuth } from "./state/AuthContext";
+
+const ThemeContext = React.createContext(null);
+
+const navIcons = {
+  "Dashboard & Monitoring": LayoutDashboard,
+  "Class Subject": BookOpenText,
+  "Class Scheduling": CalendarRange,
+  "Smart Card": CreditCard,
+  "Fingerprint Biometric": Fingerprint,
+  Attendance: Activity,
+  Reports: FileBarChart,
+  Account: UserCog,
+};
+
+const API_BASE = "/api";
+const emptyClassSubjectForm = {
+  subjectCode: "",
+  subjectName: "",
+  yearLevel: "",
+  semester: "",
+};
+const yearLevelOrder = {
+  "1st Year": 1,
+  "2nd Year": 2,
+  "3rd Year": 3,
+  "4th Year": 4,
+};
+const semesterOrder = {
+  "1st Sem": 1,
+  "2nd Sem": 2,
+};
+const academicSections = [
+  { yearLevel: "1st Year", semester: "1st Sem", label: "1st Year, 1st Semester" },
+  { yearLevel: "1st Year", semester: "2nd Sem", label: "1st Year, 2nd Semester" },
+  { yearLevel: "2nd Year", semester: "1st Sem", label: "2nd Year, 1st Semester" },
+  { yearLevel: "2nd Year", semester: "2nd Sem", label: "2nd Year, 2nd Semester" },
+  { yearLevel: "3rd Year", semester: "1st Sem", label: "3rd Year, 1st Semester" },
+  { yearLevel: "3rd Year", semester: "2nd Sem", label: "3rd Year, 2nd Semester" },
+  { yearLevel: "4th Year", semester: "1st Sem", label: "4th Year, 1st Semester" },
+  { yearLevel: "4th Year", semester: "2nd Sem", label: "4th Year, 2nd Semester" },
+];
+const sectionOptions = ["A", "B", "C", "D", "E"];
+const yearLevelOptions = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
+const semesterOptions = ["1st Sem", "2nd Sem"];
+const scheduleDayOptions = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const THEME_STORAGE_KEY = "francis-key-theme";
+
+function ThemeProvider({ children }) {
+  const [theme, setTheme] = React.useState(() => {
+    if (typeof window === "undefined") return "dark";
+
+    try {
+      return localStorage.getItem(THEME_STORAGE_KEY) === "light" ? "light" : "dark";
+    } catch {
+      return "dark";
+    }
+  });
+
+  React.useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {}
+  }, [theme]);
+
+  const value = React.useMemo(
+    () => ({
+      theme,
+      toggleTheme: () => setTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark")),
+    }),
+    [theme],
+  );
+
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}
+
+function useTheme() {
+  const context = React.useContext(ThemeContext);
+
+  if (!context) {
+    throw new Error("useTheme must be used within ThemeProvider");
+  }
+
+  return context;
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/signin" element={<SignInPage />} />
+        <Route path="/admin" element={<ProtectedLayout allowedRole="admin" />}>
+          <Route index element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="dashboard" element={<RolePanel pageKey="dashboard" role="admin" />} />
+          <Route path="class-subject" element={<ClassSubjectPage />} />
+          <Route path="class-scheduling" element={<ClassSchedulingPage />} />
+          <Route path="smart-card" element={<RolePanel pageKey="smartCard" role="admin" />} />
+          <Route path="fingerprint-biometric" element={<RolePanel pageKey="biometric" role="admin" />} />
+          <Route path="attendance" element={<RolePanel pageKey="attendance" role="admin" />} />
+          <Route path="reports" element={<RolePanel pageKey="reports" role="admin" />} />
+          <Route path="account" element={<AdminAccountPage />} />
+        </Route>
+        <Route path="/faculty" element={<ProtectedLayout allowedRole="faculty" />}>
+          <Route index element={<Navigate to="/faculty/dashboard" replace />} />
+          <Route path="dashboard" element={<RolePanel pageKey="dashboard" role="faculty" />} />
+          <Route path="smart-card" element={<RolePanel pageKey="smartCard" role="faculty" />} />
+          <Route path="fingerprint-biometric" element={<RolePanel pageKey="biometric" role="faculty" />} />
+          <Route path="attendance" element={<RolePanel pageKey="attendance" role="faculty" />} />
+          <Route path="reports" element={<RolePanel pageKey="reports" role="faculty" />} />
+          <Route path="account" element={<SelfAccountPage role="faculty" />} />
+        </Route>
+        <Route path="/student" element={<ProtectedLayout allowedRole="student" />}>
+          <Route index element={<Navigate to="/student/dashboard" replace />} />
+          <Route path="dashboard" element={<RolePanel pageKey="dashboard" role="student" />} />
+          <Route path="attendance" element={<RolePanel pageKey="attendance" role="student" />} />
+          <Route path="account" element={<SelfAccountPage role="student" />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </ThemeProvider>
+  );
+}
+
+function HomePage() {
+  const { theme, toggleTheme } = useTheme();
+  const { time, date } = useManilaClock();
+
+  return (
+    <main className="theme-shell min-h-dvh">
+      <ThemeBackdrop />
+      <div className="relative flex min-h-dvh items-center justify-center px-4 py-6 sm:px-6 lg:px-8">
+        <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
+          <ThemeToggleButton theme={theme} onToggle={toggleTheme} />
+        </div>
+        <section className="animate-fade-up home-reference-card relative w-full max-w-6xl overflow-visible px-5 pb-8 pt-12 text-center sm:px-8 sm:pb-10 sm:pt-14 lg:px-12 lg:pb-12 lg:pt-16">
+          <div className="home-reference-glow" />
+
+          <div className="home-reference-logo">
+            <img
+              src="/sfcg-logo.jpeg"
+              alt="Saint Francis College logo"
+              className="h-16 w-16 rounded-full object-cover sm:h-18 sm:w-18 lg:h-20 lg:w-20"
+            />
+          </div>
+
+          <div className="relative z-10">
+            <p className="home-reference-title font-display">
+              FRANCIS KEY: SMART CARD &amp; FINGERPRINT-BASED ATTENDANCE SYSTEM
+            </p>
+
+            <p className="home-reference-time font-display">{time}</p>
+            <p className="home-reference-date">{date}</p>
+
+            <NavLink
+              to="/signin"
+              className="home-reference-button mt-5 inline-flex items-center justify-center px-7 py-2 text-sm font-medium sm:mt-6"
+            >
+              Signin
+            </NavLink>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function SignInPage() {
+  const { login, session } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const navigate = useNavigate();
+  const [form, setForm] = React.useState({ identifier: "", password: "", role: "admin" });
+  const [feedback, setFeedback] = React.useState({ message: "", tone: "error" });
+  const [submitting, setSubmitting] = React.useState(false);
+
+  React.useEffect(() => {
+    if (session?.role) navigate(`/${session.role}`, { replace: true });
+  }, [session, navigate]);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setFeedback({ message: "", tone: "error" });
+    if (!form.identifier.trim()) {
+      setFeedback({ message: "Username or email is required.", tone: "error" });
+      return;
+    }
+    if (!form.password.trim()) {
+      setFeedback({ message: "Password is required.", tone: "error" });
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const user = await login(form);
+      navigate(`/${user.role}`, { replace: true });
+    } catch (submissionError) {
+      setFeedback({ message: submissionError.message, tone: "error" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <main className="theme-shell min-h-dvh">
+      <ThemeBackdrop />
+      <div className="signin-screen relative flex min-h-dvh items-center justify-center px-4 py-6 sm:px-6">
+        <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
+          <ThemeToggleButton theme={theme} onToggle={toggleTheme} />
+        </div>
+        <section className="signin-card animate-fade-up w-full max-w-[34rem] rounded-[1.7rem] px-6 pb-7 pt-8 sm:px-8 sm:pb-8 sm:pt-10">
+          <div className="flex justify-center">
+            <img
+              src="/sfcg-logo.jpeg"
+              alt="Saint Francis College logo"
+              className="signin-logo h-18 w-18 rounded-full object-cover sm:h-20 sm:w-20"
+            />
+          </div>
+
+          <h1 className="mt-6 text-center text-[2.15rem] font-semibold text-white sm:text-[2.35rem]">Account Sign In</h1>
+
+          <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+            <Field
+              label="Username or Email"
+              value={form.identifier}
+              onChange={(value) => setForm((prev) => ({ ...prev, identifier: value }))}
+              placeholder="Enter username or email"
+              icon={UserRound}
+              variant="signin"
+            />
+
+            <Field
+              label="Password"
+              value={form.password}
+              onChange={(value) => setForm((prev) => ({ ...prev, password: value }))}
+              placeholder="Enter password"
+              type="password"
+              icon={LockKeyhole}
+              variant="signin"
+            />
+
+            <SelectField
+              label="Role"
+              value={form.role}
+              onChange={(value) => setForm((prev) => ({ ...prev, role: value }))}
+              options={roles.map((role) => ({ label: roleLabels[role], value: role }))}
+              icon={ShieldUser}
+              variant="signin"
+            />
+            <button type="submit" className="signin-submit w-full rounded-full px-5 py-3.5 text-lg font-medium transition" disabled={submitting}>
+              {submitting ? "Signing In..." : "Signin"}
+            </button>
+          </form>
+        </section>
+      </div>
+      <FeedbackModal
+        message={feedback.message}
+        tone={feedback.tone}
+        onClose={() => setFeedback((prev) => ({ ...prev, message: "" }))}
+      />
+    </main>
+  );
+}
+
+function ProtectedLayout({ allowedRole }) {
+  const { session, currentUser, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  if (!session) return <Navigate to="/signin" replace />;
+  if (session.role !== allowedRole) return <Navigate to={`/${session.role}`} replace />;
+
+  return (
+    <div className="theme-shell min-h-dvh">
+      <ThemeBackdrop />
+      <div className="relative grid min-h-dvh gap-0 lg:h-dvh lg:grid-cols-[320px_minmax(0,1fr)] lg:overflow-hidden">
+        <aside className="theme-panel overflow-hidden lg:sticky lg:top-0 lg:h-dvh">
+          <div className="hero-card flex h-full flex-col overflow-y-auto p-5 sm:p-6">
+            <div className="flex items-start justify-between gap-3">
+              <BrandLockup />
+              <ThemeToggleButton theme={theme} onToggle={toggleTheme} compact />
+            </div>
+
+            <div className="mt-6 rounded-[1.6rem] border border-white/8 bg-[rgba(255,255,255,0.03)] p-4">
+              <div className="text-xs uppercase tracking-[0.26em] text-[var(--muted)]">Signed in as</div>
+              <div className="mt-3 text-lg font-semibold text-white">
+                {[currentUser?.firstName, currentUser?.middleName, currentUser?.lastName].filter(Boolean).join(" ")}
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <InfoPill label="Role" value={roleLabels[allowedRole]} />
+                <InfoPill
+                  label="Username"
+                  value={currentUser?.username ?? currentUser?.email?.split("@")[0] ?? "N/A"}
+                />
+              </div>
+            </div>
+
+            <nav className="mt-6 space-y-2">
+              {routeConfig[allowedRole].map((item) => {
+                const Icon = navIcons[item.label];
+
+                return (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    className={({ isActive }) =>
+                      clsx(
+                        "flex items-center gap-3 rounded-[1.2rem] border px-4 py-3 text-sm transition",
+                        isActive || location.pathname === item.path
+                          ? "border-[rgba(102,252,241,0.36)] bg-[rgba(102,252,241,0.12)] text-white"
+                          : "border-transparent bg-transparent text-[var(--muted)] hover:border-white/8 hover:bg-white/5 hover:text-[var(--text)]",
+                      )
+                    }
+                  >
+                    <span className="theme-icon-ring !size-10 rounded-[0.95rem]">
+                      <Icon size={17} />
+                    </span>
+                    <span>{item.label}</span>
+                  </NavLink>
+                );
+              })}
+            </nav>
+
+            <div className="mt-auto pt-6">
+              <button
+                type="button"
+                onClick={() => {
+                  logout();
+                  navigate("/signin", { replace: true });
+                }}
+                className="theme-button-secondary flex w-full items-center justify-center gap-2 rounded-[1.2rem] px-4 py-3 text-sm font-semibold"
+              >
+                <LogOut size={16} />
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </aside>
+
+        <main className="space-y-4 px-3 py-3 sm:px-4 sm:py-4 lg:min-h-0 lg:overflow-y-auto">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function RolePanel({ pageKey, role }) {
+  const loading = useMockLoading(3000, `${role}-${pageKey}`);
+  const data = panelContent[pageKey];
+  const [showUnavailableModal, setShowUnavailableModal] = React.useState(false);
+
+  React.useEffect(() => {
+    setShowUnavailableModal(false);
+  }, [pageKey, role]);
+
+  React.useEffect(() => {
+    if (!loading) {
+      setShowUnavailableModal(true);
+    }
+  }, [loading]);
+
+  if (loading) return <DashboardSkeleton />;
+
+  return (
+    <div className="animate-fade-up space-y-4 relative">
+      {showUnavailableModal ? (
+        <div className="absolute inset-0 z-20 flex items-center justify-center rounded-[1.9rem] bg-[rgba(5,10,18,0.78)] p-4 backdrop-blur-sm">
+          <div className="theme-panel w-full max-w-md rounded-[1.8rem] p-6 text-center shadow-[0_24px_80px_rgba(0,0,0,0.38)]">
+            <div className="mx-auto flex size-14 items-center justify-center rounded-full border border-[rgba(255,107,107,0.35)] bg-[rgba(255,107,107,0.12)] text-[var(--danger)]">
+              <LockKeyhole size={22} />
+            </div>
+            <h2 className="mt-5 text-xl font-semibold text-white">Device Unavailable</h2>
+            <p className="mt-3 text-sm leading-7 text-[var(--muted)]">Sorry, the device is not connected yet.</p>
+          </div>
+        </div>
+      ) : null}
+      <section className="hero-card overflow-hidden rounded-[1.9rem] p-6 sm:p-7">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_320px] xl:items-end">
+          <div>
+            <div className="theme-badge inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs uppercase tracking-[0.24em]">
+              <BadgeCheck size={14} />
+              {roleLabels[role]}
+            </div>
+            <h1 className="mt-5 text-3xl font-semibold tracking-[-0.04em] text-white sm:text-4xl">{data.title}</h1>
+            <p className="mt-4 max-w-3xl text-sm leading-8 text-[var(--muted)] sm:text-base">{data.description}</p>
+          </div>
+
+          <div className="theme-panel rounded-[1.7rem] p-5">
+            <div className="text-xs uppercase tracking-[0.24em] text-[var(--muted)]">Theme Direction</div>
+            <p className="mt-3 text-sm leading-7 text-[var(--muted)]">
+              High-contrast dashboards, brighter calls to action, and a consistent executive shell for admin, faculty,
+              and student views.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {data.metrics.map((metric) => (
+          <article key={metric.label} className="theme-panel rounded-[1.6rem] p-5">
+            <div className="text-[0.72rem] uppercase tracking-[0.24em] text-[var(--muted)]">{metric.label}</div>
+            <div className="mt-3 text-3xl font-semibold text-white">{metric.value}</div>
+            <div className="mt-3 text-sm text-[var(--muted)]">{metric.hint}</div>
+          </article>
+        ))}
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <article className="theme-panel rounded-[1.8rem] p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold text-white">Recent Attendance Feed</h2>
+            <span className="theme-badge rounded-full px-3 py-2 text-[0.65rem] uppercase tracking-[0.24em]">Real-Time</span>
+          </div>
+
+          <div className="mt-5 overflow-hidden rounded-[1.4rem] border border-[var(--line)]">
+            <table className="min-w-full text-left text-sm">
+              <thead className="theme-table-head">
+                <tr>
+                  <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">Role</th>
+                  <th className="px-4 py-3">Method</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sampleAttendance.map((row) => (
+                  <tr key={row.name} className="theme-table-row">
+                    <td className="px-4 py-3 font-medium text-white">{row.name}</td>
+                    <td className="px-4 py-3">{row.role}</td>
+                    <td className="px-4 py-3">{row.method}</td>
+                    <td className="px-4 py-3">
+                      <span className="rounded-full border border-white/8 bg-white/4 px-3 py-1 text-xs">{row.status}</span>
+                    </td>
+                    <td className="px-4 py-3">{row.timestamp}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article className="theme-panel rounded-[1.8rem] p-5">
+          <h2 className="text-xl font-semibold text-white">Operational Notes</h2>
+          <div className="mt-5 space-y-3">
+            {[
+              "The new visual system uses one shared palette so the whole project feels like a single product.",
+              "All key calls to action now use brighter contrast for cleaner focus and clearer user flow.",
+              "Dashboard panels and forms now share matching surfaces, borders, and icon styling.",
+              "Your routing and data behavior stay intact, so the redesign is mostly visual and UX-oriented.",
+            ].map((item) => (
+              <div key={item} className="rounded-[1.4rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4 text-sm leading-7 text-[var(--muted)]">
+                {item}
+              </div>
+            ))}
+          </div>
+        </article>
+      </section>
+    </div>
+  );
+}
+
+function ClassSubjectPage() {
+  const [subjects, setSubjects] = React.useState([]);
+  const [search, setSearch] = React.useState("");
+  const [form, setForm] = React.useState(emptyClassSubjectForm);
+  const [editingId, setEditingId] = React.useState(null);
+  const [isSubjectModalOpen, setIsSubjectModalOpen] = React.useState(false);
+  const [feedback, setFeedback] = React.useState({ message: "", tone: "success" });
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [deletingSubject, setDeletingSubject] = React.useState(null);
+  const [pageError, setPageError] = React.useState("");
+
+  const loadSubjects = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      setPageError("");
+      const response = await fetch(`${API_BASE}/class-subjects.php`);
+      const data = await response.json().catch(() => []);
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load class subjects.");
+      }
+
+      setSubjects(Array.isArray(data) ? data : []);
+    } catch (error) {
+      setPageError(error.message || "Failed to load class subjects.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    loadSubjects();
+  }, [loadSubjects]);
+
+  const resetForm = React.useCallback(() => {
+    setForm(emptyClassSubjectForm);
+    setEditingId(null);
+    setIsSubjectModalOpen(false);
+  }, []);
+
+  const validateClassSubject = React.useCallback(
+    (payload) => {
+      const normalizedCode = payload.subjectCode.trim().toUpperCase();
+      const normalizedName = payload.subjectName.trim().toUpperCase();
+
+      if (!normalizedCode) return "Subject code required";
+      if (!payload.subjectName.trim()) return "Subject name is required";
+      if (!payload.yearLevel) return "Year level is required";
+      if (!payload.semester) return "Semister is required";
+
+      const duplicate = subjects.find(
+        (subject) =>
+          subject.id !== editingId && String(subject.subjectCode ?? "").trim().toUpperCase() === normalizedCode,
+      );
+
+      if (duplicate) return "Subject code already exist";
+
+      const duplicateName = subjects.find(
+        (subject) =>
+          subject.id !== editingId && String(subject.subjectName ?? "").trim().toUpperCase() === normalizedName,
+      );
+
+      if (duplicateName) return "Subject Name already exist";
+      return "";
+    },
+    [editingId, subjects],
+  );
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    const validationError = validateClassSubject(form);
+    if (validationError) {
+      setFeedback({ message: validationError, tone: "error" });
+      return;
+    }
+
+    const payload = {
+      subjectCode: form.subjectCode.trim().toUpperCase(),
+      subjectName: form.subjectName.trim(),
+      yearLevel: form.yearLevel,
+      semester: form.semester,
+    };
+
+    try {
+      setSaving(true);
+      const response = await fetch(`${API_BASE}/class-subjects.php`, {
+        method: editingId ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editingId ? { id: editingId, ...payload } : payload),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || `Failed to ${editingId ? "update" : "add"} subject.`);
+      }
+
+      setSubjects((prev) => {
+        if (editingId) {
+          return prev
+            .map((subject) => (subject.id === data.id ? data : subject))
+            .sort((left, right) => String(left.subjectCode).localeCompare(String(right.subjectCode)));
+        }
+        return [...prev, data].sort((left, right) => String(left.subjectCode).localeCompare(String(right.subjectCode)));
+      });
+      setFeedback({
+        message: editingId ? "Class subject updated successfully." : "Class subject added successfully.",
+        tone: "success",
+      });
+      resetForm();
+    } catch (error) {
+      setFeedback({ message: error.message || "Unable to save class subject.", tone: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEdit = (subject) => {
+    setEditingId(subject.id);
+    setForm({
+      subjectCode: subject.subjectCode ?? "",
+      subjectName: subject.subjectName ?? "",
+      yearLevel: subject.yearLevel ?? "",
+      semester: subject.semester ?? "",
+    });
+    setIsSubjectModalOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deletingSubject) return;
+
+    try {
+      const response = await fetch(`${API_BASE}/class-subjects.php?id=${encodeURIComponent(deletingSubject.id)}`, {
+        method: "DELETE",
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to delete class subject.");
+      }
+
+      setSubjects((prev) => prev.filter((subject) => subject.id !== deletingSubject.id));
+      if (editingId === deletingSubject.id) resetForm();
+      setFeedback({ message: "Class subject deleted successfully.", tone: "success" });
+      setDeletingSubject(null);
+    } catch (error) {
+      setFeedback({ message: error.message || "Failed to delete class subject.", tone: "error" });
+    }
+  };
+
+  const filteredSubjects = React.useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    if (!keyword) return subjects;
+
+    return subjects.filter((subject) => {
+      const haystack = [
+        subject.subjectCode,
+        subject.subjectName,
+        subject.yearLevel,
+        subject.semester,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(keyword);
+    });
+  }, [search, subjects]);
+
+  const sectionedSubjects = React.useMemo(() => {
+    const sortedSubjects = [...filteredSubjects].sort((left, right) => {
+      const yearCompare = (yearLevelOrder[left.yearLevel] ?? Number.MAX_SAFE_INTEGER) - (yearLevelOrder[right.yearLevel] ?? Number.MAX_SAFE_INTEGER);
+      if (yearCompare !== 0) return yearCompare;
+
+      const semesterCompare = (semesterOrder[left.semester] ?? Number.MAX_SAFE_INTEGER) - (semesterOrder[right.semester] ?? Number.MAX_SAFE_INTEGER);
+      if (semesterCompare !== 0) return semesterCompare;
+
+      const codeCompare = String(left.subjectCode ?? "").localeCompare(String(right.subjectCode ?? ""));
+      if (codeCompare !== 0) return codeCompare;
+
+      const nameCompare = String(left.subjectName ?? "").localeCompare(String(right.subjectName ?? ""));
+      if (nameCompare !== 0) return nameCompare;
+
+      return Number(left.id ?? 0) - Number(right.id ?? 0);
+    });
+
+    return academicSections
+      .map((section) => ({
+        ...section,
+        key: `${section.yearLevel}-${section.semester}`,
+        items: sortedSubjects.filter(
+          (subject) => subject.yearLevel === section.yearLevel && subject.semester === section.semester,
+        ),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [filteredSubjects]);
+
+  return (
+    <div className="space-y-4">
+      <HeaderBlock
+        badgeLabel="Class Subject"
+        rightContent={(
+          <div className="grid w-full gap-3 md:grid-cols-[minmax(0,1fr)_190px] md:items-center">
+            <div className="w-full">
+              <Field
+                label="Search Subject"
+                hideLabel
+                value={search}
+                placeholder="Search subject code, name, year level, or semister"
+                onChange={setSearch}
+                small
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setEditingId(null);
+                setForm(emptyClassSubjectForm);
+                setIsSubjectModalOpen(true);
+              }}
+              className="theme-button-secondary inline-flex min-h-[3.5rem] items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold whitespace-nowrap"
+            >
+              Add Subject
+            </button>
+          </div>
+        )}
+      />
+
+      <FeedbackModal
+        message={feedback.message}
+        tone={feedback.tone}
+        onClose={() => setFeedback((prev) => ({ ...prev, message: "" }))}
+      />
+
+      <div className="grid gap-4">
+        <FormCard
+          title="Subject Records"
+        >
+          {pageError ? (
+            <div className="rounded-[1.4rem] border border-[rgba(255,107,107,0.22)] bg-[rgba(255,107,107,0.08)] p-4 text-sm text-[var(--danger)]">
+              {pageError}
+            </div>
+          ) : null}
+
+          <div className="overflow-hidden rounded-[1.4rem] border border-[var(--line)]">
+            <table className="min-w-full text-left text-sm">
+              <thead className="theme-table-head">
+                <tr>
+                  <th className="px-4 py-3">Code</th>
+                  <th className="px-4 py-3">Name</th>
+                  <th className="w-[1%] px-4 py-3 whitespace-nowrap">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr className="theme-table-row">
+                    <td colSpan="3" className="px-4 py-6 text-center text-[var(--muted)]">
+                      Loading class subjects...
+                    </td>
+                  </tr>
+                ) : sectionedSubjects.length ? (
+                  sectionedSubjects.map((section) => (
+                    <React.Fragment key={section.key}>
+                      <tr className="bg-[rgba(102,252,241,0.16)] text-white">
+                        <td colSpan="3" className="px-4 py-2 text-center font-semibold">
+                          {section.label}
+                        </td>
+                      </tr>
+                      {section.items.map((subject) => (
+                        <tr key={subject.id} className="theme-table-row">
+                          <td className="px-4 py-3 font-semibold text-white">{subject.subjectCode}</td>
+                          <td className="px-4 py-3">{subject.subjectName}</td>
+                          <td className="w-[1%] px-4 py-3 whitespace-nowrap">
+                            <div className="inline-flex items-center gap-2 whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => handleEdit(subject)}
+                                className="inline-flex items-center justify-center rounded-xl border border-[rgba(102,252,241,0.2)] bg-[rgba(102,252,241,0.08)] px-3 py-2 text-xs font-semibold text-[var(--brand)]"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeletingSubject(subject)}
+                                className="inline-flex items-center justify-center rounded-xl border border-[rgba(255,107,107,0.22)] bg-[rgba(255,107,107,0.08)] px-3 py-2 text-xs font-semibold text-[var(--danger)]"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  ))
+                ) : (
+                  <tr className="theme-table-row">
+                    <td colSpan="3" className="px-4 py-6 text-center text-[var(--muted)]">
+                      {search.trim() ? "No matching class subjects found." : "No class subjects found yet."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </FormCard>
+      </div>
+
+      {isSubjectModalOpen ? (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+          <div className="w-full max-w-2xl">
+            <FormCard
+              title={editingId ? "Edit Class Subject" : "Add Class Subject"}
+            >
+              <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
+                <Field
+                  label="Subject Code"
+                  value={form.subjectCode}
+                  onChange={(value) => setForm((prev) => ({ ...prev, subjectCode: value }))}
+                  placeholder="Enter subject code"
+                  required
+                />
+                <Field
+                  label="Subject Name"
+                  value={form.subjectName}
+                  onChange={(value) => setForm((prev) => ({ ...prev, subjectName: value }))}
+                  placeholder="Enter subject name"
+                  required
+                />
+                <SelectField
+                  label="Year Level"
+                  value={form.yearLevel}
+                  onChange={(value) => setForm((prev) => ({ ...prev, yearLevel: value }))}
+                  options={[
+                    { label: "Select year level", value: "" },
+                    { label: "1st Year", value: "1st Year" },
+                    { label: "2nd Year", value: "2nd Year" },
+                    { label: "3rd Year", value: "3rd Year" },
+                    { label: "4th Year", value: "4th Year" },
+                  ]}
+                  required
+                />
+                <SelectField
+                  label="Semister"
+                  value={form.semester}
+                  onChange={(value) => setForm((prev) => ({ ...prev, semester: value }))}
+                  options={[
+                    { label: "Select semister", value: "" },
+                    { label: "1st Sem", value: "1st Sem" },
+                    { label: "2nd Sem", value: "2nd Sem" },
+                  ]}
+                  required
+                />
+
+                <div className="flex flex-wrap gap-3 md:col-span-2">
+                  <button type="submit" disabled={saving} className="theme-button rounded-2xl px-5 py-3 font-semibold">
+                    {saving ? (editingId ? "Updating..." : "Saving...") : editingId ? "Update Subject" : "Add Subject"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="theme-button-secondary rounded-2xl px-5 py-3 font-semibold"
+                  >
+                    {editingId ? "Cancel Edit" : "Close"}
+                  </button>
+                </div>
+              </form>
+            </FormCard>
+          </div>
+        </div>
+      ) : null}
+
+      {deletingSubject ? (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+          <div className="w-full max-w-md">
+            <FormCard
+              title="Delete Class Subject"
+              subtitle={`Are you sure you want to delete ${deletingSubject.subjectCode} - ${deletingSubject.subjectName}?`}
+            >
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className="rounded-2xl border border-[rgba(255,107,107,0.24)] bg-[rgba(255,107,107,0.1)] px-5 py-3 font-semibold text-[var(--danger)]"
+                >
+                  Confirm Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeletingSubject(null)}
+                  className="theme-button-secondary rounded-2xl px-5 py-3 font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </FormCard>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ClassSchedulingPage() {
+  const [form, setForm] = React.useState({
+    section: "",
+    yearLevel: "",
+    semester: "",
+    days: [],
+  });
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = React.useState(false);
+  const [editingSchedule, setEditingSchedule] = React.useState(null);
+  const [deletingSchedule, setDeletingSchedule] = React.useState(null);
+  const [subjectEntries, setSubjectEntries] = React.useState([]);
+  const [overlapSubjectIds, setOverlapSubjectIds] = React.useState([]);
+  const [scheduleRows, setScheduleRows] = React.useState([]);
+  const [loadingRows, setLoadingRows] = React.useState(true);
+  const [loadingSubjects, setLoadingSubjects] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [feedback, setFeedback] = React.useState({ message: "", tone: "success" });
+  const [pageError, setPageError] = React.useState("");
+
+  const loadScheduleRows = React.useCallback(async () => {
+    try {
+      setLoadingRows(true);
+      setPageError("");
+      const response = await fetch(`${API_BASE}/class-schedules.php`);
+      const data = await response.json().catch(() => []);
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load class schedules.");
+      }
+
+      setScheduleRows(Array.isArray(data) ? data : []);
+    } catch (error) {
+      setPageError(error.message || "Failed to load class schedules.");
+    } finally {
+      setLoadingRows(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    loadScheduleRows();
+  }, [loadScheduleRows]);
+
+  React.useEffect(() => {
+    if (!form.yearLevel || !form.semester) {
+      setSubjectEntries([]);
+      setOverlapSubjectIds([]);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadSubjects = async () => {
+      try {
+        setLoadingSubjects(true);
+        const params = new URLSearchParams({
+          yearLevel: form.yearLevel,
+          semester: form.semester,
+        });
+        const response = await fetch(`${API_BASE}/class-schedules.php?${params.toString()}`);
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to load subjects for scheduling.");
+        }
+
+        if (!isMounted) return;
+
+        const nextEntries = Array.isArray(data.subjects)
+          ? data.subjects.map((subject) => ({
+              subjectId: subject.id,
+              subjectCode: subject.subjectCode,
+              subjectName: subject.subjectName,
+              startTime:
+                editingSchedule?.yearLevel === form.yearLevel && editingSchedule?.semester === form.semester
+                  ? normalizeTimeInputValue(
+                      editingSchedule.items.find((item) => Number(item.subjectId) === Number(subject.id))?.startTime,
+                    )
+                  : "",
+              endTime:
+                editingSchedule?.yearLevel === form.yearLevel && editingSchedule?.semester === form.semester
+                  ? normalizeTimeInputValue(
+                      editingSchedule.items.find((item) => Number(item.subjectId) === Number(subject.id))?.endTime,
+                    )
+                  : "",
+            }))
+          : [];
+
+        setSubjectEntries(nextEntries);
+        setOverlapSubjectIds([]);
+      } catch (error) {
+        if (!isMounted) return;
+        setSubjectEntries([]);
+        setOverlapSubjectIds([]);
+        setFeedback({ message: error.message || "Failed to load subjects for scheduling.", tone: "error" });
+      } finally {
+        if (isMounted) {
+          setLoadingSubjects(false);
+        }
+      }
+    };
+
+    loadSubjects();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [editingSchedule, form.yearLevel, form.semester]);
+
+  const validateSchedule = React.useCallback(() => {
+    if (!form.section) return "Section is required";
+    if (!form.yearLevel) return "Year level is required";
+    if (!form.semester) return "Semester is required";
+    if (!form.days.length) return "Please select at least one day.";
+    if (!subjectEntries.length) return "No subjects are available for the selected year level and semester.";
+
+    const windows = [];
+    for (const entry of subjectEntries) {
+      if (!entry.startTime || !entry.endTime) return "Start and end times are required";
+
+      const start = parseTimeToMinutes(entry.startTime);
+      const end = parseTimeToMinutes(entry.endTime);
+
+      if (start === null || end === null) return "Start and end times are required";
+      if (end - start < 60) return "Start and end times must be at least 1 hour apart";
+
+      windows.push({
+        subjectId: entry.subjectId,
+        start,
+        end,
+      });
+    }
+
+    windows.sort((left, right) => left.start - right.start);
+    for (let index = 1; index < windows.length; index += 1) {
+      if (windows[index].start < windows[index - 1].end) {
+        setOverlapSubjectIds([windows[index - 1].subjectId, windows[index].subjectId]);
+        return "Schedule times must not overlap.";
+      }
+    }
+
+    setOverlapSubjectIds([]);
+
+    for (const window of windows) {
+      const subjectConflict = scheduleRows.find((row) => {
+        if (Number(row.subjectId) !== Number(window.subjectId)) return false;
+
+        const isSameEditingGroup =
+          editingSchedule &&
+          row.section === editingSchedule.section &&
+          row.yearLevel === editingSchedule.yearLevel &&
+          row.semester === editingSchedule.semester;
+        if (isSameEditingGroup) return false;
+
+        const rowStart = parseTimeToMinutes(normalizeTimeInputValue(row.startTime));
+        const rowEnd = parseTimeToMinutes(normalizeTimeInputValue(row.endTime));
+        if (rowStart === null || rowEnd === null) return false;
+
+        const rowDays = Array.isArray(row.days) ? row.days : [];
+        const sameDay = rowDays.some((day) => form.days.includes(day));
+
+        return sameDay && rowStart < window.end && rowEnd > window.start;
+      });
+
+      if (subjectConflict) {
+        return `This subject is already scheduled for Section ${subjectConflict.section} at this time.`;
+      }
+    }
+
+    const duplicateSectionSchedule = scheduleRows.some(
+      (row) =>
+        row.section === form.section &&
+        row.yearLevel === form.yearLevel &&
+        row.semester === form.semester &&
+        (!editingSchedule ||
+          row.section !== editingSchedule.section ||
+          row.yearLevel !== editingSchedule.yearLevel ||
+          row.semester !== editingSchedule.semester),
+    );
+    if (duplicateSectionSchedule) {
+      return `Section ${form.section} already has a schedule for ${form.yearLevel} (${form.semester}).`;
+    }
+
+    return "";
+  }, [editingSchedule, form, scheduleRows, subjectEntries]);
+
+  const groupedScheduleRows = React.useMemo(() => {
+    const sortedRows = [...scheduleRows].sort((left, right) => {
+      const sectionCompare = String(left.section ?? "").localeCompare(String(right.section ?? ""));
+      if (sectionCompare !== 0) return sectionCompare;
+
+      const yearCompare = (yearLevelOrder[left.yearLevel] ?? Number.MAX_SAFE_INTEGER) - (yearLevelOrder[right.yearLevel] ?? Number.MAX_SAFE_INTEGER);
+      if (yearCompare !== 0) return yearCompare;
+
+      const semesterCompare = (semesterOrder[left.semester] ?? Number.MAX_SAFE_INTEGER) - (semesterOrder[right.semester] ?? Number.MAX_SAFE_INTEGER);
+      if (semesterCompare !== 0) return semesterCompare;
+
+      return String(left.startTime ?? "").localeCompare(String(right.startTime ?? ""));
+    });
+
+    return sortedRows.reduce((groups, row) => {
+      const key = `${row.section}-${row.yearLevel}-${row.semester}`;
+      const existingGroup = groups.find((group) => group.key === key);
+
+      if (existingGroup) {
+        existingGroup.items.push(row);
+      } else {
+        groups.push({
+          key,
+          section: row.section,
+          yearLevel: row.yearLevel,
+          semester: row.semester,
+          days: Array.isArray(row.days) ? row.days : [],
+          label: `Section ${row.section} - ${row.yearLevel} (${row.semester})`,
+          items: [row],
+        });
+      }
+
+      return groups;
+    }, []);
+  }, [scheduleRows]);
+
+  const handleEntryChange = (subjectId, field, value) => {
+    setOverlapSubjectIds((prev) => prev.filter((id) => id !== subjectId));
+    setSubjectEntries((prev) =>
+      prev.map((entry) => (entry.subjectId === subjectId ? { ...entry, [field]: value } : entry)),
+    );
+  };
+
+  const resetScheduleForm = React.useCallback(() => {
+    setForm({ section: "", yearLevel: "", semester: "", days: [] });
+    setSubjectEntries([]);
+    setOverlapSubjectIds([]);
+    setEditingSchedule(null);
+    setIsScheduleModalOpen(false);
+  }, []);
+
+  const handleEditSchedule = (group) => {
+    setEditingSchedule(group);
+    setDeletingSchedule(null);
+    setForm({
+      section: group.section ?? "",
+      yearLevel: group.yearLevel ?? "",
+      semester: group.semester ?? "",
+      days: Array.isArray(group.days) ? group.days : [],
+    });
+    setSubjectEntries([]);
+    setOverlapSubjectIds([]);
+    setIsScheduleModalOpen(true);
+  };
+
+  const handleDeleteSchedule = async () => {
+    if (!deletingSchedule) return;
+
+    try {
+      const params = new URLSearchParams({
+        section: deletingSchedule.section,
+        yearLevel: deletingSchedule.yearLevel,
+        semester: deletingSchedule.semester,
+      });
+      const response = await fetch(`${API_BASE}/class-schedules.php?${params.toString()}`, {
+        method: "DELETE",
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to delete the class schedule.");
+      }
+
+      setScheduleRows(Array.isArray(data.rows) ? data.rows : []);
+      setFeedback({ message: data.message || "Class schedule deleted successfully.", tone: "success" });
+      if (
+        editingSchedule &&
+        editingSchedule.section === deletingSchedule.section &&
+        editingSchedule.yearLevel === deletingSchedule.yearLevel &&
+        editingSchedule.semester === deletingSchedule.semester
+      ) {
+        resetScheduleForm();
+      }
+      setDeletingSchedule(null);
+    } catch (error) {
+      setFeedback({ message: error.message || "Failed to delete the class schedule.", tone: "error" });
+    }
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    const validationError = validateSchedule();
+    if (validationError) {
+      setFeedback({ message: validationError, tone: "error" });
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const response = await fetch(`${API_BASE}/class-schedules.php`, {
+        method: editingSchedule ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(editingSchedule
+            ? {
+                originalSection: editingSchedule.section,
+                originalYearLevel: editingSchedule.yearLevel,
+                originalSemester: editingSchedule.semester,
+              }
+            : {}),
+          section: form.section,
+          yearLevel: form.yearLevel,
+          semester: form.semester,
+          days: form.days,
+          entries: subjectEntries.map((entry) => ({
+            subjectId: entry.subjectId,
+            startTime: normalizeTimeInputValue(entry.startTime),
+            endTime: normalizeTimeInputValue(entry.endTime),
+          })),
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save the class schedule.");
+      }
+
+      setScheduleRows(Array.isArray(data.rows) ? data.rows : []);
+      setFeedback({
+        message: data.message || (editingSchedule ? "Class schedule updated successfully." : "Class schedule saved successfully."),
+        tone: "success",
+      });
+      resetScheduleForm();
+    } catch (error) {
+      setFeedback({
+        message: error.message || (editingSchedule ? "Failed to update the class schedule." : "Failed to save the class schedule."),
+        tone: "error",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <HeaderBlock
+        badgeLabel="Class Scheduling"
+        rightContent={(
+          <button
+            type="button"
+            onClick={() => {
+              setEditingSchedule(null);
+              setDeletingSchedule(null);
+              setForm({ section: "", yearLevel: "", semester: "", days: [] });
+              setSubjectEntries([]);
+              setOverlapSubjectIds([]);
+              setIsScheduleModalOpen(true);
+            }}
+            className="theme-button-secondary inline-flex min-h-[3.5rem] items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold whitespace-nowrap"
+          >
+            Add Schedule
+          </button>
+        )}
+      />
+
+      <FeedbackModal
+        message={feedback.message}
+        tone={feedback.tone}
+        onClose={() => setFeedback((prev) => ({ ...prev, message: "" }))}
+      />
+
+      <div className="grid gap-4">
+        <FormCard title="Schedule Records">
+          {pageError ? (
+            <div className="rounded-[1.4rem] border border-[rgba(255,107,107,0.22)] bg-[rgba(255,107,107,0.08)] p-4 text-sm text-[var(--danger)]">
+              {pageError}
+            </div>
+          ) : null}
+
+          <div className="overflow-hidden rounded-[1.4rem] border border-[var(--line)]">
+            <table className="min-w-full text-left text-sm">
+              <thead className="theme-table-head">
+                <tr>
+                  <th className="px-4 py-3">Code</th>
+                  <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">Days</th>
+                  <th className="px-4 py-3">Time</th>
+                  <th className="w-[1%] px-4 py-3 whitespace-nowrap">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loadingRows ? (
+                  <tr className="theme-table-row">
+                    <td colSpan="5" className="px-4 py-6 text-center text-[var(--muted)]">
+                      Loading class schedules...
+                    </td>
+                  </tr>
+                ) : groupedScheduleRows.length ? (
+                  groupedScheduleRows.map((group) => (
+                    <React.Fragment key={group.key}>
+                      <tr className="bg-[rgba(102,252,241,0.16)] text-white">
+                        <td colSpan="5" className="px-4 py-2">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="text-center font-semibold sm:text-left">{group.label}</div>
+                            <div className="inline-flex items-center justify-center gap-2 sm:justify-end">
+                              <button
+                                type="button"
+                                onClick={() => handleEditSchedule(group)}
+                                className="inline-flex items-center justify-center rounded-xl border border-[rgba(102,252,241,0.2)] bg-[rgba(102,252,241,0.08)] px-3 py-2 text-xs font-semibold text-[var(--brand)]"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeletingSchedule(group)}
+                                className="inline-flex items-center justify-center rounded-xl border border-[rgba(255,107,107,0.22)] bg-[rgba(255,107,107,0.08)] px-3 py-2 text-xs font-semibold text-[var(--danger)]"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                      {group.items.map((row) => (
+                        <tr key={row.id} className="theme-table-row">
+                          <td className="px-4 py-3 font-semibold text-white">{row.subjectCode}</td>
+                          <td className="px-4 py-3">{row.subjectName}</td>
+                          <td className="px-4 py-3">{formatScheduleDays(row.days)}</td>
+                          <td className="px-4 py-3">{formatTimeRange(row.startTime, row.endTime)}</td>
+                          <td className="px-4 py-3" />
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  ))
+                ) : (
+                  <tr className="theme-table-row">
+                    <td colSpan="5" className="px-4 py-6 text-center text-[var(--muted)]">
+                      No class schedules found yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </FormCard>
+      </div>
+
+      {isScheduleModalOpen ? (
+        <div className="fixed inset-0 z-[110] overflow-y-auto bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+          <div className="flex min-h-full items-start justify-center">
+            <div className="w-full max-w-2xl py-4">
+              <FormCard title={editingSchedule ? "Edit Schedule" : "Add Schedule"}>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <SelectField
+                    label="Section"
+                    value={form.section}
+                    onChange={(value) => setForm((prev) => ({ ...prev, section: value }))}
+                    options={[
+                      { label: "Select section", value: "" },
+                      ...sectionOptions.map((section) => ({ label: section, value: section })),
+                    ]}
+                    required
+                  />
+                  <SelectField
+                    label="Year Level"
+                    value={form.yearLevel}
+                    onChange={(value) => setForm((prev) => ({ ...prev, yearLevel: value }))}
+                    options={[
+                      { label: "Select year level", value: "" },
+                      ...yearLevelOptions.map((yearLevel) => ({ label: yearLevel, value: yearLevel })),
+                    ]}
+                    required
+                  />
+                  <SelectField
+                    label="Semister"
+                    value={form.semester}
+                    onChange={(value) => setForm((prev) => ({ ...prev, semester: value }))}
+                    options={[
+                      { label: "Select semister", value: "" },
+                      ...semesterOptions.map((semester) => ({ label: semester, value: semester })),
+                    ]}
+                    required
+                  />
+                  <CheckboxGroup
+                    label="Days"
+                    options={scheduleDayOptions}
+                    values={form.days}
+                    onChange={(nextDays) => setForm((prev) => ({ ...prev, days: nextDays }))}
+                    required
+                  />
+
+                  <div className="rounded-[1.4rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
+                    <div className="text-sm font-semibold text-white">Subject Schedule List</div>
+                    <div className="mt-4 space-y-4">
+                    {loadingSubjects ? (
+                      <div className="text-sm text-[var(--muted)]">Loading subjects...</div>
+                    ) : subjectEntries.length ? (
+                        subjectEntries.map((entry) => {
+                          const hasOverlap = overlapSubjectIds.includes(entry.subjectId);
+
+                          return (
+                          <div
+                            key={entry.subjectId}
+                            className={clsx(
+                              "rounded-[1.2rem] border bg-[rgba(255,255,255,0.02)] p-4 transition",
+                              hasOverlap
+                                ? "border-[rgba(255,107,107,0.55)] bg-[rgba(255,107,107,0.08)] shadow-[0_0_0_1px_rgba(255,107,107,0.2)]"
+                                : "border-[var(--line)]",
+                            )}
+                          >
+                            <div className="text-sm font-semibold text-white">{entry.subjectCode}</div>
+                            <div className="mt-1 text-sm text-[var(--muted)]">{entry.subjectName}</div>
+                            {hasOverlap ? (
+                              <div className="mt-3 text-xs font-medium text-[var(--danger)]">
+                                This schedule overlaps with another subject time.
+                              </div>
+                            ) : null}
+                            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                              <Field
+                                label="Start Time"
+                                type="time"
+                                value={entry.startTime}
+                                onChange={(value) => handleEntryChange(entry.subjectId, "startTime", value)}
+                                invalid={hasOverlap}
+                                required
+                              />
+                              <Field
+                                label="End Time"
+                                type="time"
+                                value={entry.endTime}
+                                onChange={(value) => handleEntryChange(entry.subjectId, "endTime", value)}
+                                invalid={hasOverlap}
+                                required
+                              />
+                            </div>
+                          </div>
+                          );
+                        })
+                      ) : form.yearLevel && form.semester ? (
+                        <div className="text-sm text-[var(--muted)]">No subject found.</div>
+                      ) : (
+                        <div className="text-sm text-[var(--muted)]">
+                          Select a year level and semester to display the available subjects automatically.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <button type="submit" disabled={saving} className="theme-button rounded-2xl px-5 py-3 font-semibold">
+                      {saving ? (editingSchedule ? "Updating..." : "Saving...") : editingSchedule ? "Update Schedule" : "Save Schedule"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetScheduleForm();
+                      }}
+                      className="theme-button-secondary rounded-2xl px-5 py-3 font-semibold"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </FormCard>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deletingSchedule ? (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+          <div className="w-full max-w-2xl">
+            <FormCard
+              title="Delete Class Schedule"
+              subtitle={`Are you sure you want to delete Section ${deletingSchedule.section} - ${deletingSchedule.yearLevel} (${deletingSchedule.semester})?`}
+            >
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={handleDeleteSchedule}
+                  className="rounded-2xl border border-[rgba(255,107,107,0.24)] bg-[rgba(255,107,107,0.1)] px-5 py-3 font-semibold text-[var(--danger)]"
+                >
+                  Confirm Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeletingSchedule(null)}
+                  className="theme-button-secondary rounded-2xl px-5 py-3 font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </FormCard>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AdminAccountPage() {
+  const { currentUser, users, updateOwnAccount, addUser, updateUser, deleteUser } = useAuth();
+  const [feedback, setFeedback] = React.useState({ message: "", tone: "success" });
+  const [search, setSearch] = React.useState("");
+  const [selectedAccountView, setSelectedAccountView] = React.useState("my");
+  const [isAddUserModalOpen, setIsAddUserModalOpen] = React.useState(false);
+  const [viewedFaculty, setViewedFaculty] = React.useState(null);
+  const [facultyEditForm, setFacultyEditForm] = React.useState(null);
+  const [openFacultyActionsMenu, setOpenFacultyActionsMenu] = React.useState(null);
+  const [pendingFacultyAction, setPendingFacultyAction] = React.useState(null);
+  const [facultyPageSize, setFacultyPageSize] = React.useState("10");
+  const [facultyPage, setFacultyPage] = React.useState(1);
+  const [viewedStudent, setViewedStudent] = React.useState(null);
+  const [studentEditForm, setStudentEditForm] = React.useState(null);
+  const [openStudentActionsMenu, setOpenStudentActionsMenu] = React.useState(null);
+  const [pendingStudentAction, setPendingStudentAction] = React.useState(null);
+  const [studentPageSize, setStudentPageSize] = React.useState("10");
+  const [studentPage, setStudentPage] = React.useState(1);
+  const [form, setForm] = React.useState({
+    username: currentUser?.username ?? "",
+    firstName: currentUser?.firstName ?? "",
+    middleName: currentUser?.middleName ?? "",
+    lastName: currentUser?.lastName ?? "",
+    email: currentUser?.email ?? "",
+  });
+  const [passwordForm, setPasswordForm] = React.useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmNewPassword: "",
+  });
+  const [newUser, setNewUser] = React.useState({
+    role: "student",
+    idNumber: "",
+    username: "",
+    firstName: "",
+    middleName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    password: "",
+    confirmPassword: "",
+    department: "",
+  });
+
+  const selectedAccount = React.useMemo(() => {
+    if (selectedAccountView === "my") return currentUser ?? null;
+    return null;
+  }, [currentUser, selectedAccountView, users]);
+
+  const filteredFaculty = React.useMemo(
+    () =>
+      users.filter((user) => {
+        if (user.role !== "faculty") return false;
+        const haystack = `${user.idNumber ?? ""} ${user.firstName} ${user.middleName ?? ""} ${user.lastName} ${user.username ?? ""} ${user.email ?? ""} ${user.status ?? ""}`.toLowerCase();
+        return haystack.includes(search.toLowerCase());
+      }),
+    [search, users],
+  );
+
+  const totalFacultyPages = Math.max(1, Math.ceil(filteredFaculty.length / Number(facultyPageSize)));
+  const paginatedFaculty = React.useMemo(() => {
+    const size = Number(facultyPageSize);
+    const startIndex = (facultyPage - 1) * size;
+    return filteredFaculty.slice(startIndex, startIndex + size);
+  }, [facultyPage, facultyPageSize, filteredFaculty]);
+
+  const filteredStudents = React.useMemo(
+    () =>
+      users.filter((user) => {
+        if (user.role !== "student") return false;
+        const haystack = `${user.idNumber ?? ""} ${user.firstName} ${user.middleName ?? ""} ${user.lastName} ${user.username ?? ""} ${user.email ?? ""} ${user.status ?? ""}`.toLowerCase();
+        return haystack.includes(search.toLowerCase());
+      }),
+    [search, users],
+  );
+
+  const totalStudentPages = Math.max(1, Math.ceil(filteredStudents.length / Number(studentPageSize)));
+  const paginatedStudents = React.useMemo(() => {
+    const size = Number(studentPageSize);
+    const startIndex = (studentPage - 1) * size;
+    return filteredStudents.slice(startIndex, startIndex + size);
+  }, [filteredStudents, studentPage, studentPageSize]);
+
+  const isOwnAccountView = selectedAccountView === "my";
+
+  React.useEffect(() => {
+    if (!currentUser) return;
+    setForm({
+      username: currentUser.username ?? "",
+      firstName: currentUser.firstName ?? "",
+      middleName: currentUser.middleName ?? "",
+      lastName: currentUser.lastName ?? "",
+      email: currentUser.email ?? "",
+    });
+    setPasswordForm({
+      currentPassword: "",
+      newPassword: "",
+      confirmNewPassword: "",
+    });
+  }, [currentUser]);
+
+  React.useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (!(event.target instanceof Element)) return;
+      if (!event.target.closest("[data-faculty-actions-menu]") && !event.target.closest("[data-faculty-actions-trigger]")) {
+        setOpenFacultyActionsMenu(null);
+      }
+      if (!event.target.closest("[data-student-actions-menu]") && !event.target.closest("[data-student-actions-trigger]")) {
+        setOpenStudentActionsMenu(null);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
+
+  React.useEffect(() => {
+    setFacultyPage(1);
+  }, [search, facultyPageSize]);
+
+  React.useEffect(() => {
+    if (facultyPage > totalFacultyPages) {
+      setFacultyPage(totalFacultyPages);
+    }
+  }, [facultyPage, totalFacultyPages]);
+
+  React.useEffect(() => {
+    setStudentPage(1);
+  }, [search, studentPageSize]);
+
+  React.useEffect(() => {
+    if (studentPage > totalStudentPages) {
+      setStudentPage(totalStudentPages);
+    }
+  }, [studentPage, totalStudentPages]);
+
+  React.useEffect(() => {
+    if (!viewedFaculty) {
+      setFacultyEditForm(null);
+      return;
+    }
+
+    setFacultyEditForm({
+      id: viewedFaculty.id,
+      role: viewedFaculty.role ?? "faculty",
+      idNumber: viewedFaculty.idNumber ?? "",
+      department: viewedFaculty.department ?? "",
+      firstName: viewedFaculty.firstName ?? "",
+      middleName: viewedFaculty.middleName ?? "",
+      lastName: viewedFaculty.lastName ?? "",
+      username: viewedFaculty.username ?? "",
+      email: viewedFaculty.email ?? "",
+      phone: viewedFaculty.phone ?? "",
+      password: viewedFaculty.password ?? "",
+      confirmPassword: viewedFaculty.password ?? "",
+      status: viewedFaculty.status ?? "Active",
+    });
+  }, [viewedFaculty]);
+
+  React.useEffect(() => {
+    if (!viewedStudent) {
+      setStudentEditForm(null);
+      return;
+    }
+
+    setStudentEditForm({
+      id: viewedStudent.id,
+      role: viewedStudent.role ?? "student",
+      idNumber: viewedStudent.idNumber ?? "",
+      department: viewedStudent.department ?? "",
+      firstName: viewedStudent.firstName ?? "",
+      middleName: viewedStudent.middleName ?? "",
+      lastName: viewedStudent.lastName ?? "",
+      username: viewedStudent.username ?? "",
+      email: viewedStudent.email ?? "",
+      phone: viewedStudent.phone ?? "",
+      password: viewedStudent.password ?? "",
+      confirmPassword: viewedStudent.password ?? "",
+      status: viewedStudent.status ?? "Active",
+    });
+  }, [viewedStudent]);
+
+  const saveOwnAccount = async (event) => {
+    event.preventDefault();
+    const error = validateAdminOwnAccount(form, users, currentUser);
+    if (error) {
+      setFeedback({ message: error, tone: "error" });
+      return;
+    }
+    await updateOwnAccount({
+      username: form.username,
+      firstName: form.firstName,
+      middleName: form.middleName,
+      lastName: form.lastName,
+      email: form.email,
+    });
+    setFeedback({ message: "Admin profile updated successfully.", tone: "success" });
+  };
+
+  const saveOwnPassword = async (event) => {
+    event.preventDefault();
+    const error = validateAdminPasswordChange(passwordForm, currentUser);
+    if (error) {
+      setFeedback({ message: error, tone: "error" });
+      return;
+    }
+    await updateOwnAccount({
+      password: passwordForm.newPassword,
+    });
+    setPasswordForm({
+      currentPassword: "",
+      newPassword: "",
+      confirmNewPassword: "",
+    });
+    setFeedback({ message: "Admin password updated successfully.", tone: "success" });
+  };
+
+  const submitNewUser = async (event) => {
+    event.preventDefault();
+    const error = validateNewUserAccount(newUser, users);
+    if (error) {
+      setFeedback({ message: error, tone: "error" });
+      return;
+    }
+    try {
+      await addUser({
+        role: newUser.role,
+        status: "Active",
+        idNumber: newUser.idNumber,
+        department: newUser.department,
+        firstName: newUser.firstName,
+        middleName: newUser.middleName,
+        lastName: newUser.lastName,
+        username: newUser.username,
+        email: newUser.email,
+        phone: newUser.phone,
+        password: newUser.password,
+      });
+      setNewUser({
+        role: "student",
+        idNumber: "",
+        username: "",
+        firstName: "",
+        middleName: "",
+        lastName: "",
+        email: "",
+        phone: "",
+        password: "",
+        confirmPassword: "",
+        department: "",
+      });
+      setFeedback({ message: "New user account added.", tone: "success" });
+      setIsAddUserModalOpen(false);
+    } catch (submissionError) {
+      setFeedback({ message: submissionError.message || "Failed to add user.", tone: "error" });
+    }
+  };
+
+  return (
+    <div className="animate-fade-up space-y-4">
+      <HeaderBlock
+        rightContent={(
+          <div className="grid w-full gap-3 md:grid-cols-[minmax(0,1.1fr)_250px_190px] md:items-center">
+            <div className="w-full">
+              <Field
+                label="Search Accounts"
+                hideLabel
+                value={search}
+                placeholder="Search by name, email, or role"
+                onChange={setSearch}
+                small
+              />
+            </div>
+            <div className="w-full">
+              <SelectField
+                label="Display Account"
+                value={selectedAccountView}
+                onChange={setSelectedAccountView}
+                options={[
+                  { label: "My Account", value: "my" },
+                  { label: "Faculty Account", value: "faculty" },
+                  { label: "Student Account", value: "student" },
+                ]}
+                hideLabel
+                small
+              />
+            </div>
+            <button type="button" onClick={() => setIsAddUserModalOpen(true)} className="theme-button-secondary inline-flex min-h-[3.5rem] items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold whitespace-nowrap">
+              Add User Account
+            </button>
+          </div>
+        )}
+      />
+      <FeedbackModal
+        message={feedback.message}
+        tone={feedback.tone}
+        onClose={() => setFeedback((prev) => ({ ...prev, message: "" }))}
+      />
+
+      <section className="grid gap-4">
+        <FormCard
+          title={selectedAccountView === "my" ? "My Account" : selectedAccountView === "faculty" ? "Faculty Account" : "Student Account"}
+          subtitle={
+            selectedAccountView === "faculty" || selectedAccountView === "student"
+              ? ""
+              : isOwnAccountView
+              ? ""
+              : selectedAccount
+                ? `Showing live ${selectedAccount.role} account information from the current user records.`
+                : `No ${selectedAccountView} account record is available yet.`
+          }
+        >
+          {selectedAccountView === "faculty" ? (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm text-[var(--muted)]">
+                  Showing <span className="text-[var(--text)]">{paginatedFaculty.length}</span> of <span className="text-[var(--text)]">{filteredFaculty.length}</span> faculty accounts
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-[var(--muted)]">Rows per page</span>
+                  <div className="w-24">
+                    <SelectField
+                      label="Rows per page"
+                      hideLabel
+                      small
+                      value={facultyPageSize}
+                      onChange={setFacultyPageSize}
+                      options={[
+                        { label: "10", value: "10" },
+                        { label: "20", value: "20" },
+                        { label: "30", value: "30" },
+                      ]}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+              <table className="min-w-full border-separate border-spacing-y-3">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
+                    <th className="px-4 py-2">ID Number</th>
+                    <th className="px-4 py-2">Full Name</th>
+                    <th className="px-4 py-2">Username/Email</th>
+                    <th className="px-4 py-2">Password</th>
+                    <th className="px-4 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedFaculty.length ? (
+                    paginatedFaculty.map((faculty) => (
+                      <tr key={faculty.id} className="rounded-[1.3rem] border border-[var(--line)] bg-[var(--panel-soft)] text-sm text-[var(--text)]">
+                        <td className="rounded-l-[1.3rem] px-4 py-4 align-top">{faculty.idNumber ?? "N/A"}</td>
+                        <td className="px-4 py-4 align-top">
+                          <div className="account-name-cell">
+                            <span>{[faculty.firstName, faculty.middleName, faculty.lastName].filter(Boolean).join(" ")}</span>
+                            <AccountStatusBadge status={faculty.status} />
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 align-top">
+                          <div>{faculty.username ?? "N/A"}</div>
+                          <div className="mt-1 text-xs text-[var(--muted)]">{faculty.email ?? "N/A"}</div>
+                        </td>
+                        <td className="px-4 py-4 align-top">{faculty.password ?? "N/A"}</td>
+                        <td className="rounded-r-[1.3rem] px-4 py-4 align-top">
+                          <div className="inline-block">
+                            <button
+                              type="button"
+                              data-faculty-actions-trigger
+                              onClick={(event) => {
+                                const rect = event.currentTarget.getBoundingClientRect();
+                                setOpenFacultyActionsMenu((prev) =>
+                                  prev?.id === faculty.id
+                                    ? null
+                                    : {
+                                        id: faculty.id,
+                                        top: rect.bottom + 10,
+                                        left: rect.right - 208,
+                                      },
+                                );
+                              }}
+                              className="theme-button-secondary inline-flex min-w-[9.5rem] items-center justify-between gap-3 rounded-xl px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.16em]"
+                            >
+                              <span className="inline-flex items-center gap-2">
+                                <EllipsisVertical size={15} />
+                                Actions
+                              </span>
+                              <ChevronDown
+                                size={15}
+                                className={clsx(
+                                  "transition-transform duration-200",
+                                  openFacultyActionsMenu?.id === faculty.id ? "rotate-180" : "",
+                                )}
+                              />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="rounded-[1.3rem] border border-[var(--line)] bg-[var(--panel-soft)] px-4 py-6 text-center text-sm text-[var(--muted)]">
+                        No faculty accounts match your search.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+              </div>
+
+              <div className="flex flex-col gap-3 border-t border-[var(--line)] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm text-[var(--muted)]">
+                  Page <span className="text-[var(--text)]">{facultyPage}</span> of <span className="text-[var(--text)]">{totalFacultyPages}</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFacultyPage((prev) => Math.max(1, prev - 1))}
+                    disabled={facultyPage === 1}
+                    className="theme-button-secondary rounded-xl px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFacultyPage((prev) => Math.min(totalFacultyPages, prev + 1))}
+                    disabled={facultyPage === totalFacultyPages}
+                    className="theme-button-secondary rounded-xl px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : selectedAccountView === "student" ? (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm text-[var(--muted)]">
+                  Showing <span className="text-[var(--text)]">{paginatedStudents.length}</span> of <span className="text-[var(--text)]">{filteredStudents.length}</span> student accounts
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-[var(--muted)]">Rows per page</span>
+                  <div className="w-24">
+                    <SelectField
+                      label="Rows per page"
+                      hideLabel
+                      small
+                      value={studentPageSize}
+                      onChange={setStudentPageSize}
+                      options={[
+                        { label: "10", value: "10" },
+                        { label: "20", value: "20" },
+                        { label: "30", value: "30" },
+                      ]}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+              <table className="min-w-full border-separate border-spacing-y-3">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
+                    <th className="px-4 py-2">ID Number</th>
+                    <th className="px-4 py-2">Full Name</th>
+                    <th className="px-4 py-2">Username/Email</th>
+                    <th className="px-4 py-2">Password</th>
+                    <th className="px-4 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedStudents.length ? (
+                    paginatedStudents.map((student) => (
+                      <tr key={student.id} className="rounded-[1.3rem] border border-[var(--line)] bg-[var(--panel-soft)] text-sm text-[var(--text)]">
+                        <td className="rounded-l-[1.3rem] px-4 py-4 align-top">{student.idNumber ?? "N/A"}</td>
+                        <td className="px-4 py-4 align-top">
+                          <div className="account-name-cell">
+                            <span>{[student.firstName, student.middleName, student.lastName].filter(Boolean).join(" ")}</span>
+                            <AccountStatusBadge status={student.status} />
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 align-top">
+                          <div>{student.username ?? "N/A"}</div>
+                          <div className="mt-1 text-xs text-[var(--muted)]">{student.email ?? "N/A"}</div>
+                        </td>
+                        <td className="px-4 py-4 align-top">{student.password ?? "N/A"}</td>
+                        <td className="rounded-r-[1.3rem] px-4 py-4 align-top">
+                          <div className="inline-block">
+                            <button
+                              type="button"
+                              data-student-actions-trigger
+                              onClick={(event) => {
+                                const rect = event.currentTarget.getBoundingClientRect();
+                                setOpenStudentActionsMenu((prev) =>
+                                  prev?.id === student.id
+                                    ? null
+                                    : {
+                                        id: student.id,
+                                        top: rect.bottom + 10,
+                                        left: rect.right - 208,
+                                      },
+                                );
+                              }}
+                              className="theme-button-secondary inline-flex min-w-[9.5rem] items-center justify-between gap-3 rounded-xl px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.16em]"
+                            >
+                              <span className="inline-flex items-center gap-2">
+                                <EllipsisVertical size={15} />
+                                Actions
+                              </span>
+                              <ChevronDown
+                                size={15}
+                                className={clsx(
+                                  "transition-transform duration-200",
+                                  openStudentActionsMenu?.id === student.id ? "rotate-180" : "",
+                                )}
+                              />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="rounded-[1.3rem] border border-[var(--line)] bg-[var(--panel-soft)] px-4 py-6 text-center text-sm text-[var(--muted)]">
+                        No student accounts match your search.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+              </div>
+
+              <div className="flex flex-col gap-3 border-t border-[var(--line)] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm text-[var(--muted)]">
+                  Page <span className="text-[var(--text)]">{studentPage}</span> of <span className="text-[var(--text)]">{totalStudentPages}</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setStudentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={studentPage === 1}
+                    className="theme-button-secondary rounded-xl px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStudentPage((prev) => Math.min(totalStudentPages, prev + 1))}
+                    disabled={studentPage === totalStudentPages}
+                    className="theme-button-secondary rounded-xl px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : selectedAccount ? (
+            isOwnAccountView ? (
+              <div className="space-y-4">
+                <form onSubmit={saveOwnAccount} className="grid gap-4 md:grid-cols-2">
+                  <Field label="Username" value={form.username} onChange={(value) => setForm((prev) => ({ ...prev, username: value }))} />
+                  <Field label="First Name" value={form.firstName} onChange={(value) => setForm((prev) => ({ ...prev, firstName: value }))} />
+                  <Field label="Middle Name" value={form.middleName} onChange={(value) => setForm((prev) => ({ ...prev, middleName: value }))} />
+                  <Field label="Last Name" value={form.lastName} onChange={(value) => setForm((prev) => ({ ...prev, lastName: value }))} />
+                  <Field label="Email" type="email" value={form.email} onChange={(value) => setForm((prev) => ({ ...prev, email: value }))} />
+                  <button type="submit" className="theme-button md:col-span-2 justify-self-start rounded-2xl px-5 py-4 font-semibold">
+                    Save Profile
+                  </button>
+                </form>
+
+                <div className="border-t border-[var(--line)] pt-4">
+                  <FormCard
+                    title="Change Password"
+                    subtitle=""
+                  >
+                    <form onSubmit={saveOwnPassword} className="grid gap-4 md:grid-cols-2">
+                      <Field label="Current Password" type="password" allowVisibilityToggle value={passwordForm.currentPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, currentPassword: value }))} />
+                      <Field label="New Password" type="password" allowVisibilityToggle value={passwordForm.newPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, newPassword: value }))} />
+                      <div className="md:col-span-2">
+                        <Field label="Confirm New Password" type="password" allowVisibilityToggle value={passwordForm.confirmNewPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, confirmNewPassword: value }))} />
+                      </div>
+                      <button type="submit" className="theme-button md:col-span-2 justify-self-start rounded-2xl px-5 py-4 font-semibold">
+                        Change Password
+                      </button>
+                    </form>
+                  </FormCard>
+                </div>
+              </div>
+            ) : (
+              <form className="grid gap-4 md:grid-cols-2">
+                <Field label="Username" value={selectedAccount.username ?? ""} onChange={() => {}} disabled />
+                <Field label="First Name" value={selectedAccount.firstName ?? ""} onChange={() => {}} disabled />
+                <Field label="Middle Name" value={selectedAccount.middleName ?? ""} onChange={() => {}} disabled />
+                <Field label="Last Name" value={selectedAccount.lastName ?? ""} onChange={() => {}} disabled />
+                <Field label="Email" type="email" value={selectedAccount.email ?? ""} onChange={() => {}} disabled />
+                <div className="md:col-span-2 grid gap-3 sm:grid-cols-2">
+                  <StatChip label="Role" value={roleLabels[selectedAccount.role] ?? selectedAccount.role} />
+                  <StatChip label="Status" value={selectedAccount.status ?? "Unknown"} />
+                </div>
+                <p className="md:col-span-2 text-sm text-[var(--muted)]">This view is read-only so you can quickly inspect accurate faculty or student account information.</p>
+              </form>
+            )
+          ) : (
+            <div className="rounded-[1.4rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4 text-sm text-[var(--muted)]">
+              No account data is available for the selected view.
+            </div>
+          )}
+        </FormCard>
+
+      </section>
+
+      {isAddUserModalOpen
+        ? createPortal(
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+              <div className="w-full max-w-3xl max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-h-[calc(100dvh-3rem)]">
+                <FormCard title="Add User Account">
+                  <form onSubmit={submitNewUser} className="grid gap-4 md:grid-cols-2">
+                    <SelectField
+                      label="Role"
+                      value={newUser.role}
+                      onChange={(value) => setNewUser((prev) => ({ ...prev, role: value }))}
+                      required
+                      options={[
+                        { label: "Faculty", value: "faculty" },
+                        { label: "Student", value: "student" },
+                      ]}
+                    />
+                    <Field required label="Department / Section" value={newUser.department} onChange={(value) => setNewUser((prev) => ({ ...prev, department: value }))} />
+                    <Field required label="ID Number" value={newUser.idNumber} onChange={(value) => setNewUser((prev) => ({ ...prev, idNumber: value }))} />
+                    <Field required label="First Name" value={newUser.firstName} onChange={(value) => setNewUser((prev) => ({ ...prev, firstName: value }))} />
+                    <Field label="Middle Name" value={newUser.middleName} onChange={(value) => setNewUser((prev) => ({ ...prev, middleName: value }))} />
+                    <Field required label="Last Name" value={newUser.lastName} onChange={(value) => setNewUser((prev) => ({ ...prev, lastName: value }))} />
+                    <Field required label="Username" value={newUser.username} onChange={(value) => setNewUser((prev) => ({ ...prev, username: value }))} />
+                    <Field required label="Email" type="email" value={newUser.email} onChange={(value) => setNewUser((prev) => ({ ...prev, email: value }))} />
+                    <Field required label="Phone" value={newUser.phone} onChange={(value) => setNewUser((prev) => ({ ...prev, phone: value }))} />
+                    <Field required label="Password" type="password" allowVisibilityToggle value={newUser.password} onChange={(value) => setNewUser((prev) => ({ ...prev, password: value }))} />
+                    <Field required label="Confirm Password" type="password" allowVisibilityToggle value={newUser.confirmPassword} onChange={(value) => setNewUser((prev) => ({ ...prev, confirmPassword: value }))} />
+                    <div className="md:col-span-2 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                      <button type="button" onClick={() => setIsAddUserModalOpen(false)} className="rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] px-5 py-4 text-sm font-semibold text-[var(--text)] transition hover:border-[rgba(108,240,255,0.24)]">
+                        Cancel
+                      </button>
+                      <button type="submit" className="theme-button-secondary rounded-2xl px-5 py-4 font-semibold">
+                        Add Account
+                      </button>
+                    </div>
+                  </form>
+                </FormCard>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {openFacultyActionsMenu
+        ? createPortal(
+            <div
+              data-faculty-actions-menu
+              className="fixed z-[115] w-52 origin-top-right rounded-[1.2rem] border border-[var(--line)] bg-[rgba(11,18,27,0.98)] p-2 shadow-[0_20px_50px_rgba(0,0,0,0.32)] animate-fade-up"
+              style={{
+                top: `${Math.max(16, openFacultyActionsMenu.top)}px`,
+                left: `${Math.max(16, openFacultyActionsMenu.left)}px`,
+              }}
+            >
+              {(() => {
+                const activeFaculty = users.find((user) => user.id === openFacultyActionsMenu.id);
+                if (!activeFaculty) return null;
+
+                return (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewedFaculty(activeFaculty);
+                        setOpenFacultyActionsMenu(null);
+                      }}
+                      className="flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-[var(--text)] transition hover:bg-white/5"
+                    >
+                      View/Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setPendingFacultyAction({
+                          type: activeFaculty.status === "Active" ? "deactivate" : "activate",
+                          facultyId: activeFaculty.id,
+                        });
+                        setOpenFacultyActionsMenu(null);
+                      }}
+                      className="mt-1 flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-[var(--text)] transition hover:bg-white/5"
+                    >
+                      {activeFaculty.status === "Active" ? "Deactivate" : "Activate"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setPendingFacultyAction({
+                          type: "delete",
+                          facultyId: activeFaculty.id,
+                        });
+                        setOpenFacultyActionsMenu(null);
+                      }}
+                      className="mt-1 flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-[var(--danger)] transition hover:bg-[rgba(255,107,107,0.08)]"
+                    >
+                      Delete
+                    </button>
+                  </>
+                );
+              })()}
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {openStudentActionsMenu
+        ? createPortal(
+            <div
+              data-student-actions-menu
+              className="fixed z-[115] w-52 origin-top-right rounded-[1.2rem] border border-[var(--line)] bg-[rgba(11,18,27,0.98)] p-2 shadow-[0_20px_50px_rgba(0,0,0,0.32)] animate-fade-up"
+              style={{
+                top: `${Math.max(16, openStudentActionsMenu.top)}px`,
+                left: `${Math.max(16, openStudentActionsMenu.left)}px`,
+              }}
+            >
+              {(() => {
+                const activeStudent = users.find((user) => user.id === openStudentActionsMenu.id);
+                if (!activeStudent) return null;
+
+                return (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewedStudent(activeStudent);
+                        setOpenStudentActionsMenu(null);
+                      }}
+                      className="flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-[var(--text)] transition hover:bg-white/5"
+                    >
+                      View/Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setPendingStudentAction({
+                          type: activeStudent.status === "Active" ? "deactivate" : "activate",
+                          studentId: activeStudent.id,
+                        });
+                        setOpenStudentActionsMenu(null);
+                      }}
+                      className="mt-1 flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-[var(--text)] transition hover:bg-white/5"
+                    >
+                      {activeStudent.status === "Active" ? "Deactivate" : "Activate"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setPendingStudentAction({
+                          type: "delete",
+                          studentId: activeStudent.id,
+                        });
+                        setOpenStudentActionsMenu(null);
+                      }}
+                      className="mt-1 flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-[var(--danger)] transition hover:bg-[rgba(255,107,107,0.08)]"
+                    >
+                      Delete
+                    </button>
+                  </>
+                );
+              })()}
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {pendingFacultyAction
+        ? createPortal(
+            <div className="fixed inset-0 z-[118] flex items-center justify-center bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+              <div className="w-full max-w-md">
+                <FormCard
+                  title={`${pendingFacultyAction.type === "delete" ? "Delete" : pendingFacultyAction.type === "deactivate" ? "Deactivate" : "Activate"} Faculty Account`}
+                  subtitle={(() => {
+                    const targetFaculty = users.find((user) => user.id === pendingFacultyAction.facultyId);
+                    const fullName = targetFaculty ? [targetFaculty.firstName, targetFaculty.lastName].filter(Boolean).join(" ") : "this faculty member";
+                    if (pendingFacultyAction.type === "delete") return `Are you sure you want to delete ${fullName}?`;
+                    if (pendingFacultyAction.type === "deactivate") return `Are you sure you want to deactivate ${fullName}?`;
+                    return `Are you sure you want to activate ${fullName}?`;
+                  })()}
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setPendingFacultyAction(null)}
+                      className="rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] px-5 py-3.5 text-sm font-semibold text-[var(--text)] transition hover:border-[rgba(108,240,255,0.24)]"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const targetFaculty = users.find((user) => user.id === pendingFacultyAction.facultyId);
+                        if (!targetFaculty) {
+                          setPendingFacultyAction(null);
+                          return;
+                        }
+
+                        if (pendingFacultyAction.type === "delete") {
+                          await deleteUser(targetFaculty.id);
+                          if (viewedFaculty?.id === targetFaculty.id) {
+                            setViewedFaculty(null);
+                          }
+                          setFeedback({ message: `${[targetFaculty.firstName, targetFaculty.lastName].filter(Boolean).join(" ")} deleted.`, tone: "success" });
+                        } else {
+                          const updatedFaculty = await updateUser(targetFaculty.id, {
+                            status: pendingFacultyAction.type === "deactivate" ? "Inactive" : "Active",
+                          });
+                          if (viewedFaculty?.id === updatedFaculty.id) {
+                            setViewedFaculty(updatedFaculty);
+                          }
+                          setFeedback({ message: `${[targetFaculty.firstName, targetFaculty.lastName].filter(Boolean).join(" ")} status updated.`, tone: "success" });
+                        }
+
+                        setPendingFacultyAction(null);
+                      }}
+                      className={clsx(
+                        "rounded-2xl px-5 py-3.5 text-sm font-semibold",
+                        pendingFacultyAction.type === "delete"
+                          ? "border border-[rgba(255,107,107,0.22)] bg-[rgba(255,107,107,0.08)] text-[var(--danger)]"
+                          : "theme-button-secondary",
+                      )}
+                    >
+                      Confirm
+                    </button>
+                  </div>
+                </FormCard>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {pendingStudentAction
+        ? createPortal(
+            <div className="fixed inset-0 z-[118] flex items-center justify-center bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+              <div className="w-full max-w-md">
+                <FormCard
+                  title={`${pendingStudentAction.type === "delete" ? "Delete" : pendingStudentAction.type === "deactivate" ? "Deactivate" : "Activate"} Student Account`}
+                  subtitle={(() => {
+                    const targetStudent = users.find((user) => user.id === pendingStudentAction.studentId);
+                    const fullName = targetStudent ? [targetStudent.firstName, targetStudent.lastName].filter(Boolean).join(" ") : "this student";
+                    if (pendingStudentAction.type === "delete") return `Are you sure you want to delete ${fullName}?`;
+                    if (pendingStudentAction.type === "deactivate") return `Are you sure you want to deactivate ${fullName}?`;
+                    return `Are you sure you want to activate ${fullName}?`;
+                  })()}
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setPendingStudentAction(null)}
+                      className="rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] px-5 py-3.5 text-sm font-semibold text-[var(--text)] transition hover:border-[rgba(108,240,255,0.24)]"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const targetStudent = users.find((user) => user.id === pendingStudentAction.studentId);
+                        if (!targetStudent) {
+                          setPendingStudentAction(null);
+                          return;
+                        }
+
+                        if (pendingStudentAction.type === "delete") {
+                          await deleteUser(targetStudent.id);
+                          setFeedback({ message: `${[targetStudent.firstName, targetStudent.lastName].filter(Boolean).join(" ")} deleted.`, tone: "success" });
+                        } else {
+                          await updateUser(targetStudent.id, {
+                            status: pendingStudentAction.type === "deactivate" ? "Inactive" : "Active",
+                          });
+                          setFeedback({ message: `${[targetStudent.firstName, targetStudent.lastName].filter(Boolean).join(" ")} status updated.`, tone: "success" });
+                        }
+
+                        setPendingStudentAction(null);
+                      }}
+                      className={clsx(
+                        "rounded-2xl px-5 py-3.5 text-sm font-semibold",
+                        pendingStudentAction.type === "delete"
+                          ? "border border-[rgba(255,107,107,0.22)] bg-[rgba(255,107,107,0.08)] text-[var(--danger)]"
+                          : "theme-button-secondary",
+                      )}
+                    >
+                      Confirm
+                    </button>
+                  </div>
+                </FormCard>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {viewedFaculty
+        ? createPortal(
+            <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+              <div className="w-full max-w-2xl">
+                <FormCard title="Faculty Account Details">
+                  {facultyEditForm ? (
+                    <form
+                      onSubmit={async (event) => {
+                        event.preventDefault();
+                        const error = validateNewUserAccount(facultyEditForm, users, facultyEditForm.id);
+                        if (error) {
+                          setFeedback({ message: error, tone: "error" });
+                          return;
+                        }
+
+                        try {
+                          const updatedFaculty = await updateUser(facultyEditForm.id, {
+                            role: "faculty",
+                            status: facultyEditForm.status,
+                            idNumber: facultyEditForm.idNumber,
+                            department: facultyEditForm.department,
+                            firstName: facultyEditForm.firstName,
+                            middleName: facultyEditForm.middleName,
+                            lastName: facultyEditForm.lastName,
+                            username: facultyEditForm.username,
+                            email: facultyEditForm.email,
+                            phone: facultyEditForm.phone,
+                            password: facultyEditForm.password,
+                          });
+                          setViewedFaculty(updatedFaculty);
+                          setFeedback({ message: "Faculty account updated successfully.", tone: "success" });
+                        } catch (submissionError) {
+                          setFeedback({ message: submissionError.message || "Failed to update the faculty account.", tone: "error" });
+                        }
+                      }}
+                      className="grid gap-4 md:grid-cols-2"
+                    >
+                      <Field required label="ID Number" value={facultyEditForm.idNumber} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, idNumber: value }))} />
+                      <Field required label="Username" value={facultyEditForm.username} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, username: value }))} />
+                      <Field required label="First Name" value={facultyEditForm.firstName} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, firstName: value }))} />
+                      <Field label="Middle Name" value={facultyEditForm.middleName} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, middleName: value }))} />
+                      <Field required label="Last Name" value={facultyEditForm.lastName} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, lastName: value }))} />
+                      <Field required label="Email" value={facultyEditForm.email} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, email: value }))} />
+                      <Field required label="Phone" value={facultyEditForm.phone} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, phone: value }))} />
+                      <Field required label="Department / Section" value={facultyEditForm.department} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, department: value }))} />
+                      <Field required label="Password" type="password" allowVisibilityToggle value={facultyEditForm.password} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, password: value }))} />
+                      <Field required label="Confirm Password" type="password" allowVisibilityToggle value={facultyEditForm.confirmPassword} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, confirmPassword: value }))} />
+                      <div className="md:col-span-2 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setViewedFaculty(null)}
+                          className="rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] px-5 py-3.5 text-sm font-semibold text-[var(--text)] transition hover:border-[rgba(108,240,255,0.24)]"
+                        >
+                          Cancel
+                        </button>
+                        <button type="submit" className="theme-button rounded-2xl px-5 py-3.5 font-semibold">
+                          Save Changes
+                        </button>
+                      </div>
+                    </form>
+                  ) : null}
+                </FormCard>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {viewedStudent
+        ? createPortal(
+            <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+              <div className="w-full max-w-2xl">
+                <FormCard title="Student Account Details">
+                  {studentEditForm ? (
+                    <form
+                      onSubmit={async (event) => {
+                        event.preventDefault();
+                        const error = validateNewUserAccount(studentEditForm, users, studentEditForm.id);
+                        if (error) {
+                          setFeedback({ message: error, tone: "error" });
+                          return;
+                        }
+
+                        try {
+                          const updatedStudent = await updateUser(studentEditForm.id, {
+                            role: "student",
+                            status: studentEditForm.status,
+                            idNumber: studentEditForm.idNumber,
+                            department: studentEditForm.department,
+                            firstName: studentEditForm.firstName,
+                            middleName: studentEditForm.middleName,
+                            lastName: studentEditForm.lastName,
+                            username: studentEditForm.username,
+                            email: studentEditForm.email,
+                            phone: studentEditForm.phone,
+                            password: studentEditForm.password,
+                          });
+                          setViewedStudent(updatedStudent);
+                          setFeedback({ message: "Student account updated successfully.", tone: "success" });
+                        } catch (submissionError) {
+                          setFeedback({ message: submissionError.message || "Failed to update the student account.", tone: "error" });
+                        }
+                      }}
+                      className="grid gap-4 md:grid-cols-2"
+                    >
+                      <Field required label="ID Number" value={studentEditForm.idNumber} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, idNumber: value }))} />
+                      <Field required label="Username" value={studentEditForm.username} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, username: value }))} />
+                      <Field required label="First Name" value={studentEditForm.firstName} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, firstName: value }))} />
+                      <Field label="Middle Name" value={studentEditForm.middleName} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, middleName: value }))} />
+                      <Field required label="Last Name" value={studentEditForm.lastName} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, lastName: value }))} />
+                      <Field required label="Email" value={studentEditForm.email} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, email: value }))} />
+                      <Field required label="Phone" value={studentEditForm.phone} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, phone: value }))} />
+                      <Field required label="Department / Section" value={studentEditForm.department} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, department: value }))} />
+                      <Field required label="Password" type="password" allowVisibilityToggle value={studentEditForm.password} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, password: value }))} />
+                      <Field required label="Confirm Password" type="password" allowVisibilityToggle value={studentEditForm.confirmPassword} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, confirmPassword: value }))} />
+                      <div className="md:col-span-2 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setViewedStudent(null)}
+                          className="rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] px-5 py-3.5 text-sm font-semibold text-[var(--text)] transition hover:border-[rgba(108,240,255,0.24)]"
+                        >
+                          Cancel
+                        </button>
+                        <button type="submit" className="theme-button rounded-2xl px-5 py-3.5 font-semibold">
+                          Save Changes
+                        </button>
+                      </div>
+                    </form>
+                  ) : null}
+                </FormCard>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </div>
+  );
+}
+
+function SelfAccountPage({ role }) {
+  const { currentUser, users, updateOwnAccount } = useAuth();
+  const [feedback, setFeedback] = React.useState({ message: "", tone: "success" });
+  const usesManagedSelfAccount = role === "faculty" || role === "student";
+  const [form, setForm] = React.useState({
+    ...(usesManagedSelfAccount
+      ? {
+          idNumber: currentUser?.idNumber ?? "",
+          username: currentUser?.username ?? "",
+        }
+      : {}),
+    firstName: currentUser?.firstName ?? "",
+    middleName: currentUser?.middleName ?? "",
+    lastName: currentUser?.lastName ?? "",
+    email: currentUser?.email ?? "",
+    phone: currentUser?.phone ?? "",
+    ...(usesManagedSelfAccount
+      ? {}
+      : {
+          smartCardId: currentUser?.smartCardId ?? "",
+          fingerprintId: currentUser?.fingerprintId ?? "",
+        }),
+    department: currentUser?.department ?? "",
+  });
+  const [passwordForm, setPasswordForm] = React.useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmNewPassword: "",
+  });
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const error = usesManagedSelfAccount ? validateFacultyOwnAccount(form, users, currentUser) : validateAccount(form);
+    if (error) {
+      setFeedback({ message: error, tone: "error" });
+      return;
+    }
+    await updateOwnAccount(form);
+    setFeedback({ message: `${roleLabels[role]} account updated successfully.`, tone: "success" });
+  };
+
+  const handlePasswordSubmit = async (event) => {
+    event.preventDefault();
+    const error = validateAdminPasswordChange(passwordForm, currentUser);
+    if (error) {
+      setFeedback({ message: error, tone: "error" });
+      return;
+    }
+    await updateOwnAccount({
+      password: passwordForm.newPassword,
+    });
+    setPasswordForm({
+      currentPassword: "",
+      newPassword: "",
+      confirmNewPassword: "",
+    });
+    setFeedback({ message: `${roleLabels[role]} password updated successfully.`, tone: "success" });
+  };
+
+  return (
+    <div className="animate-fade-up space-y-4">
+      <HeaderBlock
+        title={usesManagedSelfAccount ? undefined : `${roleLabels[role]} Account`}
+        description={usesManagedSelfAccount ? undefined : "Review and update your own profile details inside the new dark professional interface."}
+      />
+      <FeedbackModal
+        message={feedback.message}
+        tone={feedback.tone}
+        onClose={() => setFeedback((prev) => ({ ...prev, message: "" }))}
+      />
+
+      <FormCard title="Profile Details" subtitle={usesManagedSelfAccount ? undefined : "This form keeps your current validation rules and uses the new project styling."}>
+        <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
+          {usesManagedSelfAccount ? (
+            <Field label="ID Number" value={form.idNumber} onChange={(value) => setForm((prev) => ({ ...prev, idNumber: value }))} disabled />
+          ) : null}
+          <Field label="First Name" value={form.firstName} onChange={(value) => setForm((prev) => ({ ...prev, firstName: value }))} />
+          <Field label="Middle Name" value={form.middleName} onChange={(value) => setForm((prev) => ({ ...prev, middleName: value }))} />
+          <Field label="Last Name" value={form.lastName} onChange={(value) => setForm((prev) => ({ ...prev, lastName: value }))} />
+          {usesManagedSelfAccount ? (
+            <Field label="Username" value={form.username} onChange={(value) => setForm((prev) => ({ ...prev, username: value }))} />
+          ) : null}
+          <Field label="Email" type="email" value={form.email} onChange={(value) => setForm((prev) => ({ ...prev, email: value }))} />
+          <Field label="Phone" value={form.phone} onChange={(value) => setForm((prev) => ({ ...prev, phone: value }))} />
+          {!usesManagedSelfAccount ? (
+            <Field label="Smart Card ID" value={form.smartCardId} onChange={(value) => setForm((prev) => ({ ...prev, smartCardId: value }))} />
+          ) : null}
+          {!usesManagedSelfAccount ? (
+            <Field label="Fingerprint ID" value={form.fingerprintId} onChange={(value) => setForm((prev) => ({ ...prev, fingerprintId: value }))} />
+          ) : null}
+          <div className="md:col-span-2">
+            <Field label="Department / Section" value={form.department} onChange={(value) => setForm((prev) => ({ ...prev, department: value }))} />
+          </div>
+          <button type="submit" className="theme-button md:col-span-2 justify-self-start rounded-2xl px-5 py-4 font-semibold">
+            Update Account
+          </button>
+        </form>
+      </FormCard>
+
+      {usesManagedSelfAccount ? (
+        <FormCard title="Change Password">
+          <form onSubmit={handlePasswordSubmit} className="grid gap-4 md:grid-cols-2">
+            <Field label="Current Password" type="password" allowVisibilityToggle value={passwordForm.currentPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, currentPassword: value }))} />
+            <Field label="New Password" type="password" allowVisibilityToggle value={passwordForm.newPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, newPassword: value }))} />
+            <div className="md:col-span-2">
+              <Field label="Confirm New Password" type="password" allowVisibilityToggle value={passwordForm.confirmNewPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, confirmNewPassword: value }))} />
+            </div>
+            <button type="submit" className="theme-button md:col-span-2 justify-self-start rounded-2xl px-5 py-4 font-semibold">
+              Change Password
+            </button>
+          </form>
+        </FormCard>
+      ) : null}
+    </div>
+  );
+}
+
+function EditableUserCard({ user, onSave, onToggleStatus, onDelete }) {
+  const [draft, setDraft] = React.useState(user);
+
+  React.useEffect(() => setDraft(user), [user]);
+
+  return (
+    <article className="rounded-[1.6rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="theme-icon-ring">
+            <Users size={18} />
+          </span>
+          <div>
+            <div className="font-semibold text-white">
+              {[user.firstName, user.middleName, user.lastName].filter(Boolean).join(" ")}
+            </div>
+            <div className="text-xs text-[var(--muted)]">
+              {roleLabels[user.role]} | {user.status}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={onToggleStatus} className="theme-button-secondary rounded-xl px-3 py-2 text-xs font-semibold">
+            {user.status === "Active" ? "Deactivate" : "Activate"}
+          </button>
+          <button type="button" onClick={onDelete} className="rounded-xl border border-[rgba(255,107,107,0.22)] bg-[rgba(255,107,107,0.08)] px-3 py-2 text-xs font-semibold text-[var(--danger)]">
+            Delete
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <Field small label="First Name" value={draft.firstName} onChange={(value) => setDraft((prev) => ({ ...prev, firstName: value }))} />
+        <Field small label="Middle Name" value={draft.middleName ?? ""} onChange={(value) => setDraft((prev) => ({ ...prev, middleName: value }))} />
+        <Field small label="Last Name" value={draft.lastName} onChange={(value) => setDraft((prev) => ({ ...prev, lastName: value }))} />
+        <Field small label="Email" value={draft.email} onChange={(value) => setDraft((prev) => ({ ...prev, email: value }))} />
+        <Field small label="Phone" value={draft.phone} onChange={(value) => setDraft((prev) => ({ ...prev, phone: value }))} />
+        <Field small label="Smart Card ID" value={draft.smartCardId} onChange={(value) => setDraft((prev) => ({ ...prev, smartCardId: value }))} />
+        <Field small label="Fingerprint ID" value={draft.fingerprintId} onChange={(value) => setDraft((prev) => ({ ...prev, fingerprintId: value }))} />
+        <Field small label="Department" value={draft.department} onChange={(value) => setDraft((prev) => ({ ...prev, department: value }))} />
+        <SelectField
+          small
+          label="Role"
+          value={draft.role}
+          onChange={(value) => setDraft((prev) => ({ ...prev, role: value }))}
+          options={[
+            { label: "Faculty", value: "faculty" },
+            { label: "Student", value: "student" },
+          ]}
+        />
+      </div>
+
+      <button type="button" onClick={() => onSave(draft)} className="theme-button mt-4 rounded-xl px-4 py-3 text-sm font-semibold">
+        Update User
+      </button>
+    </article>
+  );
+}
+
+function parseTimeToMinutes(value) {
+  const normalizedValue = normalizeTimeInputValue(value);
+  if (!normalizedValue || !/^\d{2}:\d{2}$/.test(normalizedValue)) return null;
+  const [hours, minutes] = normalizedValue.split(":").map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+  return (hours * 60) + minutes;
+}
+
+function normalizeTimeInputValue(value) {
+  if (!value) return "";
+  const normalizedValue = String(value).trim();
+  if (/^\d{2}:\d{2}:\d{2}$/.test(normalizedValue)) {
+    return normalizedValue.slice(0, 5);
+  }
+  return /^\d{2}:\d{2}$/.test(normalizedValue) ? normalizedValue : normalizedValue.slice(0, 5);
+}
+
+function formatTimeRange(startTime, endTime) {
+  const formatValue = (value) => {
+    if (!value || !/^\d{2}:\d{2}/.test(value)) return value || "N/A";
+    const [hoursText, minutesText] = value.slice(0, 5).split(":");
+    const hours = Number(hoursText);
+    const suffix = hours >= 12 ? "PM" : "AM";
+    const normalizedHours = hours % 12 || 12;
+    return `${normalizedHours}:${minutesText} ${suffix}`;
+  };
+
+  return `${formatValue(startTime)} - ${formatValue(endTime)}`;
+}
+
+function formatScheduleDays(days) {
+  if (!Array.isArray(days) || !days.length) return "No days selected";
+  const dayCodes = {
+    Monday: "M",
+    Tuesday: "T",
+    Wednesday: "W",
+    Thursday: "TH",
+    Friday: "F",
+    Saturday: "S",
+  };
+
+  return days
+    .map((day) => dayCodes[day] ?? day)
+    .join("-");
+}
+
+function HeroClockCard({ time, date, timezone }) {
+  return (
+    <div className="theme-panel rounded-[1.8rem] p-5 sm:p-6">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.28em] text-[var(--muted)]">Live Manila Time</p>
+          <p className="mt-2 text-sm text-[var(--muted)]">{timezone}</p>
+        </div>
+        <div className="animate-pulse-soft flex items-center gap-2 rounded-full border border-[rgba(102,252,241,0.24)] bg-[rgba(102,252,241,0.08)] px-3 py-2 text-xs text-[var(--brand)]">
+          <span className="size-2 rounded-full bg-[var(--brand)]" />
+          Online
+        </div>
+      </div>
+      <div className="mt-8 text-4xl font-semibold tracking-[-0.04em] text-white sm:text-5xl">{time}</div>
+      <div className="mt-3 text-base text-[var(--muted)]">{date}</div>
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <StatChip label="Mode" value="Dual Verification" />
+        <StatChip label="Status" value="Monitoring Active" />
+      </div>
+    </div>
+  );
+}
+
+function HeroClockSkeleton() {
+  return (
+    <div className="theme-panel rounded-[1.8rem] p-5 sm:p-6">
+      <div className="skeleton h-5 w-32 rounded-full" />
+      <div className="skeleton mt-6 h-16 w-full rounded-2xl" />
+      <div className="skeleton mt-4 h-6 w-2/3 rounded-full" />
+      <div className="mt-8 grid gap-4 sm:grid-cols-2">
+        <div className="skeleton h-22 rounded-3xl" />
+        <div className="skeleton h-22 rounded-3xl" />
+      </div>
+    </div>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="hero-card rounded-[1.9rem] p-6">
+        <div className="skeleton h-4 w-28 rounded-full" />
+        <div className="skeleton mt-5 h-10 w-2/3 rounded-2xl" />
+        <div className="skeleton mt-3 h-18 w-full rounded-2xl" />
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index} className="theme-panel rounded-[1.7rem] p-5">
+            <div className="skeleton h-4 w-28 rounded-full" />
+            <div className="skeleton mt-4 h-10 w-24 rounded-2xl" />
+            <div className="skeleton mt-4 h-4 w-36 rounded-full" />
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="theme-panel h-80 rounded-[1.8rem] skeleton" />
+        <div className="theme-panel h-80 rounded-[1.8rem] skeleton" />
+      </div>
+    </div>
+  );
+}
+
+function ThemeBackdrop() {
+  return (
+    <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
+      <div className="theme-backdrop-base absolute inset-0" />
+      <div className="texture-overlay absolute inset-0 opacity-60" />
+      <div className="theme-backdrop-sheen absolute inset-0" />
+      <div className="theme-backdrop-orb theme-backdrop-orb-left absolute -left-20 top-8 h-80 w-80 rounded-full blur-3xl" />
+      <div className="theme-backdrop-orb theme-backdrop-orb-right absolute right-[-6rem] top-16 h-[28rem] w-[28rem] rounded-full blur-3xl" />
+      <div className="theme-backdrop-orb theme-backdrop-orb-bottom absolute bottom-[-8rem] left-1/3 h-80 w-80 rounded-full blur-3xl" />
+    </div>
+  );
+}
+
+function ThemeToggleButton({ theme, onToggle, compact = false }) {
+  const isLight = theme === "light";
+  const Icon = isLight ? Moon : Sun;
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={clsx(
+        "theme-toggle group inline-flex items-center justify-center gap-2 rounded-full transition",
+        compact ? "h-11 min-w-11 px-3" : "h-11 min-w-11 px-4",
+      )}
+      aria-label={isLight ? "Switch to dark mode" : "Switch to light mode"}
+      title={isLight ? "Dark mode" : "Light mode"}
+    >
+      <Icon size={18} />
+      {!compact ? <span className="text-sm font-medium">{isLight ? "Dark" : "Light"}</span> : null}
+    </button>
+  );
+}
+
+function BrandLockup({ caption }) {
+  return (
+    <div className="flex items-center gap-3">
+      <BrandMark />
+      <div>
+        <div className="font-display text-2xl leading-none text-white">FRANCIS KEY</div>
+        {caption ? <div className="mt-1 text-[0.68rem] uppercase tracking-[0.28em] text-[var(--muted)]">{caption}</div> : null}
+      </div>
+    </div>
+  );
+}
+
+function BrandMark({ compact = false }) {
+  return (
+    <span
+      className={clsx(
+        "relative inline-flex items-center justify-center overflow-hidden rounded-[1.4rem] border border-[rgba(102,252,241,0.35)] bg-[linear-gradient(145deg,rgba(102,252,241,0.22),rgba(69,162,158,0.08)_52%,rgba(11,12,16,0.42)_100%)] shadow-[0_20px_40px_rgba(0,0,0,0.28)]",
+        compact ? "size-12 rounded-[1rem]" : "size-14",
+      )}
+    >
+      <span className="absolute inset-[3px] rounded-[1.2rem] border border-white/8" />
+      <img
+        src="/sfcg-logo.jpeg"
+        alt="Saint Francis College logo"
+        className={clsx("relative z-10 rounded-[1rem] object-cover", compact ? "h-8 w-8" : "h-10 w-10")}
+      />
+      <span className="absolute right-2 top-2 size-1.5 rounded-full bg-[var(--brand)] shadow-[0_0_12px_var(--brand)]" />
+    </span>
+  );
+}
+
+function HeaderBlock({ title, description, rightContent = null, badgeLabel = "Account Management" }) {
+  return (
+    <section className="hero-card rounded-[1.9rem] p-6 sm:p-7">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="theme-badge inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs uppercase tracking-[0.22em]">
+            <BookUser size={14} />
+            {badgeLabel}
+          </div>
+          {title ? <h1 className="mt-4 text-2xl font-semibold text-white sm:text-[2rem]">{title}</h1> : null}
+          {description ? <p className="mt-2 max-w-3xl text-sm leading-7 text-[var(--muted)]">{description}</p> : null}
+        </div>
+        {rightContent ? <div className="w-full lg:w-auto">{rightContent}</div> : null}
+      </div>
+    </section>
+  );
+}
+
+function FormCard({ title, subtitle, children }) {
+  return (
+    <section className="theme-panel rounded-[1.8rem] p-5">
+      <h2 className="text-xl font-semibold text-white">{title}</h2>
+      {subtitle ? <p className="mt-2 text-sm text-[var(--muted)]">{subtitle}</p> : null}
+      <div className="mt-5">{children}</div>
+    </section>
+  );
+}
+
+function Field({ label, value, onChange, placeholder, type = "text", hideLabel = false, small = false, icon: Icon, variant = "default", disabled = false, required = false, allowVisibilityToggle = false, invalid = false }) {
+  const isSignin = variant === "signin";
+  const [showValue, setShowValue] = React.useState(false);
+  const isPasswordField = type === "password";
+  const resolvedType = isPasswordField && allowVisibilityToggle ? (showValue ? "text" : "password") : type;
+
+  return (
+    <label className="block">
+      {!hideLabel ? (
+        <span className={clsx("mb-2 flex items-center gap-2 font-medium text-[var(--text)]", small ? "text-xs" : "text-sm")}>
+          <span>{label}</span>
+          {required ? <Asterisk size={12} className="text-[var(--brand)]" /> : null}
+        </span>
+      ) : null}
+      <span className="relative block">
+        {Icon ? (
+          <span className={clsx("pointer-events-none absolute top-1/2 -translate-y-1/2", isSignin ? "left-3 text-[rgba(187,211,214,0.6)]" : "left-4 text-[var(--muted)]")}>
+            <Icon size={isSignin ? 18 : 17} />
+          </span>
+        ) : null}
+        <input
+          type={resolvedType}
+          value={value}
+          placeholder={placeholder}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          className={clsx(
+            "theme-input w-full outline-none transition",
+            isSignin
+              ? "signin-input rounded-none px-0 pb-0 pt-0 text-base"
+              : small
+                ? "rounded-2xl px-3 py-3 text-sm"
+                : "rounded-2xl px-4 py-4 text-sm",
+            Icon && isSignin ? "pl-11 pr-3" : "",
+            Icon && !isSignin ? "pl-12" : "",
+            allowVisibilityToggle ? "pr-12" : "",
+            invalid ? "border-[rgba(255,107,107,0.55)] bg-[rgba(255,107,107,0.08)] text-white focus:border-[rgba(255,107,107,0.7)] focus:shadow-[0_0_0_1px_rgba(255,107,107,0.24)]" : "",
+            disabled ? "cursor-not-allowed opacity-70" : "",
+          )}
+        />
+        {allowVisibilityToggle ? (
+          <button
+            type="button"
+            onClick={() => setShowValue((prev) => !prev)}
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--muted)] transition hover:text-[var(--text)]"
+          >
+            {showValue ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+        ) : null}
+      </span>
+    </label>
+  );
+}
+
+function SelectField({ label, value, onChange, options, small = false, icon: Icon, variant = "default", hideLabel = false, required = false }) {
+  const isSignin = variant === "signin";
+
+  return (
+    <label className="block">
+      {!hideLabel ? (
+        <span className={clsx("mb-2 flex items-center gap-2 font-medium text-[var(--text)]", small ? "text-xs" : "text-sm")}>
+          <span>{label}</span>
+          {required ? <Asterisk size={12} className="text-[var(--brand)]" /> : null}
+        </span>
+      ) : null}
+      <span className="relative block">
+        {Icon ? (
+          <span className={clsx("pointer-events-none absolute top-1/2 -translate-y-1/2", isSignin ? "left-3 text-[rgba(187,211,214,0.6)]" : "left-4 text-[var(--muted)]")}>
+            <Icon size={isSignin ? 18 : 17} />
+          </span>
+        ) : null}
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className={clsx(
+            "theme-input w-full appearance-none outline-none",
+            isSignin
+              ? "signin-input rounded-none px-0 pb-0 pt-0 text-base"
+              : small
+                ? "rounded-2xl px-3 py-3 text-sm"
+                : "rounded-2xl px-4 py-4 text-sm",
+            Icon && isSignin ? "pl-11" : "",
+            Icon && !isSignin ? "pl-12 pr-10" : "",
+            !Icon && !isSignin ? "pr-10" : "",
+            isSignin ? "pr-10" : "",
+          )}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <span className={clsx("pointer-events-none absolute top-1/2 -translate-y-1/2", isSignin ? "right-3 text-[rgba(206,224,226,0.8)]" : "right-4 text-[var(--muted)]")}>
+          <ChevronDown size={16} />
+        </span>
+      </span>
+    </label>
+  );
+}
+
+function CheckboxGroup({ label, options, values, onChange, required = false }) {
+  const selectedValues = Array.isArray(values) ? values : [];
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+        <span>{label}</span>
+        {required ? <Asterisk size={12} className="text-[var(--brand)]" /> : null}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {options.map((option) => {
+          const checked = selectedValues.includes(option);
+
+          return (
+            <label
+              key={option}
+              className={clsx(
+                "flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 text-sm transition",
+                checked
+                  ? "border-[rgba(102,252,241,0.34)] bg-[rgba(102,252,241,0.08)] text-white"
+                  : "border-[var(--line)] bg-[var(--panel-soft)] text-[var(--muted)]",
+              )}
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() =>
+                  onChange(
+                    checked ? selectedValues.filter((value) => value !== option) : [...selectedValues, option],
+                  )
+                }
+                className="h-4 w-4 rounded border-[var(--line)] bg-transparent accent-[var(--brand)]"
+              />
+              <span>{option}</span>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function StatChip({ label, value }) {
+  return (
+    <div className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
+      <div className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">{label}</div>
+      <div className="mt-2 text-lg font-semibold text-white">{value}</div>
+    </div>
+  );
+}
+
+function AccountStatusBadge({ status = "Inactive" }) {
+  const isActive = String(status).toLowerCase() === "active";
+
+  return (
+    <span className={clsx("account-status-badge", isActive ? "is-active" : "is-inactive")}>
+      <span className="account-status-dot" aria-hidden />
+      <span>{isActive ? "Active" : "Inactive"}</span>
+    </span>
+  );
+}
+
+function InfoPill({ label, value }) {
+  return (
+    <div className="rounded-full border border-[var(--line)] bg-[var(--panel-soft)] px-3 py-2 text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
+      {label}: <span className="text-[var(--text)]">{value}</span>
+    </div>
+  );
+}
+
+function FeedbackModal({ message, tone = "success", onClose }) {
+  if (!message) return null;
+
+  const isError = tone === "error";
+
+  return createPortal(
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+      <div className="theme-panel w-full max-w-md rounded-[1.8rem] p-6 text-center shadow-[0_24px_80px_rgba(0,0,0,0.38)]">
+        <div
+          className={clsx(
+            "mx-auto flex size-14 items-center justify-center rounded-full border",
+            isError
+              ? "border-[rgba(255,107,107,0.35)] bg-[rgba(255,107,107,0.12)] text-[var(--danger)]"
+              : "border-[rgba(102,252,241,0.28)] bg-[rgba(102,252,241,0.12)] text-[var(--brand)]",
+          )}
+        >
+          {isError ? <LockKeyhole size={22} /> : <BadgeCheck size={24} />}
+        </div>
+        <h2 className="mt-5 text-xl font-semibold text-white">{isError ? "Error" : "Success"}</h2>
+        <p className="mt-3 text-sm leading-7 text-[var(--muted)]">{message}</p>
+        <button type="button" onClick={onClose} className="theme-button mt-6 w-full rounded-2xl px-5 py-3.5 font-semibold">
+          OK
+        </button>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function validateAccount(payload) {
+  if (!payload.firstName?.trim() || !payload.lastName?.trim()) return "First name and last name are required.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email ?? "")) return "A valid email address is required.";
+  if (!/^\d{11}$/.test(payload.phone ?? "")) return "Phone number must be 11 digits.";
+  if (Object.prototype.hasOwnProperty.call(payload, "smartCardId") || Object.prototype.hasOwnProperty.call(payload, "fingerprintId")) {
+    if (!payload.smartCardId?.trim() || !payload.fingerprintId?.trim()) return "Smart Card ID and Fingerprint ID are required.";
+  }
+  if (!payload.department?.trim()) return "Department or section is required.";
+  return "";
+}
+
+function validateAdminOwnAccount(payload, users = [], currentUser = null) {
+  const normalizedUsername = payload.username?.trim().toLowerCase();
+  const normalizedEmail = payload.email?.trim().toLowerCase();
+  const comparableUsers = users.filter((user) => user.id !== currentUser?.id);
+
+  if (!payload.firstName?.trim() || !payload.lastName?.trim()) return "First name and last name are required.";
+  if (!payload.username?.trim()) return "Username is required.";
+  if (payload.username.trim().length < 6) return "Username must be at least 6 characters long.";
+  if (comparableUsers.some((user) => String(user.username ?? "").trim().toLowerCase() === normalizedUsername)) return "Username already exists.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email ?? "")) return "A valid email address is required.";
+  if (comparableUsers.some((user) => String(user.email ?? "").trim().toLowerCase() === normalizedEmail)) return "Email address already exists.";
+  return "";
+}
+
+function validateFacultyOwnAccount(payload, users = [], currentUser = null) {
+  const normalizedIdNumber = payload.idNumber?.trim().toLowerCase();
+  const normalizedUsername = payload.username?.trim().toLowerCase();
+  const normalizedEmail = payload.email?.trim().toLowerCase();
+  const normalizedPhone = payload.phone?.trim();
+  const comparableUsers = users.filter((user) => user.id !== currentUser?.id);
+
+  if (!payload.idNumber?.trim()) return "ID number is required.";
+  if (payload.idNumber.trim().length < 6) return "ID number must be at least 6 characters long.";
+  if (comparableUsers.some((user) => String(user.idNumber ?? "").trim().toLowerCase() === normalizedIdNumber)) return "ID number already exists.";
+  if (!payload.firstName?.trim() || !payload.lastName?.trim()) return "First name and last name are required.";
+  if (!payload.username?.trim()) return "Username is required.";
+  if (payload.username.trim().length < 6) return "Username must be at least 6 characters long.";
+  if (comparableUsers.some((user) => String(user.username ?? "").trim().toLowerCase() === normalizedUsername)) return "Username already exists.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email ?? "")) return "A valid email address is required.";
+  if (comparableUsers.some((user) => String(user.email ?? "").trim().toLowerCase() === normalizedEmail)) return "Email address already exists.";
+  if (!/^09\d{9}$/.test(payload.phone ?? "")) return "Phone number must start with 09 and be exactly 11 digits long.";
+  if (comparableUsers.some((user) => String(user.phone ?? "").trim() === normalizedPhone)) return "Phone number already exists.";
+  if (!payload.department?.trim()) return "Department or section is required.";
+  return "";
+}
+
+function validateAdminPasswordChange(payload, currentUser = null) {
+  if (payload.currentPassword !== (currentUser?.password ?? "")) return "Invalid current password.";
+  if ((payload.newPassword ?? "").trim().length < 6) return "Password must be at least 6 characters long.";
+  if (payload.currentPassword === payload.newPassword) return "The current password and new password must not be the same.";
+  if (payload.newPassword !== payload.confirmNewPassword) return "The new password and confirm new password do not match.";
+  return "";
+}
+
+function validateNewUserAccount(payload, users = [], excludedUserId = null) {
+  const hasNumber = /\d/;
+  const normalizedIdNumber = payload.idNumber?.trim().toLowerCase();
+  const normalizedUsername = payload.username?.trim().toLowerCase();
+  const normalizedEmail = payload.email?.trim().toLowerCase();
+  const normalizedPhone = payload.phone?.trim();
+  const comparableUsers = users.filter((user) => user.id !== excludedUserId);
+
+  if (!payload.role?.trim()) return "Role is required.";
+  if (!payload.idNumber?.trim()) return "ID number is required.";
+  if (payload.idNumber.trim().length < 6) return "ID number must be at least 6 characters long.";
+  if (comparableUsers.some((user) => String(user.idNumber ?? "").trim().toLowerCase() === normalizedIdNumber)) return "ID number already exists.";
+  if (!payload.department?.trim()) return "Department / Section is required.";
+  if (payload.department.trim().length < 6) return "Department / Section must be at least 6 characters long.";
+  if (!payload.firstName?.trim()) return "First name is required.";
+  if (hasNumber.test(payload.firstName)) return "First name must not contain numbers.";
+  if (payload.middleName?.trim() && hasNumber.test(payload.middleName)) return "Middle name must not contain numbers.";
+  if (!payload.lastName?.trim()) return "Last name is required.";
+  if (hasNumber.test(payload.lastName)) return "Last name must not contain numbers.";
+  if (!payload.username?.trim()) return "Username is required.";
+  if (payload.username.trim().length < 6) return "Username must be at least 6 characters long.";
+  if (comparableUsers.some((user) => String(user.username ?? "").trim().toLowerCase() === normalizedUsername)) return "Username already exists.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email ?? "")) return "A valid email address is required.";
+  if (comparableUsers.some((user) => String(user.email ?? "").trim().toLowerCase() === normalizedEmail)) return "Email address already exists.";
+  if (!/^09\d{9}$/.test(payload.phone ?? "")) return "Phone number must start with 09 and be exactly 11 digits long.";
+  if (comparableUsers.some((user) => String(user.phone ?? "").trim() === normalizedPhone)) return "Phone number already exists.";
+  if (!payload.password?.trim()) return "Password is required.";
+  if (payload.password.trim().length < 6) return "Password must be at least 6 characters long.";
+  if (!payload.confirmPassword?.trim()) return "Confirm password is required.";
+  if (payload.confirmPassword.trim().length < 6) return "Confirm password must be at least 6 characters long.";
+  if (payload.password !== payload.confirmPassword) return "Password and confirm password must match.";
+  return "";
+}
