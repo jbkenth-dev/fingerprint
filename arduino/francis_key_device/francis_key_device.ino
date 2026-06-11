@@ -85,7 +85,13 @@ String attendanceFingerprintId;
 String attendanceRfidUid;
 uint32_t attendanceRfidStartedAt = 0;
 
-uint32_t lastHomeDrawAt = 0;
+bool homeScreenVisible = false;
+String lastHomeDateText;
+String lastHomeTimeText;
+String lastHomeDayText;
+String lastHomeIpText;
+
+uint32_t lastHomeUpdateAt = 0;
 uint32_t lastApiCheckAt = 0;
 uint32_t lastSyncAt = 0;
 uint32_t lastWifiReconnectAt = 0;
@@ -109,8 +115,11 @@ String isoNow();
 void drawScreen(const String &title, const String &line1, const String &line2, const String &line3, uint16_t accent);
 void drawInstallScreen();
 void drawHomeScreen();
+void updateHomeClock(bool force = false);
+void drawHomeNetworkLine(bool force = false);
 void drawStatusFooter();
 void drawCentered(int y, const String &text, uint16_t color, uint8_t size);
+void printNetworkInfo(const String &context);
 void signalFingerprint();
 void signalRfid();
 void signalSuccess();
@@ -210,6 +219,9 @@ void loop() {
   const uint32_t nowMs = millis();
   if (nowMs - lastApiCheckAt > API_CHECK_INTERVAL_MS) {
     checkApiStatus();
+    if (mode == MODE_HOME && homeScreenVisible) {
+      drawStatusFooter();
+    }
     lastApiCheckAt = nowMs;
   }
 
@@ -225,9 +237,13 @@ void loop() {
 
   runAttendanceWorkflow();
 
-  if (mode == MODE_HOME && nowMs - lastHomeDrawAt > 1000) {
+  if (mode == MODE_HOME && !homeScreenVisible) {
     drawHomeScreen();
-    lastHomeDrawAt = nowMs;
+    lastHomeUpdateAt = nowMs;
+  } else if (mode == MODE_HOME && nowMs - lastHomeUpdateAt > 1000) {
+    updateHomeClock(false);
+    drawHomeNetworkLine(false);
+    lastHomeUpdateAt = nowMs;
   }
 }
 
@@ -300,6 +316,13 @@ void startInstallPortal() {
   WiFi.softAP(INSTALL_AP_SSID, INSTALL_AP_PASSWORD);
   delay(250);
 
+  Serial.println();
+  Serial.println(F("Install portal started"));
+  Serial.print(F("Connect to WiFi SSID: "));
+  Serial.println(INSTALL_AP_SSID);
+  Serial.print(F("Portal URL: http://"));
+  Serial.println(WiFi.softAPIP());
+
   dnsServer.start(53, "*", WiFi.softAPIP());
   setupPortalRoutes();
   server.begin();
@@ -331,6 +354,11 @@ void setupDeviceRoutes() {
 void connectToSavedWifi() {
   drawScreen("WiFi", "Connecting...", wifiSsid, "Please wait", ILI9341_BLUE);
   wifiReady = connectToWifi(wifiSsid, wifiPassword, WIFI_CONNECT_TIMEOUT_MS);
+  if (wifiReady) {
+    printNetworkInfo("WiFi connected");
+    drawScreen("WiFi Connected", "IP Address", WiFi.localIP().toString(), "Open /register", ILI9341_GREEN);
+    delay(1800);
+  }
 }
 
 bool connectToWifi(const String &ssid, const String &password, uint32_t timeoutMs) {
@@ -341,8 +369,11 @@ bool connectToWifi(const String &ssid, const String &password, uint32_t timeoutM
   while (WiFi.status() != WL_CONNECTED && millis() - startedAt < timeoutMs) {
     delay(250);
   }
-
-  return WiFi.status() == WL_CONNECTED;
+  const bool connected = WiFi.status() == WL_CONNECTED;
+  if (connected) {
+    printNetworkInfo("WiFi connected");
+  }
+  return connected;
 }
 
 void syncClock() {
@@ -428,6 +459,7 @@ void drawScreen(const String &title, const String &line1, const String &line2, c
     return;
   }
 
+  homeScreenVisible = false;
   tft.fillScreen(ILI9341_BLACK);
   tft.fillRect(0, 0, 320, 36, accent);
   tft.setTextColor(ILI9341_BLACK);
@@ -442,6 +474,7 @@ void drawScreen(const String &title, const String &line1, const String &line2, c
 }
 
 void drawInstallScreen() {
+  homeScreenVisible = false;
   tft.fillScreen(ILI9341_BLACK);
   drawCentered(42, "Device is not installed", ILI9341_RED, 2);
   drawCentered(82, "Please install before use", ILI9341_WHITE, 2);
@@ -451,17 +484,59 @@ void drawInstallScreen() {
 }
 
 void drawHomeScreen() {
-  DateTime now = currentDateTime();
+  homeScreenVisible = true;
+  lastHomeDateText = "";
+  lastHomeTimeText = "";
+  lastHomeDayText = "";
+  lastHomeIpText = "";
+
   tft.fillScreen(ILI9341_BLACK);
 
-  drawCentered(20, formatDate(now), ILI9341_WHITE, 2);
-  drawCentered(58, formatTime12(now), ILI9341_CYAN, 3);
-  drawCentered(102, formatDay(now), ILI9341_LIGHTGREY, 2);
+  updateHomeClock(true);
 
   tft.drawRoundRect(18, 136, 284, 58, 8, ILI9341_DARKGREY);
   drawCentered(154, "Waiting for Attendance", ILI9341_GREEN, 2);
 
+  drawHomeNetworkLine(true);
   drawStatusFooter();
+}
+
+void updateHomeClock(bool force) {
+  DateTime now = currentDateTime();
+  String dateText = formatDate(now);
+  String timeText = formatTime12(now);
+  String dayText = formatDay(now);
+
+  if (force || dateText != lastHomeDateText) {
+    tft.fillRect(0, 14, 320, 26, ILI9341_BLACK);
+    drawCentered(20, dateText, ILI9341_WHITE, 2);
+    lastHomeDateText = dateText;
+  }
+
+  if (force || timeText != lastHomeTimeText) {
+    tft.fillRect(0, 52, 320, 38, ILI9341_BLACK);
+    drawCentered(58, timeText, ILI9341_CYAN, 3);
+    lastHomeTimeText = timeText;
+  }
+
+  if (force || dayText != lastHomeDayText) {
+    tft.fillRect(0, 96, 320, 26, ILI9341_BLACK);
+    drawCentered(102, dayText, ILI9341_LIGHTGREY, 2);
+    lastHomeDayText = dayText;
+  }
+}
+
+void drawHomeNetworkLine(bool force) {
+  String ipText = wifiReady ? WiFi.localIP().toString() : "WiFi offline";
+  String line = "IP: " + ipText + "  /register";
+
+  if (!force && line == lastHomeIpText) {
+    return;
+  }
+
+  tft.fillRect(0, 198, 320, 16, ILI9341_BLACK);
+  drawCentered(202, line, wifiReady ? ILI9341_LIGHTGREY : ILI9341_RED, 1);
+  lastHomeIpText = line;
 }
 
 void drawStatusFooter() {
@@ -491,6 +566,18 @@ void drawCentered(int y, const String &text, uint16_t color, uint8_t size) {
   int x = max(0, (320 - (int) w) / 2);
   tft.setCursor(x, y);
   tft.print(text);
+}
+
+void printNetworkInfo(const String &context) {
+  Serial.println();
+  Serial.println(context);
+  Serial.print(F("SSID: "));
+  Serial.println(WiFi.SSID());
+  Serial.print(F("ESP32 IP: "));
+  Serial.println(WiFi.localIP());
+  Serial.print(F("Registration URL: http://"));
+  Serial.print(WiFi.localIP());
+  Serial.println(F("/register"));
 }
 
 void signalFingerprint() {
@@ -705,7 +792,7 @@ void handleRegisterPost() {
 
   pendingFingerprintTemplateId = fingerprintTemplateForUser(pendingRegistrationUserId);
   mode = MODE_REGISTER_FINGERPRINT;
-  server.send(200, "text/html", htmlPage("Registration Started", "<div class='card'><h2>Registration started.</h2><p>Follow the instructions on the TFT display.</p></div>"));
+  server.send(200, "text/html", htmlPage("Registration Started", "<div class='card'><h2>Registration started.</h2><p>Follow the instructions on the LCD display.</p></div>"));
 }
 
 void handleAttendancePage() {
