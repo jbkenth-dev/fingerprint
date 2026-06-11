@@ -14,6 +14,7 @@ Power all modules from a stable supply. The ESP32 logic pins are 3.3V. Use level
 | ILI9341 TFT | CS | GPIO5 | TFT chip select. |
 | ILI9341 TFT | DC/RS | GPIO2 | Data/command. |
 | ILI9341 TFT | RST | GPIO4 | Reset. |
+| ILI9341 TFT | LED/BL/BLK | 3V3 | TFT backlight. Use 3.3V as the safe default. Some modules also allow 5V. |
 | MicroSD module | VCC | 3V3 or 5V per module | Prefer a module with 3.3V-safe logic. |
 | MicroSD module | GND | GND | Common ground required. |
 | MicroSD module | SCK | GPIO18 | Shared SPI clock. |
@@ -64,4 +65,3 @@ ESP32 UART2:
 ## Resistor placement
 
 Each LED anode must connect through one 220 ohm resistor before reaching the ESP32 GPIO pin. The LED cathode goes to GND.
-
