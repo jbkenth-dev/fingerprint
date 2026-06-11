@@ -1,12 +1,12 @@
 #pragma once
 
-static const char INSTALL_AP_SSID[] = "FT6F8HJ";
+static const char INSTALL_AP_SSID[] = "FRANCIS_KEY";
 static const char INSTALL_AP_PASSWORD[] = "12345678";
 
 // From the ESP32, use your computer's LAN IP, not localhost.
 // Example: http://192.168.1.100/fingerprint/api/device.php
 static const char DEFAULT_API_URL[] = "http://192.168.1.100/fingerprint/api/device.php";
-static const char DEFAULT_API_KEY[] = "change-me-francis-key-device";
+static const char DEFAULT_API_KEY[] = "FRANCIS_KEY_DEVICE_KEY";
 static const char DEFAULT_DEVICE_ID[] = "ESP32-FRANCIS-KEY-01";
 
 static const char DEFAULT_ADMIN_USER[] = "admin";
