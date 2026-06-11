@@ -53,3 +53,25 @@ CREATE TABLE IF NOT EXISTS class_schedules (
   UNIQUE KEY unique_schedule_subject (sectionName, yearLevel, semester, subjectId),
   CONSTRAINT fk_class_schedules_subject FOREIGN KEY (subjectId) REFERENCES class_subjects(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS attendance_logs (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  userId INT NOT NULL,
+  idNumber VARCHAR(128) DEFAULT NULL,
+  name VARCHAR(384) NOT NULL,
+  role VARCHAR(32) DEFAULT NULL,
+  logDate DATE NOT NULL,
+  logTime TIME NOT NULL,
+  status VARCHAR(8) NOT NULL,
+  deviceId VARCHAR(64) NOT NULL,
+  fingerprintId VARCHAR(64) NOT NULL,
+  smartCardId VARCHAR(64) NOT NULL,
+  source VARCHAR(32) NOT NULL DEFAULT 'esp32',
+  localRecordId VARCHAR(128) DEFAULT NULL,
+  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  syncedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY unique_device_local (deviceId, localRecordId),
+  INDEX idx_attendance_user_date (userId, logDate),
+  INDEX idx_attendance_date_time (logDate, logTime),
+  CONSTRAINT fk_attendance_user FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+);
