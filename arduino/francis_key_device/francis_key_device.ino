@@ -258,7 +258,7 @@ void initPins() {
   digitalWrite(BLUE_LED_PIN, LOW);
   digitalWrite(GREEN_LED_PIN, LOW);
   digitalWrite(YELLOW_LED_PIN, LOW);
-  digitalWrite(BUZZER_PIN, LOW);
+  digitalWrite(BUZZER_PIN, HIGH);
 }
 
 void loadSettings() {
@@ -620,9 +620,9 @@ void pulseLed(uint8_t pin, uint16_t durationMs) {
 }
 
 void buzz(uint16_t durationMs, uint16_t pauseMs) {
-  digitalWrite(BUZZER_PIN, HIGH);
-  delay(durationMs);
   digitalWrite(BUZZER_PIN, LOW);
+  delay(durationMs);
+  digitalWrite(BUZZER_PIN, HIGH);
   if (pauseMs > 0) {
     delay(pauseMs);
   }
