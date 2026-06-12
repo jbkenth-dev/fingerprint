@@ -495,7 +495,7 @@ void drawHomeScreen() {
   updateHomeClock(true);
 
   tft.drawRoundRect(18, 136, 284, 58, 8, ILI9341_DARKGREY);
-  drawCentered(154, "Waiting for Attendance", ILI9341_GREEN, 2);
+  drawCentered(154, "FRANCIS KEY", ILI9341_GREEN, 2);
 
   drawHomeNetworkLine(true);
   drawStatusFooter();
@@ -1324,7 +1324,13 @@ void runAttendanceWorkflow() {
     if (fingerprintId > 0) {
       attendanceFingerprintId = String(fingerprintId);
       signalFingerprint();
-      drawScreen("Attendance", "Please Tap ID Card", String("Fingerprint ID: ") + attendanceFingerprintId, "", ILI9341_BLUE);
+      drawScreen(
+          String("Attendance"),
+          String("Please Tap ID Card"),
+          String("Verifying..."),
+          String(""),
+          (uint16_t)ILI9341_BLUE
+      );
       attendanceRfidStartedAt = millis();
       mode = MODE_WAIT_RFID_ATTENDANCE;
     }
@@ -1364,7 +1370,7 @@ int scanFingerprintForAttendance() {
   }
 
   if (finger.fingerFastSearch() != FINGERPRINT_OK) {
-    drawScreen("Attendance", "Fingerprint Error", "Not Recognized", "", ILI9341_RED);
+    drawScreen("Attendance", "Fingerprint Not Recognized", "Please Try Again", "", ILI9341_RED);
     signalError();
     waitForFingerRelease(5000);
     return -1;

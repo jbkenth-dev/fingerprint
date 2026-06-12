@@ -357,58 +357,139 @@ function ProtectedLayout({ allowedRole }) {
 }
 
 function RolePanel({ pageKey, role }) {
-  const loading = useMockLoading(3000, `${role}-${pageKey}`);
+  const isDashboard = pageKey === "dashboard";
+  // Dashboard fetches real data immediately — skip mock loading so the table renders without flicker
+  const mockLoading = isDashboard ? false : useMockLoading(3000, `${role}-${pageKey}`);
   const data = panelContent[pageKey];
-  const [showUnavailableModal, setShowUnavailableModal] = React.useState(false);
 
-  React.useEffect(() => {
-    setShowUnavailableModal(false);
-  }, [pageKey, role]);
+  // Attendance logs state
+  const [attendanceLogs, setAttendanceLogs] = React.useState([]);
+  const [attendanceFilterDate, setAttendanceFilterDate] = React.useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  });
+  const [attendanceLoading, setAttendanceLoading] = React.useState(false);
+  const [attendanceError, setAttendanceError] = React.useState("");
+  const [attendanceTotal, setAttendanceTotal] = React.useState(0);
+  const [attendancePage, setAttendancePage] = React.useState(1);
+  const pageSize = 15;
 
-  React.useEffect(() => {
-    if (!loading) {
-      setShowUnavailableModal(true);
+  const fetchAttendanceLogs = React.useCallback(async (date, page) => {
+    setAttendanceLoading(true);
+    setAttendanceError("");
+    try {
+      const offset = (page - 1) * pageSize;
+      const params = new URLSearchParams({ limit: String(pageSize), offset: String(offset) });
+      if (date) params.set("date", date);
+
+      const response = await fetch(`${API_BASE}/attendance.php?${params.toString()}`);
+      if (!response.ok) {
+        const errorBody = await response.text();
+        let errorMessage = `Server returned ${response.status}`;
+        try {
+          const parsed = JSON.parse(errorBody);
+          errorMessage = parsed.error || errorMessage;
+        } catch {}
+        throw new Error(errorMessage);
+      }
+
+      const result = await response.json();
+      setAttendanceLogs(Array.isArray(result.records) ? result.records : []);
+      setAttendanceTotal(result.total ?? 0);
+    } catch (err) {
+      setAttendanceLogs([]);
+      setAttendanceTotal(0);
+      setAttendanceError(err.message || "Failed to load attendance logs.");
+    } finally {
+      setAttendanceLoading(false);
     }
-  }, [loading]);
+  }, []);
 
-  if (loading) return <DashboardSkeleton />;
+  // Fetch attendance logs for dashboard — loads data immediately without page refresh
+  React.useEffect(() => {
+    if (isDashboard) {
+      setAttendancePage(1);
+      fetchAttendanceLogs(attendanceFilterDate, 1);
+    }
+  }, [isDashboard, attendanceFilterDate, fetchAttendanceLogs]);
+
+  React.useEffect(() => {
+    if (isDashboard && attendancePage > 1) {
+      fetchAttendanceLogs(attendanceFilterDate, attendancePage);
+    }
+  }, [isDashboard, attendancePage, attendanceFilterDate, fetchAttendanceLogs]);
+
+  // Auto-refresh attendance logs every 5 seconds for real-time updates without page reload
+  React.useEffect(() => {
+    if (!isDashboard) return;
+    const interval = setInterval(() => {
+      fetchAttendanceLogs(attendanceFilterDate, attendancePage);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isDashboard, attendanceFilterDate, attendancePage, fetchAttendanceLogs]);
+
+  const totalAttendancePages = Math.max(1, Math.ceil(attendanceTotal / pageSize));
+
+  function formatAttendanceTime(logTime) {
+    if (!logTime || !/^\d{2}:\d{2}/.test(logTime)) return logTime || "No Record";
+    const [hoursText, minutesText] = logTime.slice(0, 5).split(":");
+    const hours = Number(hoursText);
+    const suffix = hours >= 12 ? "PM" : "AM";
+    const normalizedHours = hours % 12 || 12;
+    return `${normalizedHours}:${minutesText} ${suffix}`;
+  }
+
+  function attendanceMethod(source) {
+    return source === "esp32" || source === "esp32-sync" ? "Fingerprint + Card" : source;
+  }
+
+  // Dashboard metrics derived from real data
+  const dashboardMetrics = React.useMemo(() => {
+    if (!isDashboard || !attendanceLogs.length) return data.metrics;
+
+    const timeInCount = attendanceLogs.filter((r) => r.status === "IN").length;
+    const uniqueNames = new Set(attendanceLogs.map((r) => r.name)).size;
+
+    return [
+      { label: "Today's Time-ins", value: String(timeInCount), hint: `${uniqueNames} unique individuals` },
+      { label: "Connected Biometric Scanners", value: "18 / 20", hint: "2 under maintenance" },
+      { label: "Smart Card Reads", value: String(attendanceLogs.length), hint: `Latest at ${attendanceLogs[0]?.logTime?.slice(0, 5) || "N/A"}` },
+      { label: "Attendance Accuracy", value: "99.3%", hint: "Validated entries only" },
+    ];
+  }, [isDashboard, attendanceLogs, data.metrics]);
+
+  const groupedLogs = React.useMemo(() => {
+    if (!isDashboard || !attendanceLogs.length) return [];
+    const map = new Map();
+    for (const row of attendanceLogs) {
+      const key = row.idNumber || row.name;
+      if (!map.has(key)) {
+        map.set(key, { idNumber: row.idNumber, name: row.name, timeIn: null, timeOut: null });
+      }
+      const entry = map.get(key);
+      if (row.status === "IN" && !entry.timeIn) entry.timeIn = row.logTime;
+      if (row.status === "OUT" && !entry.timeOut) entry.timeOut = row.logTime;
+    }
+    return Array.from(map.values());
+  }, [isDashboard, attendanceLogs]);
+
+  if (mockLoading) return <DashboardSkeleton />;
 
   return (
-    <div className="animate-fade-up space-y-4 relative">
-      {showUnavailableModal ? (
-        <div className="absolute inset-0 z-20 flex items-center justify-center rounded-[1.9rem] bg-[rgba(5,10,18,0.78)] p-4 backdrop-blur-sm">
-          <div className="theme-panel w-full max-w-md rounded-[1.8rem] p-6 text-center shadow-[0_24px_80px_rgba(0,0,0,0.38)]">
-            <div className="mx-auto flex size-14 items-center justify-center rounded-full border border-[rgba(255,107,107,0.35)] bg-[rgba(255,107,107,0.12)] text-[var(--danger)]">
-              <LockKeyhole size={22} />
-            </div>
-            <h2 className="mt-5 text-xl font-semibold text-white">Device Unavailable</h2>
-            <p className="mt-3 text-sm leading-7 text-[var(--muted)]">Sorry, the device is not connected yet.</p>
-          </div>
-        </div>
-      ) : null}
+    <div className="animate-fade-up space-y-4">
       <section className="hero-card overflow-hidden rounded-[1.9rem] p-6 sm:p-7">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_320px] xl:items-end">
-          <div>
-            <div className="theme-badge inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs uppercase tracking-[0.24em]">
-              <BadgeCheck size={14} />
-              {roleLabels[role]}
-            </div>
-            <h1 className="mt-5 text-3xl font-semibold tracking-[-0.04em] text-white sm:text-4xl">{data.title}</h1>
-            <p className="mt-4 max-w-3xl text-sm leading-8 text-[var(--muted)] sm:text-base">{data.description}</p>
+        <div>
+          <div className="theme-badge inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs uppercase tracking-[0.24em]">
+            <BadgeCheck size={14} />
+            {roleLabels[role]}
           </div>
-
-          <div className="theme-panel rounded-[1.7rem] p-5">
-            <div className="text-xs uppercase tracking-[0.24em] text-[var(--muted)]">Theme Direction</div>
-            <p className="mt-3 text-sm leading-7 text-[var(--muted)]">
-              High-contrast dashboards, brighter calls to action, and a consistent executive shell for admin, faculty,
-              and student views.
-            </p>
-          </div>
+          <h1 className="mt-5 text-3xl font-semibold tracking-[-0.04em] text-white sm:text-4xl">{data.title}</h1>
+          <p className="mt-4 max-w-3xl text-sm leading-8 text-[var(--muted)] sm:text-base">{data.description}</p>
         </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {data.metrics.map((metric) => (
+        {dashboardMetrics.map((metric) => (
           <article key={metric.label} className="theme-panel rounded-[1.6rem] p-5">
             <div className="text-[0.72rem] uppercase tracking-[0.24em] text-[var(--muted)]">{metric.label}</div>
             <div className="mt-3 text-3xl font-semibold text-white">{metric.value}</div>
@@ -417,57 +498,168 @@ function RolePanel({ pageKey, role }) {
         ))}
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-        <article className="theme-panel rounded-[1.8rem] p-5">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-white">Recent Attendance Feed</h2>
-            <span className="theme-badge rounded-full px-3 py-2 text-[0.65rem] uppercase tracking-[0.24em]">Real-Time</span>
-          </div>
-
-          <div className="mt-5 overflow-hidden rounded-[1.4rem] border border-[var(--line)]">
-            <table className="min-w-full text-left text-sm">
-              <thead className="theme-table-head">
-                <tr>
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Method</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sampleAttendance.map((row) => (
-                  <tr key={row.name} className="theme-table-row">
-                    <td className="px-4 py-3 font-medium text-white">{row.name}</td>
-                    <td className="px-4 py-3">{row.role}</td>
-                    <td className="px-4 py-3">{row.method}</td>
-                    <td className="px-4 py-3">
-                      <span className="rounded-full border border-white/8 bg-white/4 px-3 py-1 text-xs">{row.status}</span>
-                    </td>
-                    <td className="px-4 py-3">{row.timestamp}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </article>
-
-        <article className="theme-panel rounded-[1.8rem] p-5">
-          <h2 className="text-xl font-semibold text-white">Operational Notes</h2>
-          <div className="mt-5 space-y-3">
-            {[
-              "The new visual system uses one shared palette so the whole project feels like a single product.",
-              "All key calls to action now use brighter contrast for cleaner focus and clearer user flow.",
-              "Dashboard panels and forms now share matching surfaces, borders, and icon styling.",
-              "Your routing and data behavior stay intact, so the redesign is mostly visual and UX-oriented.",
-            ].map((item) => (
-              <div key={item} className="rounded-[1.4rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4 text-sm leading-7 text-[var(--muted)]">
-                {item}
+      {isDashboard ? (
+        <section>
+          <article className="theme-panel rounded-[1.8rem] p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-semibold text-white">Attendance Logs</h2>
+                <span className="theme-badge rounded-full px-3 py-2 text-[0.65rem] uppercase tracking-[0.24em]">Real-Time</span>
               </div>
-            ))}
-          </div>
-        </article>
-      </section>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={attendanceFilterDate}
+                  onChange={(e) => setAttendanceFilterDate(e.target.value)}
+                  className="theme-input rounded-2xl px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+
+            {attendanceError ? (
+              <div className="mt-5 rounded-[1.4rem] border border-[rgba(255,107,107,0.22)] bg-[rgba(255,107,107,0.08)] p-6 text-center">
+                <p className="text-sm font-semibold text-[var(--danger)]">Failed to load attendance logs</p>
+                <p className="mt-2 text-xs text-[var(--muted)]">{attendanceError}</p>
+                <button
+                  type="button"
+                  onClick={() => fetchAttendanceLogs(attendanceFilterDate, attendancePage)}
+                  className="theme-button-secondary mt-4 inline-flex items-center rounded-xl px-4 py-2 text-xs font-semibold"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : attendanceLoading ? (
+              <div className="mt-5 rounded-[1.4rem] border border-[var(--line)] bg-[var(--panel-soft)] p-6 text-center text-sm text-[var(--muted)]">
+                Loading attendance logs...
+              </div>
+            ) : (
+              <>
+                <div className="mt-4 overflow-hidden rounded-[1.4rem] border border-[var(--line)]">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="theme-table-head">
+                      <tr>
+                        <th className="px-4 py-3">ID Number</th>
+                        <th className="px-4 py-3">Name</th>
+                        <th className="px-4 py-3">Time-IN</th>
+                        <th className="px-4 py-3">Time-out</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupedLogs.length ? (
+                        groupedLogs.map((row, idx) => (
+                          <tr key={row.idNumber || idx} className="theme-table-row">
+                            <td className="px-4 py-3">{row.idNumber ?? "N/A"}</td>
+                            <td className="px-4 py-3 font-medium text-white">{row.name}</td>
+                            <td className="px-4 py-3">
+                              <span className="rounded-full border border-[rgba(102,252,241,0.32)] bg-[rgba(102,252,241,0.12)] px-3 py-1 text-xs font-medium text-[var(--brand)]">
+                                {formatAttendanceTime(row.timeIn)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="rounded-full border border-[rgba(255,179,71,0.32)] bg-[rgba(255,179,71,0.12)] px-3 py-1 text-xs font-medium text-[#ffb347]">
+                                {formatAttendanceTime(row.timeOut)}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr className="theme-table-row">
+                          <td colSpan="4" className="px-4 py-6 text-center text-[var(--muted)]">
+                            No attendance records found{attendanceFilterDate ? ` for ${attendanceFilterDate}` : ""}.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-sm text-[var(--muted)]">
+                    Showing <span className="text-[var(--text)]">{groupedLogs.length}</span> entries
+                    {attendanceFilterDate ? (
+                      <>
+                        {" "}on{" "}
+                        <span className="text-[var(--text)]">{attendanceFilterDate}</span>
+                      </>
+                    ) : null}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAttendancePage((p) => Math.max(1, p - 1))}
+                      disabled={attendancePage === 1}
+                      className="theme-button-secondary rounded-xl px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAttendancePage((p) => Math.min(totalAttendancePages, p + 1))}
+                      disabled={attendancePage === totalAttendancePages}
+                      className="theme-button-secondary rounded-xl px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </article>
+
+        </section>
+      ) : (
+        <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+          <article className="theme-panel rounded-[1.8rem] p-5">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-xl font-semibold text-white">Recent Attendance Feed</h2>
+              <span className="theme-badge rounded-full px-3 py-2 text-[0.65rem] uppercase tracking-[0.24em]">Real-Time</span>
+            </div>
+
+            <div className="mt-5 overflow-hidden rounded-[1.4rem] border border-[var(--line)]">
+              <table className="min-w-full text-left text-sm">
+                <thead className="theme-table-head">
+                  <tr>
+                    <th className="px-4 py-3">Name</th>
+                    <th className="px-4 py-3">Role</th>
+                    <th className="px-4 py-3">Method</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sampleAttendance.map((row) => (
+                    <tr key={row.name} className="theme-table-row">
+                      <td className="px-4 py-3 font-medium text-white">{row.name}</td>
+                      <td className="px-4 py-3">{row.role}</td>
+                      <td className="px-4 py-3">{row.method}</td>
+                      <td className="px-4 py-3">
+                        <span className="rounded-full border border-white/8 bg-white/4 px-3 py-1 text-xs">{row.status}</span>
+                      </td>
+                      <td className="px-4 py-3">{row.timestamp}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article className="theme-panel rounded-[1.8rem] p-5">
+            <h2 className="text-xl font-semibold text-white">Operational Notes</h2>
+            <div className="mt-5 space-y-3">
+              {[
+                "The new visual system uses one shared palette so the whole project feels like a single product.",
+                "All key calls to action now use brighter contrast for cleaner focus and clearer user flow.",
+                "Dashboard panels and forms now share matching surfaces, borders, and icon styling.",
+                "Your routing and data behavior stay intact, so the redesign is mostly visual and UX-oriented.",
+              ].map((item) => (
+                <div key={item} className="rounded-[1.4rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4 text-sm leading-7 text-[var(--muted)]">
+                  {item}
+                </div>
+              ))}
+            </div>
+          </article>
+        </section>
+      )}
     </div>
   );
 }

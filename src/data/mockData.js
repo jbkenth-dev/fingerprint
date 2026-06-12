@@ -103,8 +103,7 @@ export const initialUsers = [
 export const panelContent = {
   dashboard: {
     title: "Dashboard & Monitoring",
-    description:
-      "Live overview of attendance compliance, biometric device status, and smart card activity across the campus.",
+    description: "",
     metrics: [
       { label: "Today's Time-ins", value: "1,284", hint: "+12% vs yesterday" },
       { label: "Connected Biometric Scanners", value: "18 / 20", hint: "2 under maintenance" },
