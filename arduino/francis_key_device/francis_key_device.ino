@@ -356,7 +356,7 @@ void connectToSavedWifi() {
   wifiReady = connectToWifi(wifiSsid, wifiPassword, WIFI_CONNECT_TIMEOUT_MS);
   if (wifiReady) {
     printNetworkInfo("WiFi connected");
-    drawScreen("WiFi Connected", "IP Address", WiFi.localIP().toString(), "Open /register", ILI9341_GREEN);
+    drawScreen("WiFi Connected", "IP Address", WiFi.localIP().toString(), "FRANCIS KEY", ILI9341_GREEN);
     delay(1800);
   }
 }
@@ -528,7 +528,7 @@ void updateHomeClock(bool force) {
 
 void drawHomeNetworkLine(bool force) {
   String ipText = wifiReady ? WiFi.localIP().toString() : "WiFi offline";
-  String line = "IP: " + ipText + "  /register";
+  String line = "IP: " + ipText;
 
   if (!force && line == lastHomeIpText) {
     return;
