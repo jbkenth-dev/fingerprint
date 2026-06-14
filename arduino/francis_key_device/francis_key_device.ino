@@ -101,6 +101,15 @@ void loadSettings();
 void saveSettings();
 void initDisplay();
 void initBusesAndDevices();
+void deselectSpiDevices();
+void beginTftAccess();
+void beginSdAccess();
+void endSdAccess();
+bool sdFileExists(const char *path);
+File openSdFile(const char *path, const char *mode);
+void closeSdFile(File &file);
+bool removeSdFile(const char *path);
+bool renameSdFile(const char *fromPath, const char *toPath);
 void startInstallPortal();
 void setupPortalRoutes();
 void setupDeviceRoutes();
@@ -248,6 +257,10 @@ void loop() {
 }
 
 void initPins() {
+  pinMode(TFT_CS_PIN, OUTPUT);
+  pinMode(SD_CS_PIN, OUTPUT);
+  deselectSpiDevices();
+
   pinMode(RED_LED_PIN, OUTPUT);
   pinMode(BLUE_LED_PIN, OUTPUT);
   pinMode(GREEN_LED_PIN, OUTPUT);
@@ -282,6 +295,7 @@ void saveSettings() {
 
 void initDisplay() {
   SPI.begin(SPI_SCLK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
+  beginTftAccess();
   tft.begin();
   tft.setRotation(1);
   tft.fillScreen(ILI9341_BLACK);
@@ -292,7 +306,9 @@ void initDisplay() {
 void initBusesAndDevices() {
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
 
+  beginSdAccess();
   sdReady = SD.begin(SD_CS_PIN, SPI);
+  endSdAccess();
 
   rtcReady = rtc.begin();
   if (rtcReady && rtc.lostPower()) {
@@ -309,6 +325,79 @@ void initBusesAndDevices() {
   if (nfcReady) {
     nfc.SAMConfig();
   }
+}
+
+void deselectSpiDevices() {
+  digitalWrite(TFT_CS_PIN, HIGH);
+  digitalWrite(SD_CS_PIN, HIGH);
+  delayMicroseconds(1);
+}
+
+// TFT and microSD share SPI; keep the inactive chip-select line high.
+void beginTftAccess() {
+  digitalWrite(TFT_CS_PIN, HIGH);
+  digitalWrite(SD_CS_PIN, HIGH);
+  delayMicroseconds(1);
+}
+
+void beginSdAccess() {
+  digitalWrite(TFT_CS_PIN, HIGH);
+  digitalWrite(SD_CS_PIN, HIGH);
+  delayMicroseconds(1);
+}
+
+void endSdAccess() {
+  digitalWrite(SD_CS_PIN, HIGH);
+  delayMicroseconds(1);
+}
+
+bool sdFileExists(const char *path) {
+  if (!sdReady) {
+    return false;
+  }
+
+  beginSdAccess();
+  bool exists = SD.exists(path);
+  endSdAccess();
+  return exists;
+}
+
+File openSdFile(const char *path, const char *mode) {
+  beginSdAccess();
+  File file = SD.open(path, mode);
+  if (!file) {
+    endSdAccess();
+  }
+  return file;
+}
+
+void closeSdFile(File &file) {
+  if (file) {
+    file.close();
+  }
+  endSdAccess();
+}
+
+bool removeSdFile(const char *path) {
+  if (!sdReady) {
+    return false;
+  }
+
+  beginSdAccess();
+  bool removed = SD.remove(path);
+  endSdAccess();
+  return removed;
+}
+
+bool renameSdFile(const char *fromPath, const char *toPath) {
+  if (!sdReady) {
+    return false;
+  }
+
+  beginSdAccess();
+  bool renamed = SD.rename(fromPath, toPath);
+  endSdAccess();
+  return renamed;
 }
 
 void startInstallPortal() {
@@ -459,6 +548,7 @@ void drawScreen(const String &title, const String &line1, const String &line2, c
     return;
   }
 
+  beginTftAccess();
   homeScreenVisible = false;
   tft.fillScreen(ILI9341_BLACK);
   tft.fillRect(0, 0, 320, 36, accent);
@@ -474,6 +564,7 @@ void drawScreen(const String &title, const String &line1, const String &line2, c
 }
 
 void drawInstallScreen() {
+  beginTftAccess();
   homeScreenVisible = false;
   tft.fillScreen(ILI9341_BLACK);
   drawCentered(42, "Device is not installed", ILI9341_RED, 2);
@@ -484,6 +575,7 @@ void drawInstallScreen() {
 }
 
 void drawHomeScreen() {
+  beginTftAccess();
   homeScreenVisible = true;
   lastHomeDateText = "";
   lastHomeTimeText = "";
@@ -502,6 +594,7 @@ void drawHomeScreen() {
 }
 
 void updateHomeClock(bool force) {
+  beginTftAccess();
   DateTime now = currentDateTime();
   String dateText = formatDate(now);
   String timeText = formatTime12(now);
@@ -527,6 +620,7 @@ void updateHomeClock(bool force) {
 }
 
 void drawHomeNetworkLine(bool force) {
+  beginTftAccess();
   String ipText = wifiReady ? WiFi.localIP().toString() : "WiFi offline";
   String line = "IP: " + ipText;
 
@@ -540,6 +634,7 @@ void drawHomeNetworkLine(bool force) {
 }
 
 void drawStatusFooter() {
+  beginTftAccess();
   tft.fillRect(0, 216, 320, 24, ILI9341_NAVY);
   tft.setTextSize(1);
   tft.setTextColor(wifiReady ? ILI9341_GREEN : ILI9341_RED);
@@ -556,6 +651,7 @@ void drawStatusFooter() {
 }
 
 void drawCentered(int y, const String &text, uint16_t color, uint8_t size) {
+  beginTftAccess();
   tft.setTextSize(size);
   tft.setTextColor(color);
   int16_t x1;
@@ -803,8 +899,8 @@ void handleAttendancePage() {
   String body;
   body += F("<div class='card'><h2>Recent Local Attendance</h2><table><tr><th>Date</th><th>Time</th><th>ID</th><th>Name</th><th>Status</th></tr>");
 
-  if (sdReady && SD.exists(ATTENDANCE_FILE)) {
-    File file = SD.open(ATTENDANCE_FILE, FILE_READ);
+  if (sdFileExists(ATTENDANCE_FILE)) {
+    File file = openSdFile(ATTENDANCE_FILE, FILE_READ);
     int rowCount = 0;
     while (file && file.available() && rowCount < 80) {
       String line = file.readStringUntil('\n');
@@ -825,9 +921,7 @@ void handleAttendancePage() {
       body += F("</td></tr>");
       rowCount++;
     }
-    if (file) {
-      file.close();
-    }
+    closeSdFile(file);
   }
 
   body += F("</table></div><div class='card'><a href='/'>Back to status</a></div>");
@@ -841,15 +935,13 @@ void handleLogsPage() {
 
   String body;
   body += F("<div class='card'><h2>Offline Sync Queue</h2><pre>");
-  if (sdReady && SD.exists(UNSENT_FILE)) {
-    File file = SD.open(UNSENT_FILE, FILE_READ);
+  if (sdFileExists(UNSENT_FILE)) {
+    File file = openSdFile(UNSENT_FILE, FILE_READ);
     while (file && file.available()) {
       body += htmlEscape(file.readStringUntil('\n'));
       body += "\n";
     }
-    if (file) {
-      file.close();
-    }
+    closeSdFile(file);
   } else {
     body += "No pending records.";
   }
@@ -923,8 +1015,8 @@ String buildUserOptions() {
 
   JsonArray users = response["users"].as<JsonArray>();
   if (sdReady) {
-    SD.remove(USER_CACHE_FILE);
-    File cache = SD.open(USER_CACHE_FILE, FILE_WRITE);
+    removeSdFile(USER_CACHE_FILE);
+    File cache = openSdFile(USER_CACHE_FILE, FILE_WRITE);
     for (JsonObject user : users) {
       String userId = String((int) user["id"]);
       String idNumber = String((const char *) (user["idNumber"] | ""));
@@ -950,9 +1042,7 @@ String buildUserOptions() {
       options += htmlEscape(idNumber + " - " + fullName);
       options += "</option>";
     }
-    if (cache) {
-      cache.close();
-    }
+    closeSdFile(cache);
   } else {
     for (JsonObject user : users) {
       String userId = String((int) user["id"]);
@@ -1072,8 +1162,8 @@ bool fetchAndCacheUsers() {
     return true;
   }
 
-  SD.remove(USER_CACHE_FILE);
-  File cache = SD.open(USER_CACHE_FILE, FILE_WRITE);
+  removeSdFile(USER_CACHE_FILE);
+  File cache = openSdFile(USER_CACHE_FILE, FILE_WRITE);
   if (!cache) {
     return false;
   }
@@ -1090,7 +1180,7 @@ bool fetchAndCacheUsers() {
     cache.print('|');
     cache.println(String((const char *) (user["smartCardId"] | "")));
   }
-  cache.close();
+  closeSdFile(cache);
   return true;
 }
 
@@ -1427,18 +1517,18 @@ void ensureSdFiles() {
     return;
   }
 
-  if (!SD.exists(ATTENDANCE_FILE)) {
-    File file = SD.open(ATTENDANCE_FILE, FILE_WRITE);
+  if (!sdFileExists(ATTENDANCE_FILE)) {
+    File file = openSdFile(ATTENDANCE_FILE, FILE_WRITE);
     if (file) {
       file.println("Date,Time,ID,Name,Status");
-      file.close();
+      closeSdFile(file);
     }
   }
 
-  if (!SD.exists(UNSENT_FILE)) {
-    File file = SD.open(UNSENT_FILE, FILE_WRITE);
+  if (!sdFileExists(UNSENT_FILE)) {
+    File file = openSdFile(UNSENT_FILE, FILE_WRITE);
     if (file) {
-      file.close();
+      closeSdFile(file);
     }
   }
 }
@@ -1448,12 +1538,12 @@ void appendLine(const char *path, const String &line) {
     return;
   }
 
-  File file = SD.open(path, FILE_APPEND);
+  File file = openSdFile(path, FILE_APPEND);
   if (!file) {
     return;
   }
   file.println(line);
-  file.close();
+  closeSdFile(file);
 }
 
 String csvEscape(String value) {
@@ -1474,17 +1564,17 @@ void queueOfflineAttendance(const String &localRecordId, const String &occurredA
 }
 
 void syncOfflineRecords() {
-  if (!sdReady || !wifiReady || !SD.exists(UNSENT_FILE)) {
+  if (!sdReady || !wifiReady || !sdFileExists(UNSENT_FILE)) {
     return;
   }
 
-  File input = SD.open(UNSENT_FILE, FILE_READ);
+  File input = openSdFile(UNSENT_FILE, FILE_READ);
   if (!input) {
     return;
   }
 
-  SD.remove(UNSENT_TEMP_FILE);
-  File output = SD.open(UNSENT_TEMP_FILE, FILE_WRITE);
+  removeSdFile(UNSENT_TEMP_FILE);
+  File output = openSdFile(UNSENT_TEMP_FILE, FILE_WRITE);
   bool anyFailed = false;
   bool anySynced = false;
 
@@ -1512,19 +1602,17 @@ void syncOfflineRecords() {
     }
   }
 
-  input.close();
-  if (output) {
-    output.close();
-  }
+  closeSdFile(input);
+  closeSdFile(output);
 
-  SD.remove(UNSENT_FILE);
+  removeSdFile(UNSENT_FILE);
   if (anyFailed) {
-    SD.rename(UNSENT_TEMP_FILE, UNSENT_FILE);
+    renameSdFile(UNSENT_TEMP_FILE, UNSENT_FILE);
   } else {
-    SD.remove(UNSENT_TEMP_FILE);
-    File emptyQueue = SD.open(UNSENT_FILE, FILE_WRITE);
+    removeSdFile(UNSENT_TEMP_FILE);
+    File emptyQueue = openSdFile(UNSENT_FILE, FILE_WRITE);
     if (emptyQueue) {
-      emptyQueue.close();
+      closeSdFile(emptyQueue);
     }
   }
 
@@ -1535,11 +1623,11 @@ void syncOfflineRecords() {
 
 LocalUser findCachedUserByCredentials(const String &fingerprintId, const String &rfidUid) {
   LocalUser result;
-  if (!sdReady || !SD.exists(USER_CACHE_FILE)) {
+  if (!sdReady || !sdFileExists(USER_CACHE_FILE)) {
     return result;
   }
 
-  File cache = SD.open(USER_CACHE_FILE, FILE_READ);
+  File cache = openSdFile(USER_CACHE_FILE, FILE_READ);
   while (cache && cache.available()) {
     String line = cache.readStringUntil('\n');
     line.trim();
@@ -1560,18 +1648,16 @@ LocalUser findCachedUserByCredentials(const String &fingerprintId, const String 
     }
   }
 
-  if (cache) {
-    cache.close();
-  }
+  closeSdFile(cache);
   return result;
 }
 
 String localNextStatus(const String &date, const String &id) {
-  if (!sdReady || !SD.exists(ATTENDANCE_FILE)) {
+  if (!sdReady || !sdFileExists(ATTENDANCE_FILE)) {
     return "IN";
   }
 
-  File file = SD.open(ATTENDANCE_FILE, FILE_READ);
+  File file = openSdFile(ATTENDANCE_FILE, FILE_READ);
   int count = 0;
   while (file && file.available()) {
     String line = file.readStringUntil('\n');
@@ -1583,9 +1669,7 @@ String localNextStatus(const String &date, const String &id) {
       count++;
     }
   }
-  if (file) {
-    file.close();
-  }
+  closeSdFile(file);
 
   return count % 2 == 0 ? "IN" : "OUT";
 }
