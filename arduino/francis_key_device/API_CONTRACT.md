@@ -78,7 +78,7 @@ curl -X POST -H "Content-Type: application/json" \
   "http://localhost/fingerprint/api/device.php?action=register"
 ```
 
-This updates the selected row in `users.fingerprintId` and `users.smartCardId`.
+This updates the selected row in `users.fingerprintId` and `users.smartCardId`. The ESP32 also writes the registered credentials to its local SD user cache after a successful response.
 
 ## Save attendance
 
@@ -89,7 +89,7 @@ curl -X POST -H "Content-Type: application/json" \
   "http://localhost/fingerprint/api/device.php?action=attendance"
 ```
 
-The API accepts attendance only when fingerprint and RFID belong to the same active user.
+The ESP32 validates attendance locally before calling this endpoint. The API still accepts attendance only when fingerprint and RFID belong to the same active user in the online database.
 
 Response:
 
@@ -123,4 +123,3 @@ If fingerprint and RFID belong to different users:
 ```
 
 No attendance record is saved in this case.
-

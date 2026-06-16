@@ -68,15 +68,15 @@ http://192.168.1.100/fingerprint/api/device.php
 
 - Registration is started from the ESP32 web page at `/register`.
 - The device fetches active users from the current project database.
-- Fingerprint registration requires 5 scans.
-- RFID registration requires 3 identical UID reads.
-- The PHP API updates the selected user's `fingerprintId` and `smartCardId`.
+- Fingerprint registration requires 3 scans.
+- RFID registration requires 2 identical UID reads.
+- The PHP API updates the selected user's `fingerprintId` and `smartCardId`, and the ESP32 also updates the local SD user cache.
 - Attendance requires both fingerprint and RFID.
-- PHP validates that both credentials belong to the same active user before saving attendance.
+- The ESP32 validates attendance against the local SD user cache first, then posts or queues the attendance record for online sync.
 - Every successful or offline-queued attendance attempt is written to the SD card.
 - Offline records are retried automatically when WiFi/API returns.
+- `/settings` includes SD card storage status and a browser for folders and files on the card.
 
 ## Important
 
 The device can only reach XAMPP if Windows Firewall allows inbound Apache traffic on your private network.
-

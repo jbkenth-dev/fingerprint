@@ -150,6 +150,7 @@ void handleLogsPage();
 void handleSettingsPage();
 void handleSettingsPost();
 void handleWifiResetPost();
+void handleSdBrowserPage();
 String buildUserOptions();
 bool getDeviceJson(const String &action, DynamicJsonDocument &response, int &httpCode, String &error);
 bool postDeviceJson(const String &action, DynamicJsonDocument &request, DynamicJsonDocument &response, int &httpCode, String &error);
@@ -157,6 +158,10 @@ String endpointFor(const String &action);
 bool checkApiStatus();
 bool fetchAndCacheUsers();
 bool registerCredentials(uint16_t fingerprintId, const String &rfidUid, String &error);
+bool upsertCachedUser(const LocalUser &updated, String &error);
+String cachedUserLine(const LocalUser &user);
+void writeCachedUserLine(File &file, const LocalUser &user);
+String cacheSafe(String value);
 AttendanceResult postAttendance(const String &fingerprintId, const String &rfidUid, const String &occurredAt, const String &localRecordId);
 void runRegistrationWorkflow();
 bool enrollFingerprint(uint16_t templateId);
@@ -180,6 +185,11 @@ String localNextStatus(const String &date, const String &id);
 String fieldAt(const String &line, char separator, int index);
 String makeLocalRecordId();
 void maintainWifi();
+String normalizeSdPath(String path);
+String parentSdPath(const String &path);
+String sdChildPath(const String &parentPath, const String &childName);
+String urlEncode(const String &value);
+String fileSizeLabel(uint32_t size);
 
 void setup() {
   Serial.begin(115200);
@@ -435,6 +445,7 @@ void setupDeviceRoutes() {
   server.on("/logs", HTTP_GET, handleLogsPage);
   server.on("/settings", HTTP_GET, handleSettingsPage);
   server.on("/settings", HTTP_POST, handleSettingsPost);
+  server.on("/sd", HTTP_GET, handleSdBrowserPage);
   server.on("/reset-wifi", HTTP_POST, handleWifiResetPost);
   server.onNotFound(handleStatusPage);
   server.begin();
@@ -737,6 +748,7 @@ String htmlPage(const String &title, const String &body) {
   page += F("input,select,button{width:100%;box-sizing:border-box;padding:12px;margin:8px 0;border-radius:6px;border:1px solid #334155;background:#0f172a;color:#fff}");
   page += F("button{background:#0891b2;border:0;font-weight:700;cursor:pointer}.danger{background:#dc2626}.ok{color:#22c55e}.bad{color:#ef4444}");
   page += F("table{border-collapse:collapse;width:100%;font-size:14px}td,th{border-bottom:1px solid #1f2937;padding:8px;text-align:left}");
+  page += F("pre{white-space:pre-wrap;word-break:break-word;overflow:auto}");
   page += F("</style></head><body><main><h1>");
   page += htmlEscape(title);
   page += F("</h1>");
@@ -870,7 +882,7 @@ void handleRegisterPage() {
   body += F("<form method='post' action='/register'><select name='userId'>");
   body += buildUserOptions();
   body += F("</select><input name='userName' placeholder='Selected user display name'><button type='submit'>Register User</button></form>");
-  body += F("<p>The TFT will request 5 fingerprint scans, then 3 RFID scans.</p></div>");
+  body += F("<p>The TFT will request 3 fingerprint scans, then 2 RFID scans.</p></div>");
   server.send(200, "text/html", htmlPage("Register Fingerprint and RFID", body));
 }
 
@@ -883,6 +895,10 @@ void handleRegisterPost() {
   pendingRegistrationName = server.arg("userName");
   if (pendingRegistrationUserId <= 0) {
     server.send(400, "text/html", htmlPage("Registration Error", "<div class='card bad'>Please select a valid user.</div>"));
+    return;
+  }
+  if (!sdReady) {
+    server.send(503, "text/html", htmlPage("Registration Error", "<div class='card bad'>SD card storage is required for local registration.</div>"));
     return;
   }
 
@@ -968,6 +984,11 @@ void handleSettingsPage() {
   body += htmlEscape(adminPassword);
   body += F("'>");
   body += F("<button type='submit'>Save Settings</button></form></div>");
+  body += F("<div class='card'><h2>SD Card Storage</h2><p>Status: <span class='");
+  body += sdReady ? "ok" : "bad";
+  body += F("'>");
+  body += sdReady ? "Ready" : "Missing";
+  body += F("</span></p><a href='/sd?path=/'>View SD card files</a></div>");
   body += F("<div class='card'><form method='post' action='/reset-wifi'><button class='danger' type='submit'>Reset WiFi Setup</button></form></div>");
   server.send(200, "text/html", htmlPage("Device Settings", body));
 }
@@ -1000,6 +1021,96 @@ void handleWifiResetPost() {
   ESP.restart();
 }
 
+void handleSdBrowserPage() {
+  if (!requireAdmin()) {
+    return;
+  }
+
+  if (!sdReady) {
+    server.send(503, "text/html", htmlPage("SD Card Storage", "<div class='card bad'>SD card is missing or not ready.</div><div class='card'><a href='/settings'>Back to settings</a></div>"));
+    return;
+  }
+
+  String path = normalizeSdPath(server.hasArg("path") ? server.arg("path") : "/");
+  if (path.length() == 0) {
+    server.send(400, "text/html", htmlPage("SD Card Storage", "<div class='card bad'>Invalid SD path.</div><div class='card'><a href='/sd?path=/'>Open root</a></div>"));
+    return;
+  }
+
+  File item = openSdFile(path.c_str(), FILE_READ);
+  if (!item) {
+    server.send(404, "text/html", htmlPage("SD Card Storage", "<div class='card bad'>Path was not found on the SD card.</div><div class='card'><a href='/sd?path=/'>Open root</a></div>"));
+    return;
+  }
+
+  String body;
+  body += F("<div class='card'><a href='/settings'>Settings</a> | <a href='/sd?path=/'>SD root</a>");
+  if (path != "/") {
+    body += F(" | <a href='/sd?path=");
+    body += urlEncode(parentSdPath(path));
+    body += F("'>Parent folder</a>");
+  }
+  body += F("</div>");
+
+  if (item.isDirectory()) {
+    body += F("<div class='card'><h2>");
+    body += htmlEscape(path);
+    body += F("</h2><table><tr><th>Name</th><th>Type</th><th>Size</th></tr>");
+
+    File entry = item.openNextFile();
+    while (entry) {
+      String name = String(entry.name());
+      String entryPath = name.startsWith("/") ? name : sdChildPath(path, name);
+      body += F("<tr><td><a href='/sd?path=");
+      body += urlEncode(entryPath);
+      body += F("'>");
+      body += htmlEscape(name);
+      body += F("</a></td><td>");
+      if (entry.isDirectory()) {
+        body += "Folder";
+      } else {
+        body += "File";
+      }
+      body += F("</td><td>");
+      if (entry.isDirectory()) {
+        body += "-";
+      } else {
+        body += fileSizeLabel(entry.size());
+      }
+      body += F("</td></tr>");
+      entry.close();
+      entry = item.openNextFile();
+    }
+
+    body += F("</table></div>");
+  } else {
+    body += F("<div class='card'><h2>");
+    body += htmlEscape(path);
+    body += F("</h2><p>Size: ");
+    body += fileSizeLabel(item.size());
+    body += F("</p><pre>");
+
+    uint16_t shown = 0;
+    while (item.available() && shown < SD_FILE_PREVIEW_BYTES) {
+      char c = (char) item.read();
+      if (c == '\r') {
+        continue;
+      }
+      body += htmlEscape(String(c));
+      shown++;
+    }
+
+    body += F("</pre>");
+    if (item.available()) {
+      body += F("<p>Preview stopped because the file is larger than the browser limit.</p>");
+    }
+    body += F("</div>");
+  }
+
+  closeSdFile(item);
+  server.send(200, "text/html", htmlPage("SD Card Storage", body));
+}
+
 String buildUserOptions() {
   DynamicJsonDocument response(24576);
   int httpCode = 0;
@@ -1015,8 +1126,9 @@ String buildUserOptions() {
 
   JsonArray users = response["users"].as<JsonArray>();
   if (sdReady) {
-    removeSdFile(USER_CACHE_FILE);
-    File cache = openSdFile(USER_CACHE_FILE, FILE_WRITE);
+    removeSdFile(USER_CACHE_TEMP_FILE);
+    File cache = openSdFile(USER_CACHE_TEMP_FILE, FILE_WRITE);
+    bool cacheOpened = (bool) cache;
     for (JsonObject user : users) {
       String userId = String((int) user["id"]);
       String idNumber = String((const char *) (user["idNumber"] | ""));
@@ -1025,15 +1137,13 @@ String buildUserOptions() {
       String smartCardId = String((const char *) (user["smartCardId"] | ""));
 
       if (cache) {
-        cache.print(userId);
-        cache.print('|');
-        cache.print(idNumber);
-        cache.print('|');
-        cache.print(fullName);
-        cache.print('|');
-        cache.print(fingerprintId);
-        cache.print('|');
-        cache.println(smartCardId);
+        LocalUser cached;
+        cached.userId = userId;
+        cached.idNumber = idNumber;
+        cached.fullName = fullName;
+        cached.fingerprintId = fingerprintId;
+        cached.smartCardId = smartCardId;
+        writeCachedUserLine(cache, cached);
       }
 
       options += F("<option value='");
@@ -1042,7 +1152,11 @@ String buildUserOptions() {
       options += htmlEscape(idNumber + " - " + fullName);
       options += "</option>";
     }
-    closeSdFile(cache);
+    if (cacheOpened) {
+      closeSdFile(cache);
+      removeSdFile(USER_CACHE_FILE);
+      renameSdFile(USER_CACHE_TEMP_FILE, USER_CACHE_FILE);
+    }
   } else {
     for (JsonObject user : users) {
       String userId = String((int) user["id"]);
@@ -1162,26 +1276,25 @@ bool fetchAndCacheUsers() {
     return true;
   }
 
-  removeSdFile(USER_CACHE_FILE);
-  File cache = openSdFile(USER_CACHE_FILE, FILE_WRITE);
+  removeSdFile(USER_CACHE_TEMP_FILE);
+  File cache = openSdFile(USER_CACHE_TEMP_FILE, FILE_WRITE);
   if (!cache) {
     return false;
   }
 
   JsonArray users = response["users"].as<JsonArray>();
   for (JsonObject user : users) {
-    cache.print(String((int) user["id"]));
-    cache.print('|');
-    cache.print(String((const char *) (user["idNumber"] | "")));
-    cache.print('|');
-    cache.print(String((const char *) (user["fullName"] | "")));
-    cache.print('|');
-    cache.print(String((const char *) (user["fingerprintId"] | "")));
-    cache.print('|');
-    cache.println(String((const char *) (user["smartCardId"] | "")));
+    LocalUser cached;
+    cached.userId = String((int) user["id"]);
+    cached.idNumber = String((const char *) (user["idNumber"] | ""));
+    cached.fullName = String((const char *) (user["fullName"] | ""));
+    cached.fingerprintId = String((const char *) (user["fingerprintId"] | ""));
+    cached.smartCardId = String((const char *) (user["smartCardId"] | ""));
+    writeCachedUserLine(cache, cached);
   }
   closeSdFile(cache);
-  return true;
+  removeSdFile(USER_CACHE_FILE);
+  return renameSdFile(USER_CACHE_TEMP_FILE, USER_CACHE_FILE);
 }
 
 bool registerCredentials(uint16_t fingerprintId, const String &rfidUid, String &error) {
@@ -1198,9 +1311,89 @@ bool registerCredentials(uint16_t fingerprintId, const String &rfidUid, String &
   if (ok) {
     JsonObject user = response["user"].as<JsonObject>();
     pendingRegistrationName = String((const char *) (user["fullName"] | pendingRegistrationName.c_str()));
+    LocalUser cached;
+    cached.found = true;
+    cached.userId = String((int) (user["id"] | pendingRegistrationUserId));
+    cached.idNumber = String((const char *) (user["idNumber"] | ""));
+    cached.fullName = pendingRegistrationName;
+    cached.fingerprintId = String(fingerprintId);
+    cached.smartCardId = rfidUid;
+    String localError;
+    if (!upsertCachedUser(cached, localError)) {
+      error = localError;
+      return false;
+    }
     fetchAndCacheUsers();
   }
   return ok;
+}
+
+bool upsertCachedUser(const LocalUser &updated, String &error) {
+  if (!sdReady) {
+    error = "SD card is not ready.";
+    return false;
+  }
+
+  bool hadCache = sdFileExists(USER_CACHE_FILE);
+  String cacheBody;
+  bool wroteUpdated = false;
+
+  if (hadCache) {
+    File input = openSdFile(USER_CACHE_FILE, FILE_READ);
+    while (input && input.available()) {
+      String line = input.readStringUntil('\n');
+      line.trim();
+      if (line.length() == 0) {
+        continue;
+      }
+
+      if (fieldAt(line, '|', 0) == updated.userId) {
+        cacheBody += cachedUserLine(updated);
+        cacheBody += '\n';
+        wroteUpdated = true;
+      } else {
+        cacheBody += line;
+        cacheBody += '\n';
+      }
+    }
+    closeSdFile(input);
+  }
+
+  removeSdFile(USER_CACHE_TEMP_FILE);
+  File output = openSdFile(USER_CACHE_TEMP_FILE, FILE_WRITE);
+  if (!output) {
+    error = "Cannot write local user cache.";
+    return false;
+  }
+
+  output.print(cacheBody);
+  if (!wroteUpdated) {
+    writeCachedUserLine(output, updated);
+  }
+
+  closeSdFile(output);
+  removeSdFile(USER_CACHE_FILE);
+  if (!renameSdFile(USER_CACHE_TEMP_FILE, USER_CACHE_FILE)) {
+    error = "Cannot replace local user cache.";
+    return false;
+  }
+
+  return true;
+}
+
+String cachedUserLine(const LocalUser &user) {
+  return cacheSafe(user.userId) + "|" + cacheSafe(user.idNumber) + "|" + cacheSafe(user.fullName) + "|" + cacheSafe(user.fingerprintId) + "|" + cacheSafe(user.smartCardId);
+}
+
+void writeCachedUserLine(File &file, const LocalUser &user) {
+  file.println(cachedUserLine(user));
+}
+
+String cacheSafe(String value) {
+  value.replace("|", " ");
+  value.replace("\r", " ");
+  value.replace("\n", " ");
+  return value;
 }
 
 AttendanceResult postAttendance(const String &fingerprintId, const String &rfidUid, const String &occurredAt, const String &localRecordId) {
@@ -1282,7 +1475,7 @@ void runRegistrationWorkflow() {
     String apiError;
     if (!registerCredentials(pendingFingerprintTemplateId, pendingRfidUid, apiError)) {
       finger.deleteModel(pendingFingerprintTemplateId);
-      drawScreen("Registration", "Database Failure", apiError, "", ILI9341_RED);
+      drawScreen("Registration", "Save Failure", apiError, "", ILI9341_RED);
       signalError();
       mode = MODE_HOME;
       return;
@@ -1301,8 +1494,8 @@ void runRegistrationWorkflow() {
 }
 
 bool enrollFingerprint(uint16_t templateId) {
-  for (int scan = 1; scan <= 5; scan++) {
-    drawScreen("Fingerprint", "Please Put Your Finger", String("Scan ") + String(scan) + " of 5", "", ILI9341_BLUE);
+  for (int scan = 1; scan <= FINGERPRINT_REGISTER_SCANS; scan++) {
+    drawScreen("Fingerprint", "Please Put Your Finger", String("Scan ") + String(scan) + " of " + String(FINGERPRINT_REGISTER_SCANS), "", ILI9341_BLUE);
 
     uint8_t slot = scan == 1 ? 1 : 2;
     if (!waitForFingerprintImage(slot, FINGER_SCAN_TIMEOUT_MS)) {
@@ -1317,7 +1510,7 @@ bool enrollFingerprint(uint16_t templateId) {
     }
 
     signalFingerprint();
-    drawScreen("Fingerprint", String("Scan ") + String(scan) + " of 5", "Accepted", "Remove finger", ILI9341_BLUE);
+    drawScreen("Fingerprint", String("Scan ") + String(scan) + " of " + String(FINGERPRINT_REGISTER_SCANS), "Accepted", "Remove finger", ILI9341_BLUE);
     waitForFingerRelease(8000);
     delay(450);
   }
@@ -1358,8 +1551,8 @@ uint16_t fingerprintTemplateForUser(int userId) {
 bool enrollRfid(String &uid) {
   String firstUid;
 
-  for (int scan = 1; scan <= 3; scan++) {
-    drawScreen("RFID Registration", "Please Scan Your ID Card", String("Scan ") + String(scan) + " of 3", "", ILI9341_YELLOW);
+  for (int scan = 1; scan <= RFID_REGISTER_SCANS; scan++) {
+    drawScreen("RFID Registration", "Please Scan Your ID Card", String("Scan ") + String(scan) + " of " + String(RFID_REGISTER_SCANS), "", ILI9341_YELLOW);
 
     String currentUid;
     if (!readRfidUid(currentUid, RFID_SCAN_TIMEOUT_MS)) {
@@ -1473,27 +1666,10 @@ int scanFingerprintForAttendance() {
 void completeAttendanceAttempt() {
   String occurredAt = isoNow();
   String localRecordId = makeLocalRecordId();
-  AttendanceResult result = postAttendance(attendanceFingerprintId, attendanceRfidUid, occurredAt, localRecordId);
-
-  if (result.ok) {
-    appendAttendanceCsv(result.date, result.time, result.idNumber, result.fullName, result.status);
-    drawScreen("Attendance Success", String("ID: ") + result.idNumber, result.fullName, String("Status: ") + result.status, ILI9341_GREEN);
-    signalSuccess();
-    delay(2500);
-    return;
-  }
-
-  if (result.httpCode == 403) {
-    drawScreen("Access Denied", "Fingerprint and RFID", "Do Not Match", "Access Denied", ILI9341_RED);
-    signalUnauthorized();
-    delay(2500);
-    return;
-  }
-
   LocalUser cached = findCachedUserByCredentials(attendanceFingerprintId, attendanceRfidUid);
   if (!cached.found) {
-    drawScreen("Attendance Failure", "Cannot Validate", "No Local Match", "", ILI9341_RED);
-    signalError();
+    drawScreen("Access Denied", "Fingerprint and RFID", "No Local Match", "Access Denied", ILI9341_RED);
+    signalUnauthorized();
     delay(2500);
     return;
   }
@@ -1505,9 +1681,12 @@ void completeAttendanceAttempt() {
   String status = localNextStatus(date, cached.idNumber.length() ? cached.idNumber : cached.userId);
 
   appendAttendanceCsv(date, String(timeBuffer), cached.idNumber.length() ? cached.idNumber : cached.userId, cached.fullName, status);
-  queueOfflineAttendance(localRecordId, occurredAt, attendanceFingerprintId, attendanceRfidUid);
+  AttendanceResult result = postAttendance(attendanceFingerprintId, attendanceRfidUid, occurredAt, localRecordId);
+  if (!result.ok) {
+    queueOfflineAttendance(localRecordId, occurredAt, attendanceFingerprintId, attendanceRfidUid);
+  }
 
-  drawScreen("Saved Offline", String("ID: ") + (cached.idNumber.length() ? cached.idNumber : cached.userId), cached.fullName, String("Status: ") + status, ILI9341_YELLOW);
+  drawScreen(result.ok ? "Attendance Success" : "Saved Local", String("ID: ") + (cached.idNumber.length() ? cached.idNumber : cached.userId), cached.fullName, String("Status: ") + status, result.ok ? ILI9341_GREEN : ILI9341_YELLOW);
   signalSuccess();
   delay(2500);
 }
@@ -1707,4 +1886,71 @@ void maintainWifi() {
   lastWifiReconnectAt = millis();
   WiFi.disconnect();
   WiFi.begin(wifiSsid.c_str(), wifiPassword.c_str());
+}
+
+String normalizeSdPath(String path) {
+  path.trim();
+  path.replace("\\", "/");
+  if (path.length() == 0) {
+    path = "/";
+  }
+  if (!path.startsWith("/")) {
+    path = "/" + path;
+  }
+  while (path.indexOf("//") >= 0) {
+    path.replace("//", "/");
+  }
+  if (path.indexOf("..") >= 0) {
+    return "";
+  }
+  if (path.length() > 1 && path.endsWith("/")) {
+    path.remove(path.length() - 1);
+  }
+  return path;
+}
+
+String parentSdPath(const String &path) {
+  if (path == "/") {
+    return "/";
+  }
+  int slash = path.lastIndexOf('/');
+  if (slash <= 0) {
+    return "/";
+  }
+  return path.substring(0, slash);
+}
+
+String sdChildPath(const String &parentPath, const String &childName) {
+  if (parentPath == "/") {
+    return "/" + childName;
+  }
+  return parentPath + "/" + childName;
+}
+
+String urlEncode(const String &value) {
+  static const char hex[] = "0123456789ABCDEF";
+  String encoded;
+  encoded.reserve(value.length() * 3);
+  for (size_t i = 0; i < value.length(); i++) {
+    char c = value.charAt(i);
+    bool safe = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~' || c == '/';
+    if (safe) {
+      encoded += c;
+    } else {
+      encoded += '%';
+      encoded += hex[((uint8_t) c >> 4) & 0x0F];
+      encoded += hex[(uint8_t) c & 0x0F];
+    }
+  }
+  return encoded;
+}
+
+String fileSizeLabel(uint32_t size) {
+  if (size < 1024) {
+    return String(size) + " B";
+  }
+  if (size < 1024UL * 1024UL) {
+    return String(size / 1024.0, 1) + " KB";
+  }
+  return String(size / 1048576.0, 1) + " MB";
 }

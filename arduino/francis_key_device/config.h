@@ -22,11 +22,15 @@ static const char ATTENDANCE_FILE[] = "/attendance.csv";
 static const char UNSENT_FILE[] = "/unsent.psv";
 static const char UNSENT_TEMP_FILE[] = "/unsent.tmp";
 static const char USER_CACHE_FILE[] = "/users.psv";
+static const char USER_CACHE_TEMP_FILE[] = "/users.tmp";
 
+static const uint8_t FINGERPRINT_REGISTER_SCANS = 3;
+static const uint8_t RFID_REGISTER_SCANS = 2;
 static const uint32_t WIFI_CONNECT_TIMEOUT_MS = 20000;
 static const uint32_t FINGER_SCAN_TIMEOUT_MS = 20000;
 static const uint32_t RFID_SCAN_TIMEOUT_MS = 15000;
 static const uint32_t API_CHECK_INTERVAL_MS = 60000;
 static const uint32_t OFFLINE_SYNC_INTERVAL_MS = 90000;
 static const uint16_t HTTP_TIMEOUT_MS = 12000;
+static const uint16_t SD_FILE_PREVIEW_BYTES = 12000;
 
