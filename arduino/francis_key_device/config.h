@@ -2,6 +2,10 @@
 
 static const char INSTALL_AP_SSID[] = "FRANCIS_KEY";
 static const char INSTALL_AP_PASSWORD[] = "12345678";
+static const uint8_t AP_IP_OCTET_1 = 192;
+static const uint8_t AP_IP_OCTET_2 = 168;
+static const uint8_t AP_IP_OCTET_3 = 4;
+static const uint8_t AP_IP_OCTET_4 = 1;
 
 // From the ESP32, use your computer's LAN IP, not localhost.
 // Example: http://192.168.1.100/fingerprint/api/device.php
@@ -23,6 +27,13 @@ static const char UNSENT_FILE[] = "/unsent.psv";
 static const char UNSENT_TEMP_FILE[] = "/unsent.tmp";
 static const char USER_CACHE_FILE[] = "/users.psv";
 static const char USER_CACHE_TEMP_FILE[] = "/users.tmp";
+static const char DEVICE_LOG_FILE[] = "/device.log";
+
+static const char SESSION_COOKIE_NAME[] = "fk_session";
+static const uint32_t SESSION_TIMEOUT_MS = 21600000UL; // 6 hours
+
+static const uint16_t DEFAULT_STUDENT_IN_MINUTES = 600; // 10:00 AM
+static const uint16_t DEFAULT_OUT_DELAY_MINUTES = 1;
 
 static const uint8_t FINGERPRINT_REGISTER_SCANS = 3;
 static const uint8_t RFID_REGISTER_SCANS = 2;

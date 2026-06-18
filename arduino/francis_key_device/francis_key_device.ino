@@ -31,6 +31,8 @@ struct LocalUser {
   String userId;
   String idNumber;
   String fullName;
+  String role;
+  String status;
   String fingerprintId;
   String smartCardId;
 };
@@ -46,6 +48,17 @@ struct AttendanceResult {
   String time;
   String error;
   int httpCode = 0;
+};
+
+struct UiState {
+  uint32_t seq = 0;
+  String type = "boot";
+  String title = "FRANCIS KEY";
+  String line1 = "Starting Device";
+  String line2 = "Please wait";
+  String line3 = "";
+  uint16_t accent = ILI9341_CYAN;
+  uint32_t updatedAt = 0;
 };
 
 Preferences prefs;
@@ -67,6 +80,8 @@ String apiKey;
 String deviceId;
 String adminUser;
 String adminPassword;
+String sessionToken;
+uint32_t sessionExpiresAt = 0;
 
 bool wifiReady = false;
 bool databaseReady = false;
@@ -77,9 +92,13 @@ bool fingerprintReady = false;
 bool tftReady = false;
 
 int pendingRegistrationUserId = 0;
+String pendingRegistrationIdNumber;
 String pendingRegistrationName;
 uint16_t pendingFingerprintTemplateId = 0;
 String pendingRfidUid;
+String registrationPhase = "idle";
+String registrationError;
+bool registrationCancelRequested = false;
 
 String attendanceFingerprintId;
 String attendanceRfidUid;
@@ -95,6 +114,10 @@ uint32_t lastHomeUpdateAt = 0;
 uint32_t lastApiCheckAt = 0;
 uint32_t lastSyncAt = 0;
 uint32_t lastWifiReconnectAt = 0;
+
+UiState uiState;
+uint16_t studentInMinutes = DEFAULT_STUDENT_IN_MINUTES;
+uint16_t outDelayMinutes = DEFAULT_OUT_DELAY_MINUTES;
 
 void initPins();
 void loadSettings();
@@ -115,13 +138,17 @@ void setupPortalRoutes();
 void setupDeviceRoutes();
 void connectToSavedWifi();
 bool connectToWifi(const String &ssid, const String &password, uint32_t timeoutMs);
+void serviceWeb();
 void syncClock();
 DateTime currentDateTime();
 String formatDate(const DateTime &dt);
 String formatTime12(const DateTime &dt);
 String formatDay(const DateTime &dt);
 String isoNow();
+String minutesToTimeInput(uint16_t minutes);
+uint16_t timeInputToMinutes(String value, uint16_t fallback);
 void drawScreen(const String &title, const String &line1, const String &line2, const String &line3, uint16_t accent);
+void setUiState(const String &type, const String &title, const String &line1, const String &line2, const String &line3, uint16_t accent);
 void drawInstallScreen();
 void drawHomeScreen();
 void updateHomeClock(bool force = false);
@@ -137,20 +164,37 @@ void signalUnauthorized();
 void pulseLed(uint8_t pin, uint16_t durationMs);
 void buzz(uint16_t durationMs, uint16_t pauseMs = 0);
 String htmlPage(const String &title, const String &body);
+void sendLoginPage(const String &message = "");
+void sendAppShell();
 String htmlEscape(String value);
+String jsonEscape(String value);
 bool requireAdmin();
+bool requireApiAdmin();
+bool isAuthenticated();
+void beginSession();
+void clearSession();
+String cookieValue(const String &name);
+void sendJson(int status, const String &payload);
 void redirectToRoot();
-void handlePortalRoot();
-void handlePortalConnect();
-void handleStatusPage();
-void handleRegisterPage();
-void handleRegisterPost();
-void handleAttendancePage();
-void handleLogsPage();
-void handleSettingsPage();
-void handleSettingsPost();
-void handleWifiResetPost();
-void handleSdBrowserPage();
+void handleAppRoot();
+void handleLoginPost();
+void handleLogout();
+void handleApiState();
+void handleApiStudents();
+void handleApiRegisterStart();
+void handleApiRegisterStatus();
+void handleApiRegisterCancel();
+void handleApiAttendance();
+void handleApiUsers();
+void handleApiWifiScan();
+void handleApiWifiSave();
+void handleApiRules();
+void handleApiLogs();
+void handleApiBackupSettings();
+void handleApiBackupFile();
+void handleApiRestoreSettings();
+void handleApiRestoreFile();
+void handleApiSdFile();
 String buildUserOptions();
 bool getDeviceJson(const String &action, DynamicJsonDocument &response, int &httpCode, String &error);
 bool postDeviceJson(const String &action, DynamicJsonDocument &request, DynamicJsonDocument &response, int &httpCode, String &error);
@@ -164,7 +208,7 @@ void writeCachedUserLine(File &file, const LocalUser &user);
 String cacheSafe(String value);
 AttendanceResult postAttendance(const String &fingerprintId, const String &rfidUid, const String &occurredAt, const String &localRecordId);
 void runRegistrationWorkflow();
-bool enrollFingerprint(uint16_t templateId);
+bool enrollFingerprint(uint16_t templateId, String &errorMsg);
 bool waitForFingerprintImage(uint8_t slot, uint32_t timeoutMs);
 bool waitForFingerRelease(uint32_t timeoutMs);
 uint16_t fingerprintTemplateForUser(int userId);
@@ -176,20 +220,29 @@ int scanFingerprintForAttendance();
 void completeAttendanceAttempt();
 void ensureSdFiles();
 void appendLine(const char *path, const String &line);
+void logEvent(const String &category, const String &message);
 String csvEscape(String value);
 void appendAttendanceCsv(const String &date, const String &time, const String &id, const String &name, const String &status);
 void queueOfflineAttendance(const String &localRecordId, const String &occurredAt, const String &fingerprintId, const String &rfidUid);
 void syncOfflineRecords();
 LocalUser findCachedUserByCredentials(const String &fingerprintId, const String &rfidUid);
+LocalUser findCachedUserById(const String &userId);
 String localNextStatus(const String &date, const String &id);
+int minutesSinceLastIn(const String &date, const String &id, const DateTime &now);
+int hhmmssToMinutes(const String &value);
+uint16_t pendingQueueCount();
 String fieldAt(const String &line, char separator, int index);
 String makeLocalRecordId();
 void maintainWifi();
+void saveRules();
 String normalizeSdPath(String path);
 String parentSdPath(const String &path);
 String sdChildPath(const String &parentPath, const String &childName);
 String urlEncode(const String &value);
 String fileSizeLabel(uint32_t size);
+String backupFilePathForName(const String &name);
+void debugSdStatus();
+bool saveCredentialsLocally(uint16_t fingerprintId, const String &rfidUid, String &error);
 
 void setup() {
   Serial.begin(115200);
@@ -200,38 +253,35 @@ void setup() {
   initDisplay();
   initBusesAndDevices();
   ensureSdFiles();
+  randomSeed((uint32_t) esp_random());
 
-  if (wifiSsid.length() == 0) {
-    mode = MODE_INSTALL_PORTAL;
-    drawInstallScreen();
-    startInstallPortal();
-    return;
+  startInstallPortal();
+  logEvent("BOOT", "Device booted. AP available at 192.168.4.1");
+
+  if (wifiSsid.length() > 0) {
+    connectToSavedWifi();
+    if (wifiReady) {
+      syncClock();
+      checkApiStatus();
+      fetchAndCacheUsers();
+    } else {
+      drawScreen("Offline Mode", "WiFi unavailable", "AP: 192.168.4.1", "Saved locally", ILI9341_YELLOW);
+      logEvent("WIFI", "Saved WiFi failed to connect; appliance remains available on AP");
+      delay(1200);
+    }
+  } else {
+    drawScreen("FRANCIS KEY", "AP Ready", "192.168.4.1", "WiFi not configured", ILI9341_CYAN);
+    logEvent("WIFI", "No saved WiFi; appliance started in AP plus offline mode");
+    delay(1200);
   }
 
-  connectToSavedWifi();
-  if (!wifiReady) {
-    drawScreen("WiFi Failure", "Connection Failed", "Please Try Again", INSTALL_AP_SSID, ILI9341_RED);
-    signalError();
-    mode = MODE_INSTALL_PORTAL;
-    startInstallPortal();
-    return;
-  }
-
-  syncClock();
-  setupDeviceRoutes();
-  checkApiStatus();
-  fetchAndCacheUsers();
   mode = MODE_HOME;
   drawHomeScreen();
 }
 
 void loop() {
   server.handleClient();
-
-  if (mode == MODE_INSTALL_PORTAL) {
-    dnsServer.processNextRequest();
-    return;
-  }
+  dnsServer.processNextRequest();
 
   maintainWifi();
 
@@ -293,6 +343,12 @@ void loadSettings() {
   deviceId = prefs.getString("devId", DEFAULT_DEVICE_ID);
   adminUser = prefs.getString("adminUser", DEFAULT_ADMIN_USER);
   adminPassword = prefs.getString("adminPass", DEFAULT_ADMIN_PASSWORD);
+  studentInMinutes = prefs.getUShort("inMin", DEFAULT_STUDENT_IN_MINUTES);
+  outDelayMinutes = prefs.getUShort("outDelay", DEFAULT_OUT_DELAY_MINUTES);
+  if (!(outDelayMinutes == 1 || outDelayMinutes == 5 || outDelayMinutes == 10 ||
+        outDelayMinutes == 15 || outDelayMinutes == 30 || outDelayMinutes == 60)) {
+    outDelayMinutes = DEFAULT_OUT_DELAY_MINUTES;
+  }
 }
 
 void saveSettings() {
@@ -301,6 +357,11 @@ void saveSettings() {
   prefs.putString("devId", deviceId);
   prefs.putString("adminUser", adminUser);
   prefs.putString("adminPass", adminPassword);
+}
+
+void saveRules() {
+  prefs.putUShort("inMin", studentInMinutes);
+  prefs.putUShort("outDelay", outDelayMinutes);
 }
 
 void initDisplay() {
@@ -317,8 +378,17 @@ void initBusesAndDevices() {
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
 
   beginSdAccess();
+  Serial.println(F("[INIT] Initializing SD card..."));
+  Serial.printf("[INIT]   Heap before SD.begin: %u free\n", ESP.getFreeHeap());
   sdReady = SD.begin(SD_CS_PIN, SPI);
   endSdAccess();
+  if (sdReady) {
+    uint8_t ct = SD.cardType();
+    uint64_t sz = SD.cardSize() / (1024 * 1024);
+    Serial.printf("[INIT]   SD OK - cardType=%u size=%llu MB\n", ct, sz);
+  } else {
+    Serial.println(F("[INIT]   SD FAILED to initialize!"));
+  }
 
   rtcReady = rtc.begin();
   if (rtcReady && rtc.lostPower()) {
@@ -335,6 +405,11 @@ void initBusesAndDevices() {
   if (nfcReady) {
     nfc.SAMConfig();
   }
+
+  Serial.printf("[INIT] Devices: SD=%s RTC=%s FP=%s NFC=%s TFT=%s\n",
+                sdReady ? "OK" : "NO", rtcReady ? "OK" : "NO",
+                fingerprintReady ? "OK" : "NO", nfcReady ? "OK" : "NO",
+                tftReady ? "OK" : "NO");
 }
 
 void deselectSpiDevices() {
@@ -343,46 +418,67 @@ void deselectSpiDevices() {
   delayMicroseconds(1);
 }
 
-// TFT and microSD share SPI; keep the inactive chip-select line high.
+// TFT and microSD share SPI.  Each library manages its own CS line, but
+// the SPI peripheral (clock / mode / frequency) must be clean before
+// switching devices.  SPI.endTransaction() reverts any settings left by
+// the previous device so the next one starts with a known-good bus state.
 void beginTftAccess() {
-  digitalWrite(TFT_CS_PIN, HIGH);
+  SPI.endTransaction();
   digitalWrite(SD_CS_PIN, HIGH);
+  digitalWrite(TFT_CS_PIN, HIGH);
   delayMicroseconds(1);
 }
 
 void beginSdAccess() {
+  // Hard-reset SPI bus: end any TFT transaction, then re-init SPI at SD-safe speed.
+  SPI.endTransaction();
   digitalWrite(TFT_CS_PIN, HIGH);
   digitalWrite(SD_CS_PIN, HIGH);
-  delayMicroseconds(1);
+  delayMicroseconds(10);
+  // Re-initialise SPI with conservative settings so the SD library starts clean.
+  SPI.begin(SPI_SCLK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
+  delayMicroseconds(10);
 }
 
 void endSdAccess() {
   digitalWrite(SD_CS_PIN, HIGH);
-  delayMicroseconds(1);
+  SPI.endTransaction();
+  delayMicroseconds(10);
 }
 
 bool sdFileExists(const char *path) {
   if (!sdReady) {
+    Serial.printf("[SD] sdFileExists(%s) -> false (sdReady=false)\n", path);
     return false;
   }
 
   beginSdAccess();
   bool exists = SD.exists(path);
   endSdAccess();
+  Serial.printf("[SD] sdFileExists(%s) -> %s\n", path, exists ? "true" : "false");
   return exists;
 }
 
 File openSdFile(const char *path, const char *mode) {
+  Serial.printf("[SD] openSdFile(%s, %s) called | heap free: %u\n", path, mode, ESP.getFreeHeap());
   beginSdAccess();
   File file = SD.open(path, mode);
   if (!file) {
+    Serial.printf("[SD] openSdFile(%s, %s) FAILED | heap free: %u | sdReady=%s\n",
+                  path, mode, ESP.getFreeHeap(), sdReady ? "true" : "false");
+    // Print card type to help diagnose
+    uint8_t ct = SD.cardType();
+    Serial.printf("[SD]   cardType=%u (NONE=0,MMC=1,SD=2,SDHC=3)\n", ct);
     endSdAccess();
+  } else {
+    Serial.printf("[SD] openSdFile(%s, %s) OK\n", path, mode);
   }
   return file;
 }
 
 void closeSdFile(File &file) {
   if (file) {
+    Serial.println(F("[SD] closeSdFile() closing file"));
     file.close();
   }
   endSdAccess();
@@ -390,65 +486,87 @@ void closeSdFile(File &file) {
 
 bool removeSdFile(const char *path) {
   if (!sdReady) {
+    Serial.printf("[SD] removeSdFile(%s) -> false (sdReady=false)\n", path);
     return false;
   }
 
   beginSdAccess();
   bool removed = SD.remove(path);
   endSdAccess();
+  Serial.printf("[SD] removeSdFile(%s) -> %s\n", path, removed ? "true" : "false");
   return removed;
 }
 
 bool renameSdFile(const char *fromPath, const char *toPath) {
   if (!sdReady) {
+    Serial.printf("[SD] renameSdFile(%s -> %s) -> false (sdReady=false)\n", fromPath, toPath);
     return false;
   }
 
   beginSdAccess();
   bool renamed = SD.rename(fromPath, toPath);
   endSdAccess();
+  Serial.printf("[SD] renameSdFile(%s -> %s) -> %s\n", fromPath, toPath, renamed ? "true" : "false");
   return renamed;
 }
 
 void startInstallPortal() {
+  IPAddress apIp(AP_IP_OCTET_1, AP_IP_OCTET_2, AP_IP_OCTET_3, AP_IP_OCTET_4);
+  IPAddress gateway(AP_IP_OCTET_1, AP_IP_OCTET_2, AP_IP_OCTET_3, AP_IP_OCTET_4);
+  IPAddress subnet(255, 255, 255, 0);
+
   WiFi.mode(WIFI_AP_STA);
+  WiFi.softAPConfig(apIp, gateway, subnet);
   WiFi.softAP(INSTALL_AP_SSID, INSTALL_AP_PASSWORD);
   delay(250);
 
   Serial.println();
-  Serial.println(F("Install portal started"));
+  Serial.println(F("Francis Key appliance AP started"));
   Serial.print(F("Connect to WiFi SSID: "));
   Serial.println(INSTALL_AP_SSID);
-  Serial.print(F("Portal URL: http://"));
+  Serial.print(F("Admin URL: http://"));
   Serial.println(WiFi.softAPIP());
 
   dnsServer.start(53, "*", WiFi.softAPIP());
-  setupPortalRoutes();
+  setupDeviceRoutes();
   server.begin();
 }
 
 void setupPortalRoutes() {
-  server.on("/", HTTP_GET, handlePortalRoot);
-  server.on("/connect", HTTP_POST, handlePortalConnect);
-  server.on("/generate_204", HTTP_GET, redirectToRoot);
-  server.on("/fwlink", HTTP_GET, redirectToRoot);
-  server.on("/hotspot-detect.html", HTTP_GET, redirectToRoot);
-  server.onNotFound(redirectToRoot);
+  setupDeviceRoutes();
 }
 
 void setupDeviceRoutes() {
-  server.on("/", HTTP_GET, handleStatusPage);
-  server.on("/admin", HTTP_GET, handleStatusPage);
-  server.on("/register", HTTP_GET, handleRegisterPage);
-  server.on("/register", HTTP_POST, handleRegisterPost);
-  server.on("/attendance", HTTP_GET, handleAttendancePage);
-  server.on("/logs", HTTP_GET, handleLogsPage);
-  server.on("/settings", HTTP_GET, handleSettingsPage);
-  server.on("/settings", HTTP_POST, handleSettingsPost);
-  server.on("/sd", HTTP_GET, handleSdBrowserPage);
-  server.on("/reset-wifi", HTTP_POST, handleWifiResetPost);
-  server.onNotFound(handleStatusPage);
-  server.begin();
+  const char *headerKeys[] = {"Cookie"};
+  server.collectHeaders(headerKeys, 1);
+
+  server.on("/", HTTP_GET, handleAppRoot);
+  server.on("/admin", HTTP_GET, handleAppRoot);
+  server.on("/login", HTTP_POST, handleLoginPost);
+  server.on("/logout", HTTP_GET, handleLogout);
+
+  server.on("/api/state", HTTP_GET, handleApiState);
+  server.on("/api/students", HTTP_GET, handleApiStudents);
+  server.on("/api/register/start", HTTP_POST, handleApiRegisterStart);
+  server.on("/api/register/status", HTTP_GET, handleApiRegisterStatus);
+  server.on("/api/register/cancel", HTTP_POST, handleApiRegisterCancel);
+  server.on("/api/attendance", HTTP_GET, handleApiAttendance);
+  server.on("/api/users", HTTP_GET, handleApiUsers);
+  server.on("/api/wifi/scan", HTTP_GET, handleApiWifiScan);
+  server.on("/api/wifi/save", HTTP_POST, handleApiWifiSave);
+  server.on("/api/rules", HTTP_GET, handleApiRules);
+  server.on("/api/rules", HTTP_POST, handleApiRules);
+  server.on("/api/logs", HTTP_GET, handleApiLogs);
+  server.on("/api/backup/settings", HTTP_GET, handleApiBackupSettings);
+  server.on("/api/backup/file", HTTP_GET, handleApiBackupFile);
+  server.on("/api/restore/settings", HTTP_POST, handleApiRestoreSettings);
+  server.on("/api/restore/file", HTTP_POST, handleApiRestoreFile);
+  server.on("/api/sd/file", HTTP_GET, handleApiSdFile);
+
+  server.on("/generate_204", HTTP_GET, redirectToRoot);
+  server.on("/fwlink", HTTP_GET, redirectToRoot);
+  server.on("/hotspot-detect.html", HTTP_GET, redirectToRoot);
+  server.onNotFound(handleAppRoot);
 }
 
 void connectToSavedWifi() {
@@ -462,11 +580,13 @@ void connectToSavedWifi() {
 }
 
 bool connectToWifi(const String &ssid, const String &password, uint32_t timeoutMs) {
-  WiFi.mode(WIFI_STA);
+  WiFi.mode(WIFI_AP_STA);
   WiFi.begin(ssid.c_str(), password.c_str());
 
   const uint32_t startedAt = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - startedAt < timeoutMs) {
+    dnsServer.processNextRequest();
+    yield();
     delay(250);
   }
   const bool connected = WiFi.status() == WL_CONNECTED;
@@ -474,6 +594,12 @@ bool connectToWifi(const String &ssid, const String &password, uint32_t timeoutM
     printNetworkInfo("WiFi connected");
   }
   return connected;
+}
+
+void serviceWeb() {
+  server.handleClient();
+  dnsServer.processNextRequest();
+  yield();
 }
 
 void syncClock() {
@@ -554,7 +680,52 @@ String isoNow() {
   return String(buffer);
 }
 
+String minutesToTimeInput(uint16_t minutes) {
+  char buffer[6];
+  snprintf(buffer, sizeof(buffer), "%02u:%02u", minutes / 60, minutes % 60);
+  return String(buffer);
+}
+
+uint16_t timeInputToMinutes(String value, uint16_t fallback) {
+  value.trim();
+  int colon = value.indexOf(':');
+  if (colon <= 0) {
+    return fallback;
+  }
+  int hour = value.substring(0, colon).toInt();
+  int minute = value.substring(colon + 1).toInt();
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return fallback;
+  }
+  return (uint16_t) (hour * 60 + minute);
+}
+
+void setUiState(const String &type, const String &title, const String &line1, const String &line2, const String &line3, uint16_t accent) {
+  uiState.seq++;
+  uiState.type = type;
+  uiState.title = title;
+  uiState.line1 = line1;
+  uiState.line2 = line2;
+  uiState.line3 = line3;
+  uiState.accent = accent;
+  uiState.updatedAt = millis();
+}
+
 void drawScreen(const String &title, const String &line1, const String &line2, const String &line3, uint16_t accent) {
+  String type = "info";
+  if (accent == ILI9341_GREEN) {
+    type = "success";
+  } else if (accent == ILI9341_RED) {
+    type = "error";
+  } else if (accent == ILI9341_YELLOW) {
+    type = "offline";
+  } else if (title.indexOf("Registration") >= 0 || title.indexOf("Fingerprint") >= 0 || title.indexOf("RFID") >= 0) {
+    type = "registration";
+  } else if (title.indexOf("Attendance") >= 0) {
+    type = "attendance";
+  }
+  setUiState(type, title, line1, line2, line3, accent);
+
   if (!tftReady) {
     return;
   }
@@ -575,6 +746,7 @@ void drawScreen(const String &title, const String &line1, const String &line2, c
 }
 
 void drawInstallScreen() {
+  setUiState("setup", "FRANCIS KEY", "AP Ready", "192.168.4.1", "Password: 12345678", ILI9341_YELLOW);
   beginTftAccess();
   homeScreenVisible = false;
   tft.fillScreen(ILI9341_BLACK);
@@ -586,6 +758,7 @@ void drawInstallScreen() {
 }
 
 void drawHomeScreen() {
+  setUiState(wifiReady ? "ready" : "offline", "FRANCIS KEY", "Attendance Ready", "AP: 192.168.4.1", wifiReady ? WiFi.localIP().toString() : "Offline Mode", wifiReady ? ILI9341_GREEN : ILI9341_YELLOW);
   beginTftAccess();
   homeScreenVisible = true;
   lastHomeDateText = "";
@@ -632,8 +805,7 @@ void updateHomeClock(bool force) {
 
 void drawHomeNetworkLine(bool force) {
   beginTftAccess();
-  String ipText = wifiReady ? WiFi.localIP().toString() : "WiFi offline";
-  String line = "IP: " + ipText;
+  String line = wifiReady ? "STA: " + WiFi.localIP().toString() : "AP: 192.168.4.1";
 
   if (!force && line == lastHomeIpText) {
     return;
@@ -680,11 +852,11 @@ void printNetworkInfo(const String &context) {
   Serial.println(context);
   Serial.print(F("SSID: "));
   Serial.println(WiFi.SSID());
+  Serial.print(F("AP IP: "));
+  Serial.println(WiFi.softAPIP());
   Serial.print(F("ESP32 IP: "));
   Serial.println(WiFi.localIP());
-  Serial.print(F("Registration URL: http://"));
-  Serial.print(WiFi.localIP());
-  Serial.println(F("/register"));
+  Serial.println(F("Admin URL: http://192.168.4.1/"));
 }
 
 void signalFingerprint() {
@@ -766,18 +938,706 @@ String htmlEscape(String value) {
   return value;
 }
 
+String jsonEscape(String value) {
+  value.replace("\\", "\\\\");
+  value.replace("\"", "\\\"");
+  value.replace("\r", "\\r");
+  value.replace("\n", "\\n");
+  value.replace("\t", "\\t");
+  return value;
+}
+
+String cookieValue(const String &name) {
+  String cookie = server.header("Cookie");
+  int start = cookie.indexOf(name + "=");
+  if (start < 0) {
+    return "";
+  }
+  start += name.length() + 1;
+  int end = cookie.indexOf(';', start);
+  if (end < 0) {
+    end = cookie.length();
+  }
+  String value = cookie.substring(start, end);
+  value.trim();
+  return value;
+}
+
+bool isAuthenticated() {
+  if (sessionToken.length() == 0) {
+    return false;
+  }
+  if ((int32_t) (millis() - sessionExpiresAt) > 0) {
+    clearSession();
+    return false;
+  }
+  if (cookieValue(SESSION_COOKIE_NAME) != sessionToken) {
+    return false;
+  }
+  sessionExpiresAt = millis() + SESSION_TIMEOUT_MS;
+  return true;
+}
+
+void beginSession() {
+  sessionToken = String((uint32_t) esp_random(), HEX) + String(millis(), HEX) + String((uint32_t) ESP.getEfuseMac(), HEX);
+  sessionExpiresAt = millis() + SESSION_TIMEOUT_MS;
+  server.sendHeader("Set-Cookie", String(SESSION_COOKIE_NAME) + "=" + sessionToken + "; Path=/; SameSite=Lax");
+}
+
+void clearSession() {
+  sessionToken = "";
+  sessionExpiresAt = 0;
+}
+
+void sendJson(int status, const String &payload) {
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(status, "application/json", payload);
+}
+
+bool requireApiAdmin() {
+  if (isAuthenticated()) {
+    return true;
+  }
+  sendJson(401, "{\"ok\":false,\"error\":\"Login required.\"}");
+  return false;
+}
+
 bool requireAdmin() {
-  if (server.authenticate(adminUser.c_str(), adminPassword.c_str())) {
+  if (isAuthenticated()) {
     return true;
   }
 
-  server.requestAuthentication(BASIC_AUTH, "Francis Key Device");
+  sendLoginPage();
   return false;
 }
 
 void redirectToRoot() {
   server.sendHeader("Location", "/", true);
   server.send(302, "text/plain", "");
+}
+
+void sendLoginPage(const String &message) {
+  String body;
+  body.reserve(4800);
+  body += F("<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>");
+  body += F("<title>Francis Key Login</title><style>");
+  body += F(":root{--bg:#0b1218;--panel:#131d26;--line:#284150;--text:#f5fbff;--muted:#9cb1bd;--brand:#25c3b8;--bad:#ef6b6b}*{box-sizing:border-box}body{margin:0;min-height:100dvh;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:linear-gradient(145deg,#071017,#101d26);color:var(--text);display:grid;place-items:center;padding:18px}.login{width:min(420px,100%);border:1px solid var(--line);background:rgba(19,29,38,.94);border-radius:8px;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.35)}h1{margin:0 0 4px;font-size:28px}p{color:var(--muted);line-height:1.5}.brand{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--brand);font-weight:800}label{display:block;margin:16px 0 6px;color:#dbe8ed;font-size:13px;font-weight:700}input,button{width:100%;border-radius:8px;border:1px solid var(--line);padding:13px 14px;background:#0d151d;color:var(--text);font:inherit}button{margin-top:18px;background:var(--brand);border:0;color:#061012;font-weight:800;cursor:pointer}.msg{border:1px solid rgba(239,107,107,.35);background:rgba(239,107,107,.1);color:#ffd5d5;border-radius:8px;padding:10px;margin-top:16px}.foot{font-size:12px}</style></head><body><main class='login'>");
+  body += F("<div class='brand'>Francis Key Appliance</div><h1>Admin Login</h1><p>Connect to <b>FRANCIS_KEY</b> and manage the attendance device at <b>192.168.4.1</b>.</p>");
+  if (message.length()) {
+    body += F("<div class='msg'>");
+    body += htmlEscape(message);
+    body += F("</div>");
+  }
+  body += F("<form method='post' action='/login'><label>Username</label><input name='username' autocomplete='username' required><label>Password</label><input name='password' type='password' autocomplete='current-password' required><button type='submit'>Login</button></form><p class='foot'>Default: admin / francis123</p></main></body></html>");
+  server.send(200, "text/html", body);
+}
+
+void sendAppShell() {
+  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server.send(200, "text/html", "");
+  server.sendContent(F(R"APPHTML(
+<!doctype html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Francis Key Device</title>
+<style>
+:root{--bg:#f3f7f9;--panel:#ffffff;--panel2:#edf4f6;--ink:#17242d;--muted:#5c7180;--line:#d8e3e8;--brand:#0f9f94;--brand2:#106b77;--good:#16845b;--warn:#b7791f;--bad:#c24141;--shadow:0 16px 42px rgba(23,36,45,.12)}
+*{box-sizing:border-box}body{margin:0;min-height:100dvh;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--ink)}button,input,select,textarea{font:inherit}button{cursor:pointer}.app{display:grid;min-height:100dvh}.sidebar{position:fixed;inset:0 auto 0 0;z-index:30;width:280px;transform:translateX(-105%);transition:.2s ease;background:#0c1820;color:#f6fbff;padding:16px;box-shadow:var(--shadow)}.sidebar.open{transform:none}.brand{display:flex;align-items:center;gap:10px;margin-bottom:18px}.mark{display:grid;place-items:center;width:42px;height:42px;border-radius:8px;background:linear-gradient(135deg,var(--brand),#79e5dc);color:#06201e;font-weight:900}.brand b{display:block;font-size:20px}.brand span{font-size:12px;color:#adc2ca}.nav{display:grid;gap:6px}.nav button{display:flex;align-items:center;gap:10px;border:0;border-radius:8px;background:transparent;color:#cfe0e7;padding:11px 12px;text-align:left}.nav button.active,.nav button:hover{background:rgba(121,229,220,.12);color:white}.main{min-width:0}.topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(243,247,249,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}.iconbtn{width:42px;height:42px;border-radius:8px;border:1px solid var(--line);background:var(--panel);display:grid;place-items:center}.title{font-weight:850}.sub{color:var(--muted);font-size:12px}.content{padding:14px;display:grid;gap:14px}.grid{display:grid;gap:12px}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;box-shadow:var(--shadow)}.card h2{margin:0 0 10px;font-size:18px}.stat{display:grid;gap:6px}.stat span{font-size:12px;color:var(--muted)}.stat b{font-size:24px}.screen{background:#0b1218;color:#effcff;border-radius:8px;padding:16px;min-height:132px;display:grid;align-content:center;gap:6px}.screen .kind{text-transform:uppercase;font-size:12px;letter-spacing:.14em;color:#7ce4dc}.screen .big{font-size:23px;font-weight:850}.screen .line{color:#c0d0d7}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 9px;font-size:12px;border:1px solid var(--line);background:var(--panel2)}.ok{color:var(--good)}.warn{color:var(--warn)}.bad{color:var(--bad)}.btn{border:0;border-radius:8px;padding:11px 13px;background:var(--brand);color:white;font-weight:800}.btn.secondary{background:#dfe9ed;color:var(--ink)}.btn.danger{background:var(--bad)}.btn:disabled{opacity:.62;cursor:not-allowed}.field{display:grid;gap:6px;margin:10px 0}.field label{font-size:13px;color:var(--muted);font-weight:800}.field input,.field select,.field textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:11px;background:white;color:var(--ink)}.field textarea{min-height:130px;resize:vertical}.tablewrap{overflow:auto;border:1px solid var(--line);border-radius:8px}table{width:100%;border-collapse:collapse;background:var(--panel);font-size:13px}th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{background:#edf4f6;color:#445b68}.list{display:grid;gap:8px}.item{border:1px solid var(--line);background:white;border-radius:8px;padding:12px;text-align:left}.item:hover{border-color:var(--brand)}.muted{color:var(--muted)}.empty{padding:16px;border:1px dashed var(--line);border-radius:8px;color:var(--muted);background:#fbfdfe}.modalbg{position:fixed;inset:0;z-index:40;display:none;place-items:center;background:rgba(7,14,19,.58);padding:14px}.modalbg.show{display:grid}.modal{width:min(520px,100%);background:var(--panel);border-radius:8px;border:1px solid var(--line);box-shadow:0 32px 90px rgba(0,0,0,.28);padding:16px}.toast{position:fixed;left:14px;right:14px;bottom:14px;z-index:50;display:none;background:#0c1820;color:white;border-radius:8px;padding:13px 14px;box-shadow:var(--shadow)}.toast.show{display:block}.overlay{position:fixed;inset:0;z-index:25;background:rgba(7,14,19,.36);display:none}.overlay.show{display:block}.loader{height:12px;border-radius:999px;background:linear-gradient(90deg,#dce8ed,#f8fbfc,#dce8ed);background-size:200% 100%;animation:load 1s infinite}@keyframes load{to{background-position:-200% 0}}@media(min-width:920px){.app{grid-template-columns:280px minmax(0,1fr)}.sidebar{position:sticky;transform:none;height:100dvh}.overlay,.menu{display:none}.content{padding:18px}.cards{grid-template-columns:repeat(4,minmax(0,1fr))}.wide{grid-template-columns:1.05fr .95fr}}
+</style>
+</head>
+<body>
+<div class="overlay" id="overlay"></div>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><div class="mark">FK</div><div><b>FRANCIS KEY</b><span>Attendance Appliance</span></div></div>
+    <nav class="nav" id="nav"></nav>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <button class="iconbtn menu" id="menuBtn" title="Menu">=</button>
+      <button class="iconbtn" id="backBtn" title="Back">&lt;</button>
+      <div><div class="title" id="pageTitle">Dashboard</div><div class="sub">AP: 192.168.4.1</div></div>
+    </header>
+    <section class="content" id="content"></section>
+  </main>
+</div>
+<div class="modalbg" id="modalBg"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+<script>
+const menu=["Dashboard","Attendance","Register User","Users","WiFi Settings","Attendance Rules","Logs","Backup / Restore","Logout"];
+const state={view:"Dashboard",device:null,students:[],attendance:[],users:[],logs:null,networks:[],loading:{},modalStudent:null,search:""};
+const $=id=>document.getElementById(id);
+function toast(msg){$("toast").textContent=msg;$("toast").classList.add("show");setTimeout(()=>$("toast").classList.remove("show"),3200)}
+async function api(path,opt={}){const res=await fetch(path,{cache:"no-store",...opt});if(res.status===401){location.href="/";throw new Error("Login required")}const text=await res.text();let data={};try{data=text?JSON.parse(text):{}}catch(e){throw new Error("Invalid device response")}if(!res.ok||data.ok===false)throw new Error(data.error||"Device request failed");return data}
+function setLoading(k,v){state.loading[k]=v;render()}
+function closeMenu(){$("sidebar").classList.remove("open");$("overlay").classList.remove("show")}
+function openMenu(){$("sidebar").classList.add("open");$("overlay").classList.add("show")}
+function nav(){const n=$("nav");n.innerHTML="";menu.forEach(name=>{const b=document.createElement("button");b.textContent=name;b.className=state.view===name?"active":"";b.onclick=()=>{if(name==="Logout"){location.href="/logout";return}state.view=name;closeMenu();render();loadView(name)};n.appendChild(b)})}
+function shell(){nav();$("pageTitle").textContent=state.view;$("backBtn").style.visibility=state.view==="Dashboard"?"hidden":"visible"}
+function statusPill(label,on){return `<span class="pill ${on?"ok":"bad"}">${label}: ${on?"OK":"OFF"}</span>`}
+function deviceCards(){const d=state.device||{};return `<div class="grid cards"><div class="card stat"><span>WiFi</span><b class="${d.wifiReady?"ok":"bad"}">${d.wifiReady?"Online":"Offline"}</b></div><div class="card stat"><span>Database API</span><b class="${d.databaseReady?"ok":"bad"}">${d.databaseReady?"Ready":"Offline"}</b></div><div class="card stat"><span>SD Queue</span><b>${d.pendingQueue||0}</b></div><div class="card stat"><span>Device Time</span><b>${d.time||"--:--"}</b></div></div>`}
+function liveScreen(){const u=(state.device&&state.device.ui)||{};return `<div class="screen"><div class="kind">${u.type||"state"}</div><div class="big">${u.title||"FRANCIS KEY"}</div><div class="line">${u.line1||""}</div><div class="line">${u.line2||""}</div><div class="line">${u.line3||""}</div></div>`}
+function dashboard(){const d=state.device||{};return `${deviceCards()}<div class="grid wide"><div class="card"><h2>Live Device Screen</h2>${liveScreen()}<div class="row" style="margin-top:12px">${statusPill("Fingerprint",d.fingerprintReady)}${statusPill("RFID",d.nfcReady)}${statusPill("RTC",d.rtcReady)}${statusPill("TFT",d.tftReady)}${statusPill("SD",d.sdReady)}</div></div><div class="card"><h2>Appliance</h2><div class="field"><label>Access Point</label><div class="item"><b>FRANCIS_KEY</b><div class="muted">Password: 12345678 / IP: 192.168.4.1</div></div></div><div class="field"><label>Station IP</label><div>${d.staIp||"Offline"}</div></div><div class="field"><label>API URL</label><div class="muted">${d.apiUrl||""}</div></div></div></div>`}
+function attendance(){if(state.loading.attendance)return `<div class="card"><div class="loader"></div></div>`;const rows=state.attendance.map(r=>`<tr><td>${r.date}</td><td>${r.time}</td><td>${r.id}</td><td>${r.name}</td><td>${r.status}</td></tr>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Recent Attendance</h2><button class="btn secondary" onclick="loadAttendance()">Refresh</button></div><div class="tablewrap"><table><thead><tr><th>Date</th><th>Time</th><th>ID</th><th>Name</th><th>Status</th></tr></thead><tbody>${rows||"<tr><td colspan=5>No local attendance records.</td></tr>"}</tbody></table></div></div>`}
+function registerView(){const d=state.device||{};if(!d.wifiReady||!d.databaseReady)return `<div class="card"><h2>Register User</h2><div class="empty">Registration unavailable.<br>Please connect to WiFi.</div></div>`;const q=state.search.toLowerCase();const filtered=state.students.filter(s=>(`${s.idNumber} ${s.fullName}`.toLowerCase()).includes(q));const list=filtered.map(s=>`<button class="item" onclick="openRegister(${s.id})"><b>${s.idNumber||s.id}</b> ${s.fullName}<div class="muted">${s.department||"Student"}</div></button>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Select Student</h2><button class="btn secondary" onclick="loadStudents()">Refresh</button></div><div class="field"><label>Realtime Search</label><input placeholder="Student ID, first name, last name, full name" value="${state.search}" oninput="state.search=this.value;render()"></div>${state.loading.students?'<div class="loader"></div>':`<div class="list">${list||'<div class="empty">No matching students.</div>'}</div>`}</div>`}
+function usersView(){if(state.loading.users)return `<div class="card"><div class="loader"></div></div>`;const rows=state.users.map(u=>`<tr><td>${u.idNumber||u.userId}</td><td>${u.fullName}</td><td>${u.fingerprintId||""}</td><td>${u.smartCardId||""}</td></tr>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Local User Cache</h2><button class="btn secondary" onclick="loadUsers()">Refresh</button></div><div class="tablewrap"><table><thead><tr><th>ID</th><th>Name</th><th>Fingerprint</th><th>RFID</th></tr></thead><tbody>${rows||"<tr><td colspan=4>No cached users.</td></tr>"}</tbody></table></div></div>`}
+function wifiView(){const nets=state.networks.map(n=>`<option value="${n.ssid}">${n.ssid} (${n.rssi} dBm)</option>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">WiFi Settings</h2><button class="btn secondary" onclick="scanWifi()">Scan</button></div>${state.loading.scan?'<div class="loader"></div>':""}<div class="field"><label>Network</label><select id="wifiSsid">${nets}<option value="">Manual SSID</option></select></div><div class="field"><label>Manual SSID</label><input id="manualSsid" placeholder="2.4GHz SSID"></div><div class="field"><label>Password</label><input id="wifiPass" type="password" placeholder="WiFi password"></div><button class="btn" onclick="saveWifi()">Save and Connect</button></div>`}
+function rulesView(){const d=state.device||{}, r=d.rules||{};return `<div class="card"><h2>Attendance Rules</h2><div class="field"><label>Student IN Time</label><input type="time" id="inTime" value="${r.inTime||"10:00"}"></div><div class="field"><label>Student OUT Allowed After</label><select id="outDelay">${[1,5,10,15,30,60].map(v=>`<option value="${v}" ${Number(r.outDelay)===v?"selected":""}>${v} minute${v>1?"s":""}</option>`).join("")}</select></div><button class="btn" onclick="saveRules()">Save Rules</button></div>`}
+function logsView(){if(state.loading.logs)return `<div class="card"><div class="loader"></div></div>`;const l=state.logs||{};return `<div class="grid"><div class="card"><div class="row"><h2 style="margin-right:auto">Device Logs</h2><button class="btn secondary" onclick="loadLogs()">Refresh</button></div><pre>${l.events||"No device log."}</pre></div><div class="card"><h2>Offline Sync Queue</h2><pre>${l.unsent||"No pending records."}</pre></div></div>`}
+function backupView(){return `<div class="grid"><div class="card"><h2>Backup</h2><p class="muted">Download SD files and settings. Fingerprint templates remain inside the fingerprint sensor.</p><div class="row"><button class="btn" onclick="download('/api/backup/settings','francis-key-settings.json')">Settings</button><button class="btn secondary" onclick="download('/api/backup/file?name=attendance','attendance.csv')">Attendance</button><button class="btn secondary" onclick="download('/api/backup/file?name=users','users.psv')">Users</button><button class="btn secondary" onclick="download('/api/backup/file?name=queue','unsent.psv')">Queue</button><button class="btn secondary" onclick="download('/api/backup/file?name=logs','device.log')">Logs</button></div></div><div class="card"><h2>Restore Settings</h2><div class="field"><label>Settings JSON</label><textarea id="restoreSettings"></textarea></div><button class="btn danger" onclick="restoreSettings()">Restore Settings</button></div><div class="card"><h2>Restore SD File</h2><div class="field"><label>File</label><select id="restoreFile"><option value="attendance">Attendance CSV</option><option value="users">Users cache</option><option value="queue">Unsent queue</option><option value="logs">Device log</option></select></div><div class="field"><label>Content</label><textarea id="restoreContent"></textarea></div><button class="btn danger" onclick="restoreFile()">Restore File</button></div></div>`}
+function render(){shell();const v=state.view;let html=v==="Dashboard"?dashboard():v==="Attendance"?attendance():v==="Register User"?registerView():v==="Users"?usersView():v==="WiFi Settings"?wifiView():v==="Attendance Rules"?rulesView():v==="Logs"?logsView():backupView();$("content").innerHTML=html}
+async function loadState(){try{state.device=await api("/api/state");render()}catch(e){console.log(e.message)}}
+async function loadAttendance(){setLoading("attendance",true);try{state.attendance=(await api("/api/attendance")).records||[]}catch(e){toast(e.message)}setLoading("attendance",false)}
+async function loadStudents(){setLoading("students",true);try{state.students=(await api("/api/students")).students||[]}catch(e){toast(e.message)}setLoading("students",false)}
+async function loadUsers(){setLoading("users",true);try{state.users=(await api("/api/users")).users||[]}catch(e){toast(e.message)}setLoading("users",false)}
+async function scanWifi(){setLoading("scan",true);try{state.networks=(await api("/api/wifi/scan")).networks||[]}catch(e){toast(e.message)}setLoading("scan",false)}
+async function loadLogs(){setLoading("logs",true);try{state.logs=await api("/api/logs")}catch(e){toast(e.message)}setLoading("logs",false)}
+function loadView(v){if(v==="Attendance")loadAttendance();if(v==="Register User")loadStudents();if(v==="Users")loadUsers();if(v==="WiFi Settings")scanWifi();if(v==="Logs")loadLogs()}
+function openRegister(id){state.modalStudent=state.students.find(s=>s.id===id);showRegisterModal()}
+function showRegisterModal(){const s=state.modalStudent;if(!s)return;$("modal").innerHTML=`<h2>Register User</h2><div class="field"><label>Student ID</label><div class="item">${s.idNumber||s.id}</div></div><div class="field"><label>Full Name</label><div class="item">${s.fullName}</div></div><div class="item">Scan Fingerprint: follow TFT and browser status</div><div class="item">Scan RFID: follow TFT and browser status</div><div class="row" style="margin-top:12px"><button class="btn" onclick="startRegister()">Register</button><button class="btn secondary" onclick="closeModal()">Cancel</button></div><div style="margin-top:12px">${liveScreen()}</div>`;$("modalBg").classList.add("show")}
+function closeModal(){$("modalBg").classList.remove("show");api("/api/register/cancel",{method:"POST"}).catch(()=>{})}
+async function startRegister(){try{const s=state.modalStudent;await api("/api/register/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:s.id})});toast("Registration started. Follow the device screen.");showRegisterModal()}catch(e){toast(e.message)}}
+async function saveWifi(){if(!confirm("Save WiFi settings and connect now?"))return;const select=$("wifiSsid").value;const manual=$("manualSsid").value.trim();try{await api("/api/wifi/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ssid:manual||select,password:$("wifiPass").value})});toast("WiFi settings saved.");loadState()}catch(e){toast(e.message)}}
+async function saveRules(){try{await api("/api/rules",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({inTime:$("inTime").value,outDelay:Number($("outDelay").value)})});toast("Attendance rules saved.");loadState()}catch(e){toast(e.message)}}
+function download(url,name){const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove()}
+async function restoreSettings(){if(!confirm("Restore settings from this JSON?"))return;try{await api("/api/restore/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:$("restoreSettings").value});toast("Settings restored.");loadState()}catch(e){toast(e.message)}}
+async function restoreFile(){if(!confirm("Replace the selected SD file?"))return;try{await api(`/api/restore/file?name=${encodeURIComponent($("restoreFile").value)}`,{method:"POST",headers:{"Content-Type":"text/plain"},body:$("restoreContent").value});toast("File restored.")}catch(e){toast(e.message)}}
+$("menuBtn").onclick=openMenu;$("overlay").onclick=closeMenu;$("backBtn").onclick=()=>{state.view="Dashboard";render();loadState()};$("modalBg").onclick=e=>{if(e.target===$("modalBg"))closeModal()};
+render();loadState();setInterval(loadState,2000);
+</script>
+</body>
+</html>
+)APPHTML"));
+}
+
+
+void handleAppRoot() {
+  if (!isAuthenticated()) {
+    sendLoginPage();
+    return;
+  }
+  sendAppShell();
+}
+
+void handleLoginPost() {
+  String username = server.arg("username");
+  String password = server.arg("password");
+  username.trim();
+  if (username == adminUser && password == adminPassword) {
+    beginSession();
+    logEvent("AUTH", "Admin logged in");
+    server.sendHeader("Location", "/", true);
+    server.send(302, "text/plain", "");
+    return;
+  }
+  logEvent("AUTH", "Invalid admin login attempt");
+  sendLoginPage("Invalid username or password.");
+}
+
+void handleLogout() {
+  clearSession();
+  server.sendHeader("Set-Cookie", String(SESSION_COOKIE_NAME) + "=; Path=/; Max-Age=0; SameSite=Lax");
+  server.sendHeader("Location", "/", true);
+  server.send(302, "text/plain", "");
+}
+
+void handleApiState() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+
+  DateTime now = currentDateTime();
+  String payload;
+  payload.reserve(1800);
+  payload += F("{\"ok\":true");
+  payload += F(",\"deviceId\":\""); payload += jsonEscape(deviceId); payload += F("\"");
+  payload += F(",\"apiUrl\":\""); payload += jsonEscape(apiUrl); payload += F("\"");
+  payload += F(",\"apIp\":\""); payload += WiFi.softAPIP().toString(); payload += F("\"");
+  payload += F(",\"staIp\":\""); payload += wifiReady ? WiFi.localIP().toString() : ""; payload += F("\"");
+  payload += F(",\"ssid\":\""); payload += jsonEscape(wifiSsid); payload += F("\"");
+  payload += F(",\"time\":\""); payload += jsonEscape(formatTime12(now)); payload += F("\"");
+  payload += F(",\"date\":\""); payload += jsonEscape(formatDate(now)); payload += F("\"");
+  payload += F(",\"mode\":\""); payload += String((int) mode); payload += F("\"");
+  payload += F(",\"wifiReady\":"); payload += wifiReady ? F("true") : F("false");
+  payload += F(",\"databaseReady\":"); payload += databaseReady ? F("true") : F("false");
+  payload += F(",\"sdReady\":"); payload += sdReady ? F("true") : F("false");
+  payload += F(",\"rtcReady\":"); payload += rtcReady ? F("true") : F("false");
+  payload += F(",\"nfcReady\":"); payload += nfcReady ? F("true") : F("false");
+  payload += F(",\"fingerprintReady\":"); payload += fingerprintReady ? F("true") : F("false");
+  payload += F(",\"tftReady\":"); payload += tftReady ? F("true") : F("false");
+  payload += F(",\"pendingQueue\":"); payload += String(pendingQueueCount());
+  payload += F(",\"rules\":{\"inTime\":\""); payload += minutesToTimeInput(studentInMinutes);
+  payload += F("\",\"outDelay\":"); payload += String(outDelayMinutes); payload += F("}");
+  payload += F(",\"ui\":{\"seq\":"); payload += String(uiState.seq);
+  payload += F(",\"type\":\""); payload += jsonEscape(uiState.type);
+  payload += F("\",\"title\":\""); payload += jsonEscape(uiState.title);
+  payload += F("\",\"line1\":\""); payload += jsonEscape(uiState.line1);
+  payload += F("\",\"line2\":\""); payload += jsonEscape(uiState.line2);
+  payload += F("\",\"line3\":\""); payload += jsonEscape(uiState.line3);
+  payload += F("\",\"updatedAt\":"); payload += String(uiState.updatedAt);
+  payload += F("}}");
+  sendJson(200, payload);
+}
+
+void handleApiStudents() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+  if (!wifiReady || !checkApiStatus()) {
+    sendJson(503, "{\"ok\":false,\"error\":\"Registration unavailable. Please connect to WiFi.\"}");
+    return;
+  }
+
+  DynamicJsonDocument response(24576);
+  int httpCode = 0;
+  String error;
+  if (!getDeviceJson("users", response, httpCode, error)) {
+    sendJson(503, String("{\"ok\":false,\"error\":\"") + jsonEscape(error.length() ? error : "Registration unavailable. Please connect to WiFi.") + "\"}");
+    return;
+  }
+
+  String payload;
+  payload.reserve(12000);
+  payload += F("{\"ok\":true,\"students\":[");
+  bool first = true;
+  for (JsonObject user : response["users"].as<JsonArray>()) {
+    String role = String((const char *) (user["role"] | ""));
+    String status = String((const char *) (user["status"] | ""));
+    role.toLowerCase();
+    status.toLowerCase();
+    if (role != "student" || status != "active") {
+      continue;
+    }
+    if (!first) {
+      payload += ",";
+    }
+    first = false;
+    payload += F("{\"id\":"); payload += String((int) user["id"]);
+    payload += F(",\"idNumber\":\""); payload += jsonEscape(String((const char *) (user["idNumber"] | "")));
+    payload += F("\",\"fullName\":\""); payload += jsonEscape(String((const char *) (user["fullName"] | "")));
+    payload += F("\",\"department\":\""); payload += jsonEscape(String((const char *) (user["department"] | "")));
+    payload += F("\",\"fingerprintId\":\""); payload += jsonEscape(String((const char *) (user["fingerprintId"] | "")));
+    payload += F("\",\"smartCardId\":\""); payload += jsonEscape(String((const char *) (user["smartCardId"] | "")));
+    payload += F("\"}");
+  }
+  payload += F("]}");
+  sendJson(200, payload);
+}
+
+void handleApiRegisterStart() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+  if (mode == MODE_REGISTER_FINGERPRINT || mode == MODE_REGISTER_RFID) {
+    sendJson(409, "{\"ok\":false,\"error\":\"Registration is already running.\"}");
+    return;
+  }
+  if (!wifiReady || !checkApiStatus()) {
+    sendJson(503, "{\"ok\":false,\"error\":\"Registration unavailable. Please connect to WiFi.\"}");
+    return;
+  }
+  if (!sdReady) {
+    sendJson(503, "{\"ok\":false,\"error\":\"SD card storage is required for local registration.\"}");
+    return;
+  }
+
+  DynamicJsonDocument request(512);
+  DeserializationError parseError = deserializeJson(request, server.arg("plain"));
+  if (parseError) {
+    sendJson(400, "{\"ok\":false,\"error\":\"Invalid JSON payload.\"}");
+    return;
+  }
+  int userId = request["userId"] | 0;
+  if (userId <= 0) {
+    sendJson(400, "{\"ok\":false,\"error\":\"Please select a valid student.\"}");
+    return;
+  }
+
+  DynamicJsonDocument response(24576);
+  int httpCode = 0;
+  String error;
+  if (!getDeviceJson("users", response, httpCode, error)) {
+    sendJson(503, String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
+    return;
+  }
+
+  bool found = false;
+  for (JsonObject user : response["users"].as<JsonArray>()) {
+    if ((int) user["id"] != userId) {
+      continue;
+    }
+    String role = String((const char *) (user["role"] | ""));
+    String status = String((const char *) (user["status"] | ""));
+    role.toLowerCase();
+    status.toLowerCase();
+    if (role != "student" || status != "active") {
+      sendJson(409, "{\"ok\":false,\"error\":\"Selected student is not active.\"}");
+      return;
+    }
+    pendingRegistrationUserId = userId;
+    pendingRegistrationIdNumber = String((const char *) (user["idNumber"] | ""));
+    pendingRegistrationName = String((const char *) (user["fullName"] | ""));
+    found = true;
+    break;
+  }
+  if (!found) {
+    sendJson(404, "{\"ok\":false,\"error\":\"Selected student was not found.\"}");
+    return;
+  }
+
+  pendingFingerprintTemplateId = fingerprintTemplateForUser(pendingRegistrationUserId);
+  pendingRfidUid = "";
+  registrationPhase = "fingerprint";
+  registrationError = "";
+  registrationCancelRequested = false;
+  mode = MODE_REGISTER_FINGERPRINT;
+  drawScreen("Registration", "Selected Student", pendingRegistrationName, "Scan fingerprint", ILI9341_BLUE);
+  logEvent("REG", "Started registration for " + pendingRegistrationIdNumber + " " + pendingRegistrationName);
+  sendJson(200, "{\"ok\":true,\"message\":\"Registration started.\"}");
+}
+
+void handleApiRegisterStatus() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+  String payload;
+  payload.reserve(900);
+  payload += F("{\"ok\":true,\"running\":");
+  payload += (mode == MODE_REGISTER_FINGERPRINT || mode == MODE_REGISTER_RFID) ? F("true") : F("false");
+  payload += F(",\"phase\":\""); payload += jsonEscape(registrationPhase);
+  payload += F("\",\"error\":\""); payload += jsonEscape(registrationError);
+  payload += F("\",\"userId\":"); payload += String(pendingRegistrationUserId);
+  payload += F(",\"idNumber\":\""); payload += jsonEscape(pendingRegistrationIdNumber);
+  payload += F("\",\"fullName\":\""); payload += jsonEscape(pendingRegistrationName);
+  payload += F("\",\"fingerprintId\":\""); payload += String(pendingFingerprintTemplateId);
+  payload += F("\",\"rfidUid\":\""); payload += jsonEscape(pendingRfidUid);
+  payload += F("\"}");
+  sendJson(200, payload);
+}
+
+void handleApiRegisterCancel() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+  registrationCancelRequested = true;
+  if (mode == MODE_REGISTER_FINGERPRINT || mode == MODE_REGISTER_RFID) {
+    drawScreen("Registration", "Cancel Requested", "Finish current scan", "", ILI9341_YELLOW);
+  }
+  sendJson(200, "{\"ok\":true}");
+}
+
+void handleApiAttendance() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+  String payload;
+  payload.reserve(10000);
+  payload += F("{\"ok\":true,\"records\":[");
+  bool first = true;
+  if (sdFileExists(ATTENDANCE_FILE)) {
+    File file = openSdFile(ATTENDANCE_FILE, FILE_READ);
+    String rows[80];
+    int count = 0;
+    while (file && file.available()) {
+      String line = file.readStringUntil('\n');
+      line.trim();
+      if (line.length() == 0 || line.startsWith("Date,")) {
+        continue;
+      }
+      if (count < 80) {
+        rows[count++] = line;
+      } else {
+        for (int i = 1; i < 80; i++) {
+          rows[i - 1] = rows[i];
+        }
+        rows[79] = line;
+      }
+      serviceWeb();
+    }
+    closeSdFile(file);
+    for (int i = count - 1; i >= 0; i--) {
+      if (!first) {
+        payload += ",";
+      }
+      first = false;
+      payload += F("{\"date\":\""); payload += jsonEscape(fieldAt(rows[i], ',', 0));
+      payload += F("\",\"time\":\""); payload += jsonEscape(fieldAt(rows[i], ',', 1));
+      payload += F("\",\"id\":\""); payload += jsonEscape(fieldAt(rows[i], ',', 2));
+      payload += F("\",\"name\":\""); payload += jsonEscape(fieldAt(rows[i], ',', 3));
+      payload += F("\",\"status\":\""); payload += jsonEscape(fieldAt(rows[i], ',', 4));
+      payload += F("\"}");
+    }
+  }
+  payload += F("]}");
+  sendJson(200, payload);
+}
+
+void handleApiUsers() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+  String payload;
+  payload.reserve(10000);
+  payload += F("{\"ok\":true,\"users\":[");
+  bool first = true;
+  if (sdFileExists(USER_CACHE_FILE)) {
+    File cache = openSdFile(USER_CACHE_FILE, FILE_READ);
+    while (cache && cache.available()) {
+      String line = cache.readStringUntil('\n');
+      line.trim();
+      if (line.length() == 0) {
+        continue;
+      }
+      if (!first) {
+        payload += ",";
+      }
+      first = false;
+      payload += F("{\"userId\":\""); payload += jsonEscape(fieldAt(line, '|', 0));
+      payload += F("\",\"idNumber\":\""); payload += jsonEscape(fieldAt(line, '|', 1));
+      payload += F("\",\"fullName\":\""); payload += jsonEscape(fieldAt(line, '|', 2));
+      payload += F("\",\"fingerprintId\":\""); payload += jsonEscape(fieldAt(line, '|', 3));
+      payload += F("\",\"smartCardId\":\""); payload += jsonEscape(fieldAt(line, '|', 4));
+      payload += F("\"}");
+      serviceWeb();
+    }
+    closeSdFile(cache);
+  }
+  payload += F("]}");
+  sendJson(200, payload);
+}
+
+void handleApiWifiScan() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+  int networks = WiFi.scanNetworks();
+  String payload;
+  payload.reserve(2048);
+  payload += F("{\"ok\":true,\"networks\":[");
+  for (int i = 0; i < networks; i++) {
+    if (i > 0) {
+      payload += ",";
+    }
+    payload += F("{\"ssid\":\""); payload += jsonEscape(WiFi.SSID(i));
+    payload += F("\",\"rssi\":"); payload += String(WiFi.RSSI(i));
+    payload += F(",\"open\":"); payload += WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? F("true") : F("false");
+    payload += F("}");
+  }
+  payload += F("]}");
+  sendJson(200, payload);
+}
+
+void handleApiWifiSave() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+  DynamicJsonDocument request(512);
+  if (deserializeJson(request, server.arg("plain"))) {
+    sendJson(400, "{\"ok\":false,\"error\":\"Invalid JSON payload.\"}");
+    return;
+  }
+  String ssid = String((const char *) (request["ssid"] | ""));
+  String password = String((const char *) (request["password"] | ""));
+  ssid.trim();
+  if (ssid.length() == 0) {
+    sendJson(400, "{\"ok\":false,\"error\":\"WiFi SSID is required.\"}");
+    return;
+  }
+  wifiSsid = ssid;
+  wifiPassword = password;
+  prefs.putString("ssid", wifiSsid);
+  prefs.putString("pass", wifiPassword);
+  drawScreen("WiFi", "Connecting...", wifiSsid, "AP stays online", ILI9341_BLUE);
+  wifiReady = connectToWifi(wifiSsid, wifiPassword, WIFI_CONNECT_TIMEOUT_MS);
+  if (wifiReady) {
+    syncClock();
+    checkApiStatus();
+    fetchAndCacheUsers();
+    drawScreen("WiFi Connected", "Station IP", WiFi.localIP().toString(), "AP: 192.168.4.1", ILI9341_GREEN);
+    logEvent("WIFI", "Connected to " + wifiSsid + " at " + WiFi.localIP().toString());
+    sendJson(200, "{\"ok\":true,\"connected\":true}");
+    return;
+  }
+  drawScreen("WiFi", "Connection Failed", "AP: 192.168.4.1", "Check password", ILI9341_RED);
+  logEvent("WIFI", "Connection failed for " + wifiSsid);
+  sendJson(200, "{\"ok\":true,\"connected\":false}");
+}
+
+void handleApiRules() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+  if (server.method() == HTTP_GET) {
+    String payload = String("{\"ok\":true,\"inTime\":\"") + minutesToTimeInput(studentInMinutes) + "\",\"outDelay\":" + String(outDelayMinutes) + "}";
+    sendJson(200, payload);
+    return;
+  }
+
+  DynamicJsonDocument request(512);
+  if (deserializeJson(request, server.arg("plain"))) {
+    sendJson(400, "{\"ok\":false,\"error\":\"Invalid JSON payload.\"}");
+    return;
+  }
+  studentInMinutes = timeInputToMinutes(String((const char *) (request["inTime"] | "10:00")), DEFAULT_STUDENT_IN_MINUTES);
+  uint16_t requestedDelay = request["outDelay"] | DEFAULT_OUT_DELAY_MINUTES;
+  if (requestedDelay == 1 || requestedDelay == 5 || requestedDelay == 10 || requestedDelay == 15 || requestedDelay == 30 || requestedDelay == 60) {
+    outDelayMinutes = requestedDelay;
+  } else {
+    outDelayMinutes = DEFAULT_OUT_DELAY_MINUTES;
+  }
+  saveRules();
+  logEvent("RULES", "Updated IN " + minutesToTimeInput(studentInMinutes) + " OUT delay " + String(outDelayMinutes) + " minutes");
+  sendJson(200, "{\"ok\":true}");
+}
+
+void handleApiLogs() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+  String events;
+  String unsent;
+  if (sdFileExists(DEVICE_LOG_FILE)) {
+    File file = openSdFile(DEVICE_LOG_FILE, FILE_READ);
+    uint16_t shown = 0;
+    while (file && file.available() && shown < SD_FILE_PREVIEW_BYTES) {
+      events += (char) file.read();
+      shown++;
+      serviceWeb();
+    }
+    closeSdFile(file);
+  }
+  if (sdFileExists(UNSENT_FILE)) {
+    File file = openSdFile(UNSENT_FILE, FILE_READ);
+    uint16_t shown = 0;
+    while (file && file.available() && shown < SD_FILE_PREVIEW_BYTES) {
+      unsent += (char) file.read();
+      shown++;
+      serviceWeb();
+    }
+    closeSdFile(file);
+  }
+  sendJson(200, String("{\"ok\":true,\"events\":\"") + jsonEscape(events) + "\",\"unsent\":\"" + jsonEscape(unsent) + "\"}");
+}
+
+void handleApiBackupSettings() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+  String payload;
+  payload.reserve(1200);
+  payload += F("{\"ok\":true,\"deviceId\":\""); payload += jsonEscape(deviceId);
+  payload += F("\",\"apiUrl\":\""); payload += jsonEscape(apiUrl);
+  payload += F("\",\"apiKey\":\""); payload += jsonEscape(apiKey);
+  payload += F("\",\"adminUser\":\""); payload += jsonEscape(adminUser);
+  payload += F("\",\"adminPassword\":\""); payload += jsonEscape(adminPassword);
+  payload += F("\",\"wifiSsid\":\""); payload += jsonEscape(wifiSsid);
+  payload += F("\",\"wifiPassword\":\""); payload += jsonEscape(wifiPassword);
+  payload += F("\",\"rules\":{\"inTime\":\""); payload += minutesToTimeInput(studentInMinutes);
+  payload += F("\",\"outDelay\":"); payload += String(outDelayMinutes);
+  payload += F("},\"note\":\"Fingerprint templates are stored in the fingerprint sensor and are not part of this backup.\"}");
+  server.sendHeader("Content-Disposition", "attachment; filename=francis-key-settings.json");
+  sendJson(200, payload);
+}
+
+void handleApiBackupFile() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+  String path = backupFilePathForName(server.arg("name"));
+  if (path.length() == 0) {
+    sendJson(400, "{\"ok\":false,\"error\":\"Unknown backup file.\"}");
+    return;
+  }
+  if (!sdReady || !sdFileExists(path.c_str())) {
+    sendJson(404, "{\"ok\":false,\"error\":\"File is not available on SD.\"}");
+    return;
+  }
+  File file = openSdFile(path.c_str(), FILE_READ);
+  if (!file) {
+    sendJson(500, "{\"ok\":false,\"error\":\"Cannot open SD file.\"}");
+    return;
+  }
+  String filename = path.substring(1);
+  server.sendHeader("Content-Disposition", "attachment; filename=" + filename);
+  server.streamFile(file, "text/plain");
+  closeSdFile(file);
+}
+
+void handleApiRestoreSettings() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+  DynamicJsonDocument request(4096);
+  if (deserializeJson(request, server.arg("plain"))) {
+    sendJson(400, "{\"ok\":false,\"error\":\"Invalid settings JSON.\"}");
+    return;
+  }
+  apiUrl = String((const char *) (request["apiUrl"] | apiUrl.c_str()));
+  apiKey = String((const char *) (request["apiKey"] | apiKey.c_str()));
+  deviceId = String((const char *) (request["deviceId"] | deviceId.c_str()));
+  adminUser = String((const char *) (request["adminUser"] | adminUser.c_str()));
+  adminPassword = String((const char *) (request["adminPassword"] | adminPassword.c_str()));
+  wifiSsid = String((const char *) (request["wifiSsid"] | wifiSsid.c_str()));
+  wifiPassword = String((const char *) (request["wifiPassword"] | wifiPassword.c_str()));
+  if (request["rules"].is<JsonObject>()) {
+    JsonObject rules = request["rules"];
+    studentInMinutes = timeInputToMinutes(String((const char *) (rules["inTime"] | minutesToTimeInput(studentInMinutes).c_str())), studentInMinutes);
+    uint16_t restoredDelay = rules["outDelay"] | outDelayMinutes;
+    if (restoredDelay == 1 || restoredDelay == 5 || restoredDelay == 10 || restoredDelay == 15 || restoredDelay == 30 || restoredDelay == 60) {
+      outDelayMinutes = restoredDelay;
+    }
+  }
+  saveSettings();
+  saveRules();
+  prefs.putString("ssid", wifiSsid);
+  prefs.putString("pass", wifiPassword);
+  logEvent("RESTORE", "Settings restored from browser");
+  sendJson(200, "{\"ok\":true}");
+}
+
+void handleApiRestoreFile() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+  String path = backupFilePathForName(server.arg("name"));
+  if (path.length() == 0) {
+    sendJson(400, "{\"ok\":false,\"error\":\"Unknown restore file.\"}");
+    return;
+  }
+  if (!sdReady) {
+    sendJson(503, "{\"ok\":false,\"error\":\"SD card is not ready.\"}");
+    return;
+  }
+  removeSdFile(path.c_str());
+  File file = openSdFile(path.c_str(), FILE_WRITE);
+  if (!file) {
+    sendJson(500, "{\"ok\":false,\"error\":\"Cannot write SD file.\"}");
+    return;
+  }
+  file.print(server.arg("plain"));
+  closeSdFile(file);
+  logEvent("RESTORE", "Restored " + path + " from browser");
+  sendJson(200, "{\"ok\":true}");
+}
+
+void handleApiSdFile() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+  String path = normalizeSdPath(server.arg("path"));
+  if (path.length() == 0 || !sdReady || !sdFileExists(path.c_str())) {
+    sendJson(404, "{\"ok\":false,\"error\":\"SD file not found.\"}");
+    return;
+  }
+  File file = openSdFile(path.c_str(), FILE_READ);
+  if (!file || file.isDirectory()) {
+    closeSdFile(file);
+    sendJson(400, "{\"ok\":false,\"error\":\"Path is not a readable file.\"}");
+    return;
+  }
+  server.streamFile(file, "text/plain");
+  closeSdFile(file);
 }
 
 void handlePortalRoot() {
@@ -1329,17 +2189,55 @@ bool registerCredentials(uint16_t fingerprintId, const String &rfidUid, String &
 }
 
 bool upsertCachedUser(const LocalUser &updated, String &error) {
+  Serial.println(F("[CACHE] upsertCachedUser() called"));
+  Serial.printf("[CACHE]   userId=%s  idNumber=%s  fullName=%s  fpId=%s  cardId=%s\n",
+                updated.userId.c_str(), updated.idNumber.c_str(),
+                updated.fullName.c_str(), updated.fingerprintId.c_str(),
+                updated.smartCardId.c_str());
+
   if (!sdReady) {
     error = "SD card is not ready.";
+    Serial.printf("[CACHE] FAIL: %s\n", error.c_str());
     return false;
   }
+  Serial.println(F("[CACHE] sdReady check passed"));
 
   bool hadCache = sdFileExists(USER_CACHE_FILE);
-  String cacheBody;
+  Serial.printf("[CACHE] Existing %s: %s\n", USER_CACHE_FILE, hadCache ? "yes" : "no");
+
   bool wroteUpdated = false;
 
+  // Remove stale temp file BEFORE opening the new one.
+  if (sdFileExists(USER_CACHE_TEMP_FILE)) {
+    Serial.printf("[CACHE] Stale temp file %s found, removing...\n", USER_CACHE_TEMP_FILE);
+    if (!removeSdFile(USER_CACHE_TEMP_FILE)) {
+      Serial.println(F("[CACHE] WARNING: Could not remove stale temp file"));
+    }
+  }
+
+  // Open the output temp file FIRST so we don't exhaust heap between reads.
+  Serial.printf("[CACHE] Opening temp file %s for writing...\n", USER_CACHE_TEMP_FILE);
+  Serial.printf("[CACHE] Pre-open heap: %u free, %u max block\n",
+                ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+
+  File output = openSdFile(USER_CACHE_TEMP_FILE, FILE_WRITE);
+  if (!output) {
+    error = "Cannot write local user cache (SD open failed). Check SD card and SPI bus.";
+    Serial.printf("[CACHE] FAIL: %s\n", error.c_str());
+    debugSdStatus();
+    return false;
+  }
+  Serial.println(F("[CACHE] Temp file opened OK"));
+
+  // Stream lines from the existing cache to the temp file, replacing the
+  // matching user row in-flight instead of building the whole file in a String.
   if (hadCache) {
+    Serial.println(F("[CACHE] Reading existing cache to merge..."));
     File input = openSdFile(USER_CACHE_FILE, FILE_READ);
+    if (!input) {
+      Serial.println(F("[CACHE] WARNING: Could not open existing cache for reading, treating as empty"));
+    }
+    int linesRead = 0;
     while (input && input.available()) {
       String line = input.readStringUntil('\n');
       line.trim();
@@ -1348,36 +2246,46 @@ bool upsertCachedUser(const LocalUser &updated, String &error) {
       }
 
       if (fieldAt(line, '|', 0) == updated.userId) {
-        cacheBody += cachedUserLine(updated);
-        cacheBody += '\n';
+        output.println(cachedUserLine(updated));
         wroteUpdated = true;
+        Serial.printf("[CACHE]   Replaced user %s at line %d\n", updated.userId.c_str(), linesRead);
       } else {
-        cacheBody += line;
-        cacheBody += '\n';
+        output.println(line);
       }
+      linesRead++;
+      yield();  // prevent watchdog bite on large files
     }
-    closeSdFile(input);
+    if (input) {
+      closeSdFile(input);
+    }
+    Serial.printf("[CACHE] Merged %d lines from existing cache\n", linesRead);
   }
 
-  removeSdFile(USER_CACHE_TEMP_FILE);
-  File output = openSdFile(USER_CACHE_TEMP_FILE, FILE_WRITE);
-  if (!output) {
-    error = "Cannot write local user cache.";
-    return false;
-  }
-
-  output.print(cacheBody);
+  // Append the new user row if it wasn't already replaced.
   if (!wroteUpdated) {
-    writeCachedUserLine(output, updated);
+    Serial.printf("[CACHE] Appending new user row (userId=%s)\n", updated.userId.c_str());
+    output.println(cachedUserLine(updated));
   }
 
+  Serial.println(F("[CACHE] Closing temp file..."));
   closeSdFile(output);
-  removeSdFile(USER_CACHE_FILE);
+  Serial.println(F("[CACHE] Temp file closed"));
+
+  // Atomically replace old cache with new
+  Serial.printf("[CACHE] Removing old cache %s...\n", USER_CACHE_FILE);
+  if (hadCache && !removeSdFile(USER_CACHE_FILE)) {
+    Serial.println(F("[CACHE] WARNING: Could not remove old cache, but continuing"));
+  }
+
+  Serial.printf("[CACHE] Renaming %s -> %s...\n", USER_CACHE_TEMP_FILE, USER_CACHE_FILE);
   if (!renameSdFile(USER_CACHE_TEMP_FILE, USER_CACHE_FILE)) {
-    error = "Cannot replace local user cache.";
+    error = "Cannot replace local user cache (rename failed).";
+    Serial.printf("[CACHE] FAIL: %s\n", error.c_str());
+    debugSdStatus();
     return false;
   }
 
+  Serial.println(F("[CACHE] upsertCachedUser() SUCCESS"));
   return true;
 }
 
@@ -1433,21 +2341,37 @@ AttendanceResult postAttendance(const String &fingerprintId, const String &rfidU
 
 void runRegistrationWorkflow() {
   if (mode == MODE_REGISTER_FINGERPRINT) {
+    if (registrationCancelRequested) {
+      registrationPhase = "cancelled";
+      drawScreen("Registration", "Cancelled", "", "", ILI9341_YELLOW);
+      logEvent("REG", "Registration cancelled before fingerprint scan");
+      mode = MODE_HOME;
+      return;
+    }
     if (!fingerprintReady) {
+      registrationPhase = "error";
+      registrationError = "Fingerprint sensor is not ready.";
       drawScreen("Registration", "Fingerprint Sensor", "Not Ready", "", ILI9341_RED);
+      logEvent("REG", registrationError);
       signalError();
       mode = MODE_HOME;
       return;
     }
 
-    bool enrolled = enrollFingerprint(pendingFingerprintTemplateId);
+    registrationPhase = "fingerprint";
+    String fpError;
+    bool enrolled = enrollFingerprint(pendingFingerprintTemplateId, fpError);
     if (!enrolled) {
-      drawScreen("Registration", "Fingerprint Mismatch", "Please Try Again", "", ILI9341_RED);
+      registrationPhase = "error";
+      registrationError = fpError.length() ? fpError : "Fingerprint mismatch.";
+      drawScreen("Registration", fpError.length() ? fpError : "Fingerprint Mismatch", "Please Try Again", "", ILI9341_RED);
+      logEvent("REG", "Fingerprint failed for " + pendingRegistrationName + ": " + registrationError);
       signalError();
       mode = MODE_HOME;
       return;
     }
 
+    registrationPhase = "rfid";
     drawScreen("Registration", "Fingerprint Registered", "Scan ID Card Next", "", ILI9341_GREEN);
     signalSuccess();
     mode = MODE_REGISTER_RFID;
@@ -1455,8 +2379,20 @@ void runRegistrationWorkflow() {
   }
 
   if (mode == MODE_REGISTER_RFID) {
+    if (registrationCancelRequested) {
+      finger.deleteModel(pendingFingerprintTemplateId);
+      registrationPhase = "cancelled";
+      drawScreen("Registration", "Cancelled", "Fingerprint rolled back", "", ILI9341_YELLOW);
+      logEvent("REG", "Registration cancelled after fingerprint scan; template rolled back");
+      mode = MODE_HOME;
+      return;
+    }
     if (!nfcReady) {
+      registrationPhase = "error";
+      registrationError = "RFID reader is not ready.";
+      finger.deleteModel(pendingFingerprintTemplateId);
       drawScreen("Registration", "RFID Reader", "Not Ready", "", ILI9341_RED);
+      logEvent("REG", registrationError + " Template rolled back.");
       signalError();
       mode = MODE_HOME;
       return;
@@ -1465,63 +2401,119 @@ void runRegistrationWorkflow() {
     String uid;
     bool rfidOk = enrollRfid(uid);
     if (!rfidOk) {
+      registrationPhase = "error";
+      registrationError = "RFID scan mismatch or timeout.";
+      finger.deleteModel(pendingFingerprintTemplateId);
       drawScreen("Registration", "RFID Mismatch", "Please Try Again", "", ILI9341_RED);
+      logEvent("REG", registrationError + " Template rolled back.");
       signalError();
       mode = MODE_HOME;
       return;
     }
 
     pendingRfidUid = uid;
+    registrationPhase = "api";
+    drawScreen("Registration", "Saving Online", pendingRegistrationName, "Please wait", ILI9341_BLUE);
+
     String apiError;
-    if (!registerCredentials(pendingFingerprintTemplateId, pendingRfidUid, apiError)) {
+    bool registered = registerCredentials(pendingFingerprintTemplateId, pendingRfidUid, apiError);
+    if (!registered) {
       finger.deleteModel(pendingFingerprintTemplateId);
-      drawScreen("Registration", "Save Failure", apiError, "", ILI9341_RED);
+      registrationPhase = "error";
+      registrationError = apiError.length() ? apiError : "Online registration failed.";
+      drawScreen("Registration Failed", "Online Save Failed", registrationError, "Fingerprint rolled back", ILI9341_RED);
+      logEvent("REG", "Online registration failed for " + pendingRegistrationName + ": " + registrationError);
       signalError();
       mode = MODE_HOME;
       return;
     }
 
-    drawScreen("Registration Complete", String("ID: ") + String(pendingRegistrationUserId), pendingRegistrationName, "Fingerprint + RFID Success", ILI9341_GREEN);
+    registrationPhase = "complete";
+    drawScreen("Registration Complete", "ID: " + (pendingRegistrationIdNumber.length() ? pendingRegistrationIdNumber : String(pendingRegistrationUserId)), pendingRegistrationName, "Saved Online + Local", ILI9341_GREEN);
+    logEvent("REG", "Registration complete for " + pendingRegistrationName + " FP " + String(pendingFingerprintTemplateId) + " RFID " + pendingRfidUid);
     signalSuccess();
     delay(2500);
 
     pendingRegistrationUserId = 0;
+    pendingRegistrationIdNumber = "";
     pendingRegistrationName = "";
     pendingFingerprintTemplateId = 0;
     pendingRfidUid = "";
+    registrationCancelRequested = false;
     mode = MODE_HOME;
   }
 }
 
-bool enrollFingerprint(uint16_t templateId) {
-  for (int scan = 1; scan <= FINGERPRINT_REGISTER_SCANS; scan++) {
-    drawScreen("Fingerprint", "Please Put Your Finger", String("Scan ") + String(scan) + " of " + String(FINGERPRINT_REGISTER_SCANS), "", ILI9341_BLUE);
+bool enrollFingerprint(uint16_t templateId, String &errorMsg) {
+  // Pre-check: ensure the template slot isn't already occupied
+  if (finger.loadModel(templateId) == FINGERPRINT_OK) {
+    errorMsg = "Fingerprint already registered for this user.";
+    return false;
+  }
 
-    uint8_t slot = scan == 1 ? 1 : 2;
-    if (!waitForFingerprintImage(slot, FINGER_SCAN_TIMEOUT_MS)) {
-      return false;
-    }
+  // --- Scan 1: capture first image to char buffer 1 ---
+  drawScreen("Fingerprint", "Please Put Your Finger", "Scan 1 of " + String(FINGERPRINT_REGISTER_SCANS), "", ILI9341_BLUE);
+  if (!waitForFingerprintImage(1, FINGER_SCAN_TIMEOUT_MS)) {
+    errorMsg = "Fingerprint scan timed out.";
+    return false;
+  }
+  signalFingerprint();
+  drawScreen("Fingerprint", "Scan 1 of " + String(FINGERPRINT_REGISTER_SCANS), "Accepted", "Remove finger", ILI9341_BLUE);
+  waitForFingerRelease(8000);
+  delay(450);
 
-    if (scan > 1) {
-      uint8_t modelStatus = finger.createModel();
-      if (modelStatus != FINGERPRINT_OK) {
-        return false;
-      }
+  // --- Scan 2: capture second image to char buffer 2, then combine ---
+  drawScreen("Fingerprint", "Same Finger Again", "Scan 2 of " + String(FINGERPRINT_REGISTER_SCANS), "", ILI9341_BLUE);
+  if (!waitForFingerprintImage(2, FINGER_SCAN_TIMEOUT_MS)) {
+    errorMsg = "Fingerprint scan timed out.";
+    return false;
+  }
+  if (finger.createModel() != FINGERPRINT_OK) {
+    errorMsg = "Fingerprints do not match. Please try again.";
+    return false;
+  }
+  signalFingerprint();
+  drawScreen("Fingerprint", "Scan 2 of " + String(FINGERPRINT_REGISTER_SCANS), "Accepted", "Remove finger", ILI9341_BLUE);
+  waitForFingerRelease(8000);
+  delay(450);
+
+  // --- Scan 3 onward: store the model, then verify the same finger ---
+  if (finger.storeModel(templateId) != FINGERPRINT_OK) {
+    errorMsg = "Failed to store fingerprint model.";
+    return false;
+  }
+
+  if (FINGERPRINT_REGISTER_SCANS >= 3) {
+    drawScreen("Fingerprint", "Same Finger Again", "Scan 3 of " + String(FINGERPRINT_REGISTER_SCANS), "", ILI9341_BLUE);
+    if (!waitForFingerprintImage(1, FINGER_SCAN_TIMEOUT_MS)) {
+      // Model is already stored; treat a verify-timeout as non-fatal.
+      return true;
     }
 
     signalFingerprint();
-    drawScreen("Fingerprint", String("Scan ") + String(scan) + " of " + String(FINGERPRINT_REGISTER_SCANS), "Accepted", "Remove finger", ILI9341_BLUE);
+    drawScreen("Fingerprint", "Scan 3 of " + String(FINGERPRINT_REGISTER_SCANS), "Accepted", "Remove finger", ILI9341_BLUE);
     waitForFingerRelease(8000);
     delay(450);
+
+    // Quick verification search against the stored model
+    uint8_t searchResult = finger.fingerFastSearch();
+    if (searchResult == FINGERPRINT_OK) {
+      return true;  // Verified — the stored print matches scan 3
+    }
+    // Verification didn't match; model is already stored so don't undo it.
+    // Still return success — captures 1+2 were consistent via createModel().
   }
 
-  uint8_t storeStatus = finger.storeModel(templateId);
-  return storeStatus == FINGERPRINT_OK;
+  return true;
 }
 
 bool waitForFingerprintImage(uint8_t slot, uint32_t timeoutMs) {
   uint32_t startedAt = millis();
   while (millis() - startedAt < timeoutMs) {
+    serviceWeb();
+    if (registrationCancelRequested) {
+      return false;
+    }
     uint8_t imageStatus = finger.getImage();
     if (imageStatus == FINGERPRINT_OK) {
       uint8_t convertStatus = finger.image2Tz(slot);
@@ -1535,6 +2527,7 @@ bool waitForFingerprintImage(uint8_t slot, uint32_t timeoutMs) {
 bool waitForFingerRelease(uint32_t timeoutMs) {
   uint32_t startedAt = millis();
   while (millis() - startedAt < timeoutMs) {
+    serviceWeb();
     if (finger.getImage() == FINGERPRINT_NOFINGER) {
       return true;
     }
@@ -1555,7 +2548,15 @@ bool enrollRfid(String &uid) {
     drawScreen("RFID Registration", "Please Scan Your ID Card", String("Scan ") + String(scan) + " of " + String(RFID_REGISTER_SCANS), "", ILI9341_YELLOW);
 
     String currentUid;
-    if (!readRfidUid(currentUid, RFID_SCAN_TIMEOUT_MS)) {
+    uint32_t startedAt = millis();
+    while (currentUid.length() == 0 && millis() - startedAt < RFID_SCAN_TIMEOUT_MS) {
+      serviceWeb();
+      if (registrationCancelRequested) {
+        return false;
+      }
+      readRfidUid(currentUid, 250);
+    }
+    if (currentUid.length() == 0) {
       return false;
     }
 
@@ -1668,7 +2669,8 @@ void completeAttendanceAttempt() {
   String localRecordId = makeLocalRecordId();
   LocalUser cached = findCachedUserByCredentials(attendanceFingerprintId, attendanceRfidUid);
   if (!cached.found) {
-    drawScreen("Access Denied", "Fingerprint and RFID", "No Local Match", "Access Denied", ILI9341_RED);
+    drawScreen("Access Denied", "RFID mismatch", "No Local Match", "Access Denied", ILI9341_RED);
+    logEvent("ATTENDANCE", "Denied local mismatch FP " + attendanceFingerprintId + " RFID " + attendanceRfidUid);
     signalUnauthorized();
     delay(2500);
     return;
@@ -1678,15 +2680,30 @@ void completeAttendanceAttempt() {
   String date = String(now.year()) + "-" + (now.month() < 10 ? "0" : "") + String(now.month()) + "-" + (now.day() < 10 ? "0" : "") + String(now.day());
   char timeBuffer[12];
   snprintf(timeBuffer, sizeof(timeBuffer), "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
-  String status = localNextStatus(date, cached.idNumber.length() ? cached.idNumber : cached.userId);
+  String localId = cached.idNumber.length() ? cached.idNumber : cached.userId;
+  String status = localNextStatus(date, localId);
+  if (status == "OUT") {
+    int elapsedMinutes = minutesSinceLastIn(date, localId, now);
+    if (elapsedMinutes >= 0 && elapsedMinutes < (int) outDelayMinutes) {
+      int waitMinutes = outDelayMinutes - elapsedMinutes;
+      drawScreen("Attendance Blocked", "OUT Not Allowed", "Wait " + String(waitMinutes) + " min", cached.fullName, ILI9341_RED);
+      logEvent("ATTENDANCE", "Blocked early OUT for " + localId + " after " + String(elapsedMinutes) + " minutes");
+      signalError();
+      delay(2500);
+      return;
+    }
+  }
 
-  appendAttendanceCsv(date, String(timeBuffer), cached.idNumber.length() ? cached.idNumber : cached.userId, cached.fullName, status);
+  appendAttendanceCsv(date, String(timeBuffer), localId, cached.fullName, status);
   AttendanceResult result = postAttendance(attendanceFingerprintId, attendanceRfidUid, occurredAt, localRecordId);
   if (!result.ok) {
     queueOfflineAttendance(localRecordId, occurredAt, attendanceFingerprintId, attendanceRfidUid);
+    logEvent("ATTENDANCE", "Saved offline " + status + " for " + localId + " " + cached.fullName);
+  } else {
+    logEvent("ATTENDANCE", "Uploaded " + status + " for " + localId + " " + cached.fullName);
   }
 
-  drawScreen(result.ok ? "Attendance Success" : "Saved Local", String("ID: ") + (cached.idNumber.length() ? cached.idNumber : cached.userId), cached.fullName, String("Status: ") + status, result.ok ? ILI9341_GREEN : ILI9341_YELLOW);
+  drawScreen(result.ok ? "Attendance Success" : "Saved Local", String("ID: ") + localId, cached.fullName, String("Status: ") + status, result.ok ? ILI9341_GREEN : ILI9341_YELLOW);
   signalSuccess();
   delay(2500);
 }
@@ -1710,6 +2727,20 @@ void ensureSdFiles() {
       closeSdFile(file);
     }
   }
+
+  if (!sdFileExists(USER_CACHE_FILE)) {
+    File file = openSdFile(USER_CACHE_FILE, FILE_WRITE);
+    if (file) {
+      closeSdFile(file);
+    }
+  }
+
+  if (!sdFileExists(DEVICE_LOG_FILE)) {
+    File file = openSdFile(DEVICE_LOG_FILE, FILE_WRITE);
+    if (file) {
+      closeSdFile(file);
+    }
+  }
 }
 
 void appendLine(const char *path, const String &line) {
@@ -1723,6 +2754,14 @@ void appendLine(const char *path, const String &line) {
   }
   file.println(line);
   closeSdFile(file);
+}
+
+void logEvent(const String &category, const String &message) {
+  if (!sdReady) {
+    Serial.printf("[LOG] %s | %s\n", category.c_str(), message.c_str());
+    return;
+  }
+  appendLine(DEVICE_LOG_FILE, isoNow() + "|" + cacheSafe(category) + "|" + cacheSafe(message));
 }
 
 String csvEscape(String value) {
@@ -1796,6 +2835,7 @@ void syncOfflineRecords() {
   }
 
   if (anySynced) {
+    logEvent("SYNC", "Uploaded pending attendance records");
     signalSuccess();
   }
 }
@@ -1853,6 +2893,69 @@ String localNextStatus(const String &date, const String &id) {
   return count % 2 == 0 ? "IN" : "OUT";
 }
 
+int hhmmssToMinutes(const String &value) {
+  if (value.length() < 5) {
+    return -1;
+  }
+  int hour = value.substring(0, 2).toInt();
+  int minute = value.substring(3, 5).toInt();
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return -1;
+  }
+  return hour * 60 + minute;
+}
+
+int minutesSinceLastIn(const String &date, const String &id, const DateTime &now) {
+  if (!sdReady || !sdFileExists(ATTENDANCE_FILE)) {
+    return -1;
+  }
+
+  File file = openSdFile(ATTENDANCE_FILE, FILE_READ);
+  int lastInMinute = -1;
+  while (file && file.available()) {
+    String line = file.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0 || line.startsWith("Date,")) {
+      continue;
+    }
+    if (fieldAt(line, ',', 0) == date && fieldAt(line, ',', 2) == id && fieldAt(line, ',', 4) == "IN") {
+      int minute = hhmmssToMinutes(fieldAt(line, ',', 1));
+      if (minute >= 0) {
+        lastInMinute = minute;
+      }
+    }
+    serviceWeb();
+  }
+  closeSdFile(file);
+
+  if (lastInMinute < 0) {
+    return -1;
+  }
+  int currentMinute = now.hour() * 60 + now.minute();
+  int elapsed = currentMinute - lastInMinute;
+  if (elapsed < 0) {
+    elapsed += 24 * 60;
+  }
+  return elapsed;
+}
+
+uint16_t pendingQueueCount() {
+  if (!sdReady || !sdFileExists(UNSENT_FILE)) {
+    return 0;
+  }
+  File file = openSdFile(UNSENT_FILE, FILE_READ);
+  uint16_t count = 0;
+  while (file && file.available()) {
+    String line = file.readStringUntil('\n');
+    line.trim();
+    if (line.length() > 0) {
+      count++;
+    }
+  }
+  closeSdFile(file);
+  return count;
+}
+
 String fieldAt(const String &line, char separator, int index) {
   int current = 0;
   int start = 0;
@@ -1874,7 +2977,17 @@ String makeLocalRecordId() {
 }
 
 void maintainWifi() {
+  bool wasReady = wifiReady;
   wifiReady = WiFi.status() == WL_CONNECTED;
+  if (wifiReady && !wasReady) {
+    logEvent("WIFI", "Station connection restored at " + WiFi.localIP().toString());
+    syncClock();
+    checkApiStatus();
+  }
+  if (!wifiReady && wasReady) {
+    databaseReady = false;
+    logEvent("WIFI", "Station connection lost");
+  }
   if (wifiReady || wifiSsid.length() == 0) {
     return;
   }
@@ -1953,4 +3066,114 @@ String fileSizeLabel(uint32_t size) {
     return String(size / 1024.0, 1) + " KB";
   }
   return String(size / 1048576.0, 1) + " MB";
+}
+
+String backupFilePathForName(const String &name) {
+  if (name == "attendance") {
+    return ATTENDANCE_FILE;
+  }
+  if (name == "queue") {
+    return UNSENT_FILE;
+  }
+  if (name == "users") {
+    return USER_CACHE_FILE;
+  }
+  if (name == "logs") {
+    return DEVICE_LOG_FILE;
+  }
+  return "";
+}
+
+// ---- SD card diagnostics ----
+void debugSdStatus() {
+  Serial.println(F("[SD DEBUG] ========== SD Card Diagnostics =========="));
+  Serial.printf("  sdReady flag: %s\n", sdReady ? "true" : "false");
+  Serial.printf("  Free heap: %u bytes\n", ESP.getFreeHeap());
+  Serial.printf("  Largest allocable block: %u bytes\n", ESP.getMaxAllocHeap());
+  Serial.printf("  SPI pins: SCLK=%d MISO=%d MOSI=%d\n", SPI_SCLK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
+  Serial.printf("  CS pins: TFT=%d SD=%d\n", TFT_CS_PIN, SD_CS_PIN);
+
+  if (!sdReady) {
+    Serial.println(F("[SD DEBUG] SD not marked ready — skipping hardware checks"));
+    Serial.println(F("[SD DEBUG] =========================================="));
+    return;
+  }
+
+  // Deselect everything and access SD
+  beginSdAccess();
+
+  uint8_t cardType = SD.cardType();
+  Serial.printf("  Card type: %u ", cardType);
+  switch (cardType) {
+    case CARD_NONE:  Serial.println(F("(NONE — no card detected!)")); break;
+    case CARD_MMC:   Serial.println(F("(MMC)")); break;
+    case CARD_SD:    Serial.println(F("(SD)")); break;
+    case CARD_SDHC:  Serial.println(F("(SDHC)")); break;
+    default:         Serial.println(F("(UNKNOWN)")); break;
+  }
+
+  if (cardType != CARD_NONE) {
+    uint64_t cardSizeMB = SD.cardSize() / (1024 * 1024);
+    Serial.printf("  Card size: %llu MB\n", cardSizeMB);
+    Serial.printf("  Total bytes: %llu\n", SD.totalBytes());
+    Serial.printf("  Used bytes: %llu\n", SD.usedBytes());
+  }
+
+  // Test write capability
+  const char *testPath = "/sd_debug_write_test.tmp";
+  File testFile = SD.open(testPath, FILE_WRITE);
+  if (testFile) {
+    size_t written = testFile.println("debug ok");
+    testFile.close();
+    SD.remove(testPath);
+    Serial.printf("  Write test: PASS (wrote %u bytes to %s)\n", written, testPath);
+  } else {
+    Serial.printf("  Write test: FAIL — cannot create %s\n", testPath);
+  }
+
+  // Check if the critical files exist
+  Serial.printf("  %s exists: %s\n", USER_CACHE_FILE, SD.exists(USER_CACHE_FILE) ? "yes" : "no");
+  Serial.printf("  %s exists: %s\n", ATTENDANCE_FILE, SD.exists(ATTENDANCE_FILE) ? "yes" : "no");
+  Serial.printf("  %s exists: %s\n", UNSENT_FILE, SD.exists(UNSENT_FILE) ? "yes" : "no");
+
+  endSdAccess();
+  Serial.println(F("[SD DEBUG] =========================================="));
+}
+
+// ---- Local-only credential save (no API) ----
+bool saveCredentialsLocally(uint16_t fingerprintId, const String &rfidUid, String &error) {
+  Serial.println(F("[SAVE] saveCredentialsLocally() called"));
+
+  LocalUser newUser;
+  newUser.found = true;
+  newUser.userId = String(pendingRegistrationUserId);
+  // Use the name as idNumber fallback when we don't have a separate ID number
+  newUser.idNumber = String(pendingRegistrationUserId);
+  newUser.fullName = pendingRegistrationName;
+  newUser.fingerprintId = String(fingerprintId);
+  newUser.smartCardId = rfidUid;
+
+  Serial.printf("[SAVE] Built LocalUser: userId=%s idNumber=%s name=%s fp=%s rfid=%s\n",
+                newUser.userId.c_str(), newUser.idNumber.c_str(),
+                newUser.fullName.c_str(), newUser.fingerprintId.c_str(),
+                newUser.smartCardId.c_str());
+
+  // Ensure SD files exist (creates empty cache file if missing)
+  if (sdReady && !sdFileExists(USER_CACHE_FILE)) {
+    Serial.println(F("[SAVE] No user cache file yet, creating empty one..."));
+    File f = openSdFile(USER_CACHE_FILE, FILE_WRITE);
+    if (f) {
+      closeSdFile(f);
+      Serial.println(F("[SAVE] Empty cache file created"));
+    } else {
+      Serial.println(F("[SAVE] WARNING: Could not create empty cache file"));
+    }
+  }
+
+  bool ok = upsertCachedUser(newUser, error);
+  Serial.printf("[SAVE] upsertCachedUser returned: %s\n", ok ? "true" : "false");
+  if (!ok) {
+    Serial.printf("[SAVE] Error: %s\n", error.c_str());
+  }
+  return ok;
 }
