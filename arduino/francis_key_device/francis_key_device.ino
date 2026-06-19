@@ -1068,7 +1068,7 @@ void sendAppShell() {
 <div class="toast" id="toast"></div>
 <script>
 const menu=["Dashboard","Attendance","Register User","Users","WiFi Settings","Attendance Rules","Date/Time","Logs","Backup / Restore","Logout"];
-const state={view:"Dashboard",device:null,students:[],attendance:[],users:[],logs:null,networks:[],loading:{},modalStudent:null,search:""};
+const state={view:"Dashboard",device:null,students:[],attendance:[],users:[],logs:null,networks:[],loading:{},scanStatus:"",modalStudent:null,search:""};
 const $=id=>document.getElementById(id);
 function toast(msg){$("toast").textContent=msg;$("toast").classList.add("show");setTimeout(()=>$("toast").classList.remove("show"),3200)}
 async function api(path,opt={}){const res=await fetch(path,{cache:"no-store",...opt});if(res.status===401){location.href="/";throw new Error("Login required")}const text=await res.text();let data={};try{data=text?JSON.parse(text):{}}catch(e){throw new Error("Invalid device response")}if(!res.ok||data.ok===false)throw new Error(data.error||"Device request failed");return data}
@@ -1084,25 +1084,25 @@ function dashboard(){const d=state.device||{};return `${deviceCards()}<div class
 function attendance(){if(state.loading.attendance)return `<div class="card"><div class="loader"></div></div>`;const rows=state.attendance.map(r=>`<tr><td>${r.date}</td><td>${r.time}</td><td>${r.id}</td><td>${r.name}</td><td>${r.status}</td></tr>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Recent Attendance</h2><button class="btn secondary" onclick="loadAttendance()">Refresh</button></div><div class="tablewrap"><table><thead><tr><th>Date</th><th>Time</th><th>ID</th><th>Name</th><th>Status</th></tr></thead><tbody>${rows||"<tr><td colspan=5>No local attendance records.</td></tr>"}</tbody></table></div></div>`}
 function registerView(){const d=state.device||{};if(!d.wifiReady||!d.databaseReady)return `<div class="card"><h2>Register User</h2><div class="empty">Registration unavailable.<br>Please connect to WiFi.</div></div>`;const q=state.search.toLowerCase();const filtered=state.students.filter(s=>(`${s.idNumber} ${s.fullName}`.toLowerCase()).includes(q));const list=filtered.map(s=>`<button class="item" onclick="openRegister(${s.id})"><b>${s.idNumber||s.id}</b> ${s.fullName}<div class="muted">${s.department||"Student"}</div></button>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Select Student</h2><button class="btn secondary" onclick="loadStudents()">Refresh</button></div><div class="field"><label>Realtime Search</label><input placeholder="Student ID, first name, last name, full name" value="${state.search}" oninput="state.search=this.value;render()"></div>${state.loading.students?'<div class="loader"></div>':`<div class="list">${list||'<div class="empty">No matching students.</div>'}</div>`}</div>`}
 function usersView(){if(state.loading.users)return `<div class="card"><div class="loader"></div></div>`;const rows=state.users.map(u=>`<tr><td>${u.idNumber||u.userId}</td><td>${u.fullName}</td><td>${u.fingerprintId||""}</td><td>${u.smartCardId||""}</td></tr>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Local User Cache</h2><button class="btn secondary" onclick="loadUsers()">Refresh</button></div><div class="tablewrap"><table><thead><tr><th>ID</th><th>Name</th><th>Fingerprint</th><th>RFID</th></tr></thead><tbody>${rows||"<tr><td colspan=4>No cached users.</td></tr>"}</tbody></table></div></div>`}
-function wifiView(){const nets=state.networks.map(n=>`<option value="${n.ssid}">${n.ssid} (${n.rssi} dBm)</option>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">WiFi Settings</h2><button class="btn secondary" onclick="scanWifi()">Scan</button></div>${state.loading.scan?'<div class="loader"></div>':""}<div class="field"><label>Network</label><select id="wifiSsid">${nets}<option value="">Manual SSID</option></select></div><div class="field"><label>Manual SSID</label><input id="manualSsid" placeholder="2.4GHz SSID"></div><div class="field"><label>Password</label><input id="wifiPass" type="password" placeholder="WiFi password"></div><button class="btn" onclick="saveWifi()">Save and Connect</button></div>`}
+function wifiView(){const nets=state.networks.map(n=>`<option value="${n.ssid}">${n.ssid} (${n.rssi} dBm)</option>`).join("");const scanMsg=state.loading.scan?'Scanning WiFi...':state.scanStatus;return `<div class="card"><div class="row"><h2 style="margin-right:auto">WiFi Settings</h2><button class="btn secondary" onclick="scanWifi()">Scan</button></div>${scanMsg?'<p style="margin:8px 0;color:var(--muted)">'+scanMsg+'</p>':""}<div class="field"><label>Network</label><select id="wifiSsid">${nets}</select></div><div class="field"><label>Password</label><input id="wifiPass" type="password" placeholder="WiFi password"></div><button class="btn" onclick="saveWifi()">Save and Connect</button></div>`}
 function rulesView(){const d=state.device||{}, r=d.rules||{};return `<div class="card"><h2>Attendance Rules</h2><div class="field"><label>Student IN Time</label><input type="time" id="inTime" value="${r.inTime||"10:00"}"></div><div class="field"><label>Student OUT Allowed After</label><select id="outDelay">${[1,5,10,15,30,60].map(v=>`<option value="${v}" ${Number(r.outDelay)===v?"selected":""}>${v} minute${v>1?"s":""}</option>`).join("")}</select></div><button class="btn" onclick="saveRules()">Save Rules</button></div>`}
 function logsView(){if(state.loading.logs)return `<div class="card"><div class="loader"></div></div>`;const l=state.logs||{};return `<div class="grid"><div class="card"><div class="row"><h2 style="margin-right:auto">Device Logs</h2><button class="btn secondary" onclick="loadLogs()">Refresh</button></div><pre>${l.events||"No device log."}</pre></div><div class="card"><h2>Offline Sync Queue</h2><pre>${l.unsent||"No pending records."}</pre></div></div>`}
 function backupView(){return `<div class="grid"><div class="card"><h2>Backup</h2><p class="muted">Download SD files and settings. Fingerprint templates remain inside the fingerprint sensor.</p><div class="row"><button class="btn" onclick="download('/api/backup/settings','francis-key-settings.json')">Settings</button><button class="btn secondary" onclick="download('/api/backup/file?name=attendance','attendance.csv')">Attendance</button><button class="btn secondary" onclick="download('/api/backup/file?name=users','users.psv')">Users</button><button class="btn secondary" onclick="download('/api/backup/file?name=queue','unsent.psv')">Queue</button><button class="btn secondary" onclick="download('/api/backup/file?name=logs','device.log')">Logs</button></div></div><div class="card"><h2>Restore Settings</h2><div class="field"><label>Settings JSON</label><textarea id="restoreSettings"></textarea></div><button class="btn danger" onclick="restoreSettings()">Restore Settings</button></div><div class="card"><h2>Restore SD File</h2><div class="field"><label>File</label><select id="restoreFile"><option value="attendance">Attendance CSV</option><option value="users">Users cache</option><option value="queue">Unsent queue</option><option value="logs">Device log</option></select></div><div class="field"><label>Content</label><textarea id="restoreContent"></textarea></div><button class="btn danger" onclick="restoreFile()">Restore File</button></div></div>`}
-function dateTimeView(){const d=state.device||{};const h24=d.rtcHour24!==undefined?d.rtcHour24:12;const h12=h24%12||12;const ampm=h24>=12?'PM':'AM';const m=d.rtcMonth||1;const dd=d.rtcDay||1;const y=d.rtcYear||2026;const min=d.rtcMinute||0;let ms='';for(let i=1;i<=12;i++)ms+='<option value="'+i+'"'+(i===m?' selected':'')+'>'+i+'</option>';let hs='';for(let i=1;i<=12;i++){const s=i<10?'0'+i:''+i;hs+='<option value="'+i+'"'+(i===h12?' selected':'')+'>'+s+'</option>'}let mins='';for(let i=0;i<60;i++){const s=i<10?'0'+i:''+i;mins+='<option value="'+s+'"'+(i===min?' selected':'')+'>'+s+'</option>'}return '<div class="card"><h2>Set Date & Time (Offline)</h2><p class="muted">Manually set the RTC date and time when the device is offline. All times are in 12-hour format.</p><div class="grid" style="grid-template-columns:1fr 1fr"><div class="field"><label>Year</label><input type="number" id="dtYear" min="2000" max="2099" value="'+y+'"></div><div class="field"><label>Month</label><select id="dtMonth">'+ms+'</select></div><div class="field"><label>Day</label><input type="number" id="dtDay" min="1" max="31" value="'+dd+'"></div><div class="field"><label>Hour</label><select id="dtHour">'+hs+'</select></div><div class="field"><label>Minute</label><select id="dtMinute">'+mins+'</select></div><div class="field"><label>AM/PM</label><select id="dtAmPm"><option value="AM"'+(ampm==='AM'?' selected':'')+'>AM</option><option value="PM"'+(ampm==='PM'?' selected':'')+'>PM</option></select></div></div><button class="btn" onclick="saveDateTime()">Set Date & Time</button><div style="margin-top:12px;padding:12px;background:#fbfdfe;border-radius:8px;border:1px solid var(--line)"><div class="muted">Current device time</div><b>'+d.date+' '+d.time+'</b></div></div>'}
-async function saveDateTime(){const y=parseInt($("dtYear").value);const mo=parseInt($("dtMonth").value);const d=parseInt($("dtDay").value);const h12=parseInt($("dtHour").value);const mi=parseInt($("dtMinute").value);const pm=$("dtAmPm").value==="PM";if(!y||!mo||!d||!h12||mi===undefined){toast("Please fill all fields");return}try{await api("/api/time/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({year:y,month:mo,day:d,hour12:h12,minute:mi,isPm:pm})});toast("Date and time updated.");loadState()}catch(e){toast(e.message)}}
+function dateTimeView(){const d=state.device||{};const h24=d.rtcHour24!==undefined?d.rtcHour24:12;const h12=h24%12||12;const ampm=h24>=12?'PM':'AM';const m=d.rtcMonth||1;const dd=d.rtcDay||1;const y=d.rtcYear||2026;const min=d.rtcMinute||0;const mn=["January","February","March","April","May","June","July","August","September","October","November","December"];let ms='';for(let i=1;i<=12;i++)ms+='<option value="'+i+'"'+(i===m?' selected':'')+'>'+mn[i-1]+'</option>';let hs='';for(let i=1;i<=12;i++){const s=i<10?'0'+i:''+i;hs+='<option value="'+i+'"'+(i===h12?' selected':'')+'>'+s+'</option>'}let mins='';for(let i=0;i<60;i++){const s=i<10?'0'+i:''+i;mins+='<option value="'+s+'"'+(i===min?' selected':'')+'>'+s+'</option>'}return '<div class="card"><h2>Set Date & Time (Offline)</h2><p class="muted">Manually set the RTC date and time when the device is offline. All times are in 12-hour format.</p><div class="grid" style="grid-template-columns:1fr 1fr"><div class="field"><label>Year</label><input type="number" id="dtYear" min="2000" max="2099" value="'+y+'"></div><div class="field"><label>Month</label><select id="dtMonth">'+ms+'</select></div><div class="field"><label>Day</label><input type="number" id="dtDay" min="1" max="31" value="'+dd+'"></div><div class="field"><label>Hour</label><select id="dtHour">'+hs+'</select></div><div class="field"><label>Minute</label><select id="dtMinute">'+mins+'</select></div><div class="field"><label>AM/PM</label><select id="dtAmPm"><option value="AM"'+(ampm==='AM'?' selected':'')+'>AM</option><option value="PM"'+(ampm==='PM'?' selected':'')+'>PM</option></select></div></div><button class="btn" onclick="saveDateTime()">Set Date & Time</button><div style="margin-top:12px;padding:12px;background:#fbfdfe;border-radius:8px;border:1px solid var(--line)"><div class="muted">Current device time</div><b>'+d.date+' '+d.time+'</b></div></div>'}
+async function saveDateTime(){const y=parseInt($("dtYear").value);const mo=parseInt($("dtMonth").value);const d=parseInt($("dtDay").value);const h12=parseInt($("dtHour").value);const mi=parseInt($("dtMinute").value);const pm=$("dtAmPm").value==="PM";if(!y||!mo||!d||!h12||mi===undefined){toast("Please fill all fields");return}if(d<1||d>31){toast("Day must be between 1 and 31");return}try{await api("/api/time/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({year:y,month:mo,day:d,hour12:h12,minute:mi,isPm:pm})});toast("Date and time updated.");loadState()}catch(e){toast(e.message)}}
 function render(){shell();const v=state.view;let html=v==="Dashboard"?dashboard():v==="Attendance"?attendance():v==="Register User"?registerView():v==="Users"?usersView():v==="WiFi Settings"?wifiView():v==="Attendance Rules"?rulesView():v==="Date/Time"?dateTimeView():v==="Logs"?logsView():backupView();$("content").innerHTML=html}
 async function loadState(){try{state.device=await api("/api/state");render()}catch(e){console.log(e.message)}}
 async function loadAttendance(){setLoading("attendance",true);try{state.attendance=(await api("/api/attendance")).records||[]}catch(e){toast(e.message)}setLoading("attendance",false)}
 async function loadStudents(){setLoading("students",true);try{state.students=(await api("/api/students")).students||[]}catch(e){toast(e.message)}setLoading("students",false)}
 async function loadUsers(){setLoading("users",true);try{state.users=(await api("/api/users")).users||[]}catch(e){toast(e.message)}setLoading("users",false)}
-async function scanWifi(){setLoading("scan",true);try{state.networks=(await api("/api/wifi/scan")).networks||[]}catch(e){toast(e.message)}setLoading("scan",false)}
+async function scanWifi(){setLoading("scan",true);try{const r=await api("/api/wifi/scan");state.networks=r.networks||[];state.scanStatus=state.networks.length?"Found "+state.networks.length+" 2.4GHz networks":"No 2.4GHz WiFi networks found."}catch(e){state.scanStatus="";toast(e.message)}setLoading("scan",false)}
 async function loadLogs(){setLoading("logs",true);try{state.logs=await api("/api/logs")}catch(e){toast(e.message)}setLoading("logs",false)}
 function loadView(v){if(v==="Attendance")loadAttendance();if(v==="Register User")loadStudents();if(v==="Users")loadUsers();if(v==="WiFi Settings")scanWifi();if(v==="Date/Time")loadState();if(v==="Logs")loadLogs()}
 function openRegister(id){state.modalStudent=state.students.find(s=>s.id===id);showRegisterModal()}
 function showRegisterModal(){const s=state.modalStudent;if(!s)return;$("modal").innerHTML=`<h2>Register User</h2><div class="field"><label>Student ID</label><div class="item">${s.idNumber||s.id}</div></div><div class="field"><label>Full Name</label><div class="item">${s.fullName}</div></div><div class="item">Scan Fingerprint: follow TFT and browser status</div><div class="item">Scan RFID: follow TFT and browser status</div><div class="row" style="margin-top:12px"><button class="btn" onclick="startRegister()">Register</button><button class="btn secondary" onclick="closeModal()">Cancel</button></div><div style="margin-top:12px">${liveScreen()}</div>`;$("modalBg").classList.add("show")}
 function closeModal(){$("modalBg").classList.remove("show");api("/api/register/cancel",{method:"POST"}).catch(()=>{})}
 async function startRegister(){try{const s=state.modalStudent;await api("/api/register/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:s.id})});toast("Registration started. Follow the device screen.");showRegisterModal()}catch(e){toast(e.message)}}
-async function saveWifi(){if(!confirm("Save WiFi settings and connect now?"))return;const select=$("wifiSsid").value;const manual=$("manualSsid").value.trim();try{await api("/api/wifi/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ssid:manual||select,password:$("wifiPass").value})});toast("WiFi settings saved.");loadState()}catch(e){toast(e.message)}}
+async function saveWifi(){if(!confirm("Save WiFi settings and connect now?"))return;const ssid=$("wifiSsid").value;if(!ssid){toast("Please select a WiFi network");return}try{await api("/api/wifi/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ssid:ssid,password:$("wifiPass").value})});toast("WiFi settings saved.");loadState()}catch(e){toast(e.message)}}
 async function saveRules(){try{await api("/api/rules",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({inTime:$("inTime").value,outDelay:Number($("outDelay").value)})});toast("Attendance rules saved.");loadState()}catch(e){toast(e.message)}}
 function download(url,name){const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function restoreSettings(){if(!confirm("Restore settings from this JSON?"))return;try{await api("/api/restore/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:$("restoreSettings").value});toast("Settings restored.");loadState()}catch(e){toast(e.message)}}
@@ -1421,20 +1421,82 @@ void handleApiWifiScan() {
   if (!requireApiAdmin()) {
     return;
   }
-  int networks = WiFi.scanNetworks();
+
+  // Delete previous scan results and start a new async scan
+  WiFi.scanDelete();
+  WiFi.scanNetworks(true);
+
+  // Wait for completion while servicing web clients so the UI stays responsive
+  int networks = WiFi.scanComplete();
+  while (networks == WIFI_SCAN_RUNNING) {
+    server.handleClient();
+    dnsServer.processNextRequest();
+    delay(100);
+    networks = WiFi.scanComplete();
+  }
+
+  if (networks == WIFI_SCAN_FAILED) {
+    WiFi.scanDelete();
+    sendJson(200, "{\"ok\":true,\"networks\":[]}");
+    return;
+  }
+
+  // Filter: 2.4GHz only (channels 1-14), non-empty SSID, no duplicates
+  String seen[64];
+  int seenCount = 0;
+
   String payload;
   payload.reserve(2048);
   payload += F("{\"ok\":true,\"networks\":[");
+
+  bool first = true;
   for (int i = 0; i < networks; i++) {
-    if (i > 0) {
+    String ssid = WiFi.SSID(i);
+    ssid.trim();
+
+    // Skip empty SSIDs
+    if (ssid.length() == 0) {
+      continue;
+    }
+
+    // Skip non-2.4GHz networks (channel >= 36 is 5GHz)
+    int8_t ch = WiFi.channel(i);
+    if (ch < 1 || ch > 14) {
+      continue;
+    }
+
+    // Skip duplicates (case-insensitive)
+    bool duplicate = false;
+    String lowerSsid = ssid;
+    lowerSsid.toLowerCase();
+    for (int j = 0; j < seenCount; j++) {
+      if (seen[j] == lowerSsid) {
+        duplicate = true;
+        break;
+      }
+    }
+    if (duplicate) {
+      continue;
+    }
+
+    // Store seen SSID (lowercase for case-insensitive dedup)
+    if (seenCount < 64) {
+      seen[seenCount++] = lowerSsid;
+    }
+
+    if (!first) {
       payload += ",";
     }
-    payload += F("{\"ssid\":\""); payload += jsonEscape(WiFi.SSID(i));
+    first = false;
+
+    payload += F("{\"ssid\":\""); payload += jsonEscape(ssid);
     payload += F("\",\"rssi\":"); payload += String(WiFi.RSSI(i));
     payload += F(",\"open\":"); payload += WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? F("true") : F("false");
     payload += F("}");
   }
+
   payload += F("]}");
+  WiFi.scanDelete();
   sendJson(200, payload);
 }
 
