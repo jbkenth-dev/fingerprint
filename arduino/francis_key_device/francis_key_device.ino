@@ -244,6 +244,7 @@ String backupFilePathForName(const String &name);
 void debugSdStatus();
 bool saveCredentialsLocally(uint16_t fingerprintId, const String &rfidUid, String &error);
 void handleApiTimeSet();
+void handleApiWifiReset();
 
 void setup() {
   Serial.begin(115200);
@@ -564,6 +565,7 @@ void setupDeviceRoutes() {
   server.on("/api/restore/file", HTTP_POST, handleApiRestoreFile);
   server.on("/api/sd/file", HTTP_GET, handleApiSdFile);
   server.on("/api/time/set", HTTP_POST, handleApiTimeSet);
+  server.on("/api/wifi/reset", HTTP_POST, handleApiWifiReset);
 
   server.on("/generate_204", HTTP_GET, redirectToRoot);
   server.on("/fwlink", HTTP_GET, redirectToRoot);
@@ -1084,7 +1086,7 @@ function dashboard(){const d=state.device||{};return `${deviceCards()}<div class
 function attendance(){if(state.loading.attendance)return `<div class="card"><div class="loader"></div></div>`;const rows=state.attendance.map(r=>`<tr><td>${r.date}</td><td>${r.time}</td><td>${r.id}</td><td>${r.name}</td><td>${r.status}</td></tr>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Recent Attendance</h2><button class="btn secondary" onclick="loadAttendance()">Refresh</button></div><div class="tablewrap"><table><thead><tr><th>Date</th><th>Time</th><th>ID</th><th>Name</th><th>Status</th></tr></thead><tbody>${rows||"<tr><td colspan=5>No local attendance records.</td></tr>"}</tbody></table></div></div>`}
 function registerView(){const d=state.device||{};if(!d.wifiReady||!d.databaseReady)return `<div class="card"><h2>Register User</h2><div class="empty">Registration unavailable.<br>Please connect to WiFi.</div></div>`;const q=state.search.toLowerCase();const filtered=state.students.filter(s=>(`${s.idNumber} ${s.fullName}`.toLowerCase()).includes(q));const list=filtered.map(s=>`<button class="item" onclick="openRegister(${s.id})"><b>${s.idNumber||s.id}</b> ${s.fullName}<div class="muted">${s.department||"Student"}</div></button>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Select Student</h2><button class="btn secondary" onclick="loadStudents()">Refresh</button></div><div class="field"><label>Realtime Search</label><input placeholder="Student ID, first name, last name, full name" value="${state.search}" oninput="state.search=this.value;render()"></div>${state.loading.students?'<div class="loader"></div>':`<div class="list">${list||'<div class="empty">No matching students.</div>'}</div>`}</div>`}
 function usersView(){if(state.loading.users)return `<div class="card"><div class="loader"></div></div>`;const rows=state.users.map(u=>`<tr><td>${u.idNumber||u.userId}</td><td>${u.fullName}</td><td>${u.fingerprintId||""}</td><td>${u.smartCardId||""}</td></tr>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Local User Cache</h2><button class="btn secondary" onclick="loadUsers()">Refresh</button></div><div class="tablewrap"><table><thead><tr><th>ID</th><th>Name</th><th>Fingerprint</th><th>RFID</th></tr></thead><tbody>${rows||"<tr><td colspan=4>No cached users.</td></tr>"}</tbody></table></div></div>`}
-function wifiView(){const nets=state.networks.map(n=>`<option value="${n.ssid}">${n.ssid} (${n.rssi} dBm)</option>`).join("");const scanMsg=state.loading.scan?'Scanning WiFi...':state.scanStatus;return `<div class="card"><div class="row"><h2 style="margin-right:auto">WiFi Settings</h2><button class="btn secondary" onclick="scanWifi()">Scan</button></div>${scanMsg?'<p style="margin:8px 0;color:var(--muted)">'+scanMsg+'</p>':""}<div class="field"><label>Network</label><select id="wifiSsid">${nets}</select></div><div class="field"><label>Password</label><input id="wifiPass" type="password" placeholder="WiFi password"></div><button class="btn" onclick="saveWifi()">Save and Connect</button></div>`}
+function wifiView(){const nets=state.networks.map(n=>`<option value="${n.ssid}">${n.ssid} (${n.rssi} dBm)</option>`).join("");const scanMsg=state.loading.scan?'Scanning WiFi...':state.scanStatus;return `<div class="card"><div class="row"><h2 style="margin-right:auto">WiFi Settings</h2><button class="btn secondary" onclick="scanWifi()">Scan</button></div>${scanMsg?'<p style="margin:8px 0;color:var(--muted)">'+scanMsg+'</p>':""}<div class="field"><label>Network</label><select id="wifiSsid">${nets}</select></div><div class="field"><label>Password</label><input id="wifiPass" type="password" placeholder="WiFi password"></div><button class="btn" onclick="saveWifi()">Save and Connect</button><button class="btn danger" onclick="resetWifi()" style="margin-top:12px">Reset WiFi</button></div>`}
 function rulesView(){const d=state.device||{}, r=d.rules||{};return `<div class="card"><h2>Attendance Rules</h2><div class="field"><label>Student IN Time</label><input type="time" id="inTime" value="${r.inTime||"10:00"}"></div><div class="field"><label>Student OUT Allowed After</label><select id="outDelay">${[1,5,10,15,30,60].map(v=>`<option value="${v}" ${Number(r.outDelay)===v?"selected":""}>${v} minute${v>1?"s":""}</option>`).join("")}</select></div><button class="btn" onclick="saveRules()">Save Rules</button></div>`}
 function logsView(){if(state.loading.logs)return `<div class="card"><div class="loader"></div></div>`;const l=state.logs||{};return `<div class="grid"><div class="card"><div class="row"><h2 style="margin-right:auto">Device Logs</h2><button class="btn secondary" onclick="loadLogs()">Refresh</button></div><pre>${l.events||"No device log."}</pre></div><div class="card"><h2>Offline Sync Queue</h2><pre>${l.unsent||"No pending records."}</pre></div></div>`}
 function backupView(){return `<div class="grid"><div class="card"><h2>Backup</h2><p class="muted">Download SD files and settings. Fingerprint templates remain inside the fingerprint sensor.</p><div class="row"><button class="btn" onclick="download('/api/backup/settings','francis-key-settings.json')">Settings</button><button class="btn secondary" onclick="download('/api/backup/file?name=attendance','attendance.csv')">Attendance</button><button class="btn secondary" onclick="download('/api/backup/file?name=users','users.psv')">Users</button><button class="btn secondary" onclick="download('/api/backup/file?name=queue','unsent.psv')">Queue</button><button class="btn secondary" onclick="download('/api/backup/file?name=logs','device.log')">Logs</button></div></div><div class="card"><h2>Restore Settings</h2><div class="field"><label>Settings JSON</label><textarea id="restoreSettings"></textarea></div><button class="btn danger" onclick="restoreSettings()">Restore Settings</button></div><div class="card"><h2>Restore SD File</h2><div class="field"><label>File</label><select id="restoreFile"><option value="attendance">Attendance CSV</option><option value="users">Users cache</option><option value="queue">Unsent queue</option><option value="logs">Device log</option></select></div><div class="field"><label>Content</label><textarea id="restoreContent"></textarea></div><button class="btn danger" onclick="restoreFile()">Restore File</button></div></div>`}
@@ -1103,6 +1105,7 @@ function showRegisterModal(){const s=state.modalStudent;if(!s)return;$("modal").
 function closeModal(){$("modalBg").classList.remove("show");api("/api/register/cancel",{method:"POST"}).catch(()=>{})}
 async function startRegister(){try{const s=state.modalStudent;await api("/api/register/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:s.id})});toast("Registration started. Follow the device screen.");showRegisterModal()}catch(e){toast(e.message)}}
 async function saveWifi(){if(!confirm("Save WiFi settings and connect now?"))return;const ssid=$("wifiSsid").value;if(!ssid){toast("Please select a WiFi network");return}try{await api("/api/wifi/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ssid:ssid,password:$("wifiPass").value})});toast("WiFi settings saved.");loadState()}catch(e){toast(e.message)}}
+async function resetWifi(){if(!confirm("Reset WiFi? This will clear saved credentials and return to AP mode."))return;try{await api("/api/wifi/reset",{method:"POST"});toast("WiFi credentials cleared. Scanning networks...");state.networks=[];state.scanStatus="";scanWifi()}catch(e){toast(e.message)}}
 async function saveRules(){try{await api("/api/rules",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({inTime:$("inTime").value,outDelay:Number($("outDelay").value)})});toast("Attendance rules saved.");loadState()}catch(e){toast(e.message)}}
 function download(url,name){const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function restoreSettings(){if(!confirm("Restore settings from this JSON?"))return;try{await api("/api/restore/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:$("restoreSettings").value});toast("Settings restored.");loadState()}catch(e){toast(e.message)}}
@@ -1534,6 +1537,40 @@ void handleApiWifiSave() {
   drawScreen("WiFi", "Connection Failed", "AP: 192.168.4.1", "Check password", ILI9341_RED);
   logEvent("WIFI", "Connection failed for " + wifiSsid);
   sendJson(200, "{\"ok\":true,\"connected\":false}");
+}
+
+void handleApiWifiReset() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+
+  // Clear saved credentials from Preferences
+  prefs.remove("ssid");
+  prefs.remove("pass");
+
+  // Clear global variables so maintainWifi() won't try to reconnect
+  wifiSsid = "";
+  wifiPassword = "";
+
+  // Disconnect WiFi and disable auto-reconnect
+  WiFi.disconnect();
+  WiFi.setAutoReconnect(false);
+  delay(100);
+
+  // Ensure AP + STA mode stays active (STA stays disconnected)
+  WiFi.mode(WIFI_AP_STA);
+
+  // Update status flags
+  wifiReady = false;
+  databaseReady = false;
+
+  // Prevent maintainWifi() from scheduling reconnect attempts for 1 hour
+  lastWifiReconnectAt = millis() + 3600000;
+
+  logEvent("WIFI", "WiFi credentials cleared by user via browser. Device is in AP mode.");
+  drawScreen("WiFi Reset", "Credentials Cleared", "AP: 192.168.4.1", "Re-scan available", ILI9341_YELLOW);
+
+  sendJson(200, "{\"ok\":true,\"message\":\"WiFi credentials cleared. Device is in AP mode. You can now scan for available networks.\"}");
 }
 
 void handleApiRules() {
