@@ -26,6 +26,16 @@ enum DeviceMode {
   MODE_WAIT_RFID_ATTENDANCE
 };
 
+enum WifiState {
+  WIFI_STATE_DISCONNECTED,
+  WIFI_STATE_SCANNING,
+  WIFI_STATE_CONNECTING,
+  WIFI_STATE_AUTHENTICATING,
+  WIFI_STATE_CONNECTED,
+  WIFI_STATE_CONNECTION_FAILED,
+  WIFI_STATE_RECONNECTING
+};
+
 struct LocalUser {
   bool found = false;
   String userId;
@@ -114,6 +124,7 @@ uint32_t lastHomeUpdateAt = 0;
 uint32_t lastApiCheckAt = 0;
 uint32_t lastSyncAt = 0;
 uint32_t lastWifiReconnectAt = 0;
+WifiState wifiState = WIFI_STATE_DISCONNECTED;
 
 UiState uiState;
 uint16_t studentInMinutes = DEFAULT_STUDENT_IN_MINUTES;
@@ -188,6 +199,7 @@ void handleApiAttendance();
 void handleApiUsers();
 void handleApiWifiScan();
 void handleApiWifiSave();
+void handleApiWifiStatus();
 void handleApiRules();
 void handleApiLogs();
 void handleApiBackupSettings();
@@ -566,6 +578,7 @@ void setupDeviceRoutes() {
   server.on("/api/sd/file", HTTP_GET, handleApiSdFile);
   server.on("/api/time/set", HTTP_POST, handleApiTimeSet);
   server.on("/api/wifi/reset", HTTP_POST, handleApiWifiReset);
+  server.on("/api/wifi/status", HTTP_GET, handleApiWifiStatus);
 
   server.on("/generate_204", HTTP_GET, redirectToRoot);
   server.on("/fwlink", HTTP_GET, redirectToRoot);
@@ -585,6 +598,7 @@ void connectToSavedWifi() {
 
 bool connectToWifi(const String &ssid, const String &password, uint32_t timeoutMs) {
   WiFi.mode(WIFI_AP_STA);
+  wifiState = WIFI_STATE_CONNECTING;
   WiFi.begin(ssid.c_str(), password.c_str());
 
   const uint32_t startedAt = millis();
@@ -594,6 +608,7 @@ bool connectToWifi(const String &ssid, const String &password, uint32_t timeoutM
     delay(250);
   }
   const bool connected = WiFi.status() == WL_CONNECTED;
+  wifiState = connected ? WIFI_STATE_CONNECTED : WIFI_STATE_CONNECTION_FAILED;
   if (connected) {
     printNetworkInfo("WiFi connected");
   }
@@ -1070,7 +1085,7 @@ void sendAppShell() {
 <div class="toast" id="toast"></div>
 <script>
 const menu=["Dashboard","Attendance","Register User","Users","WiFi Settings","Attendance Rules","Date/Time","Logs","Backup / Restore","Logout"];
-const state={view:"Dashboard",device:null,students:[],attendance:[],users:[],logs:null,networks:[],loading:{},scanStatus:"",modalStudent:null,search:""};
+const state={view:"Dashboard",device:null,students:[],attendance:[],users:[],logs:null,networks:[],loading:{},scanStatus:"",modalStudent:null,search:"",wifiStatus:null};
 const $=id=>document.getElementById(id);
 function toast(msg){$("toast").textContent=msg;$("toast").classList.add("show");setTimeout(()=>$("toast").classList.remove("show"),3200)}
 async function api(path,opt={}){const res=await fetch(path,{cache:"no-store",...opt});if(res.status===401){location.href="/";throw new Error("Login required")}const text=await res.text();let data={};try{data=text?JSON.parse(text):{}}catch(e){throw new Error("Invalid device response")}if(!res.ok||data.ok===false)throw new Error(data.error||"Device request failed");return data}
@@ -1086,7 +1101,7 @@ function dashboard(){const d=state.device||{};return `${deviceCards()}<div class
 function attendance(){if(state.loading.attendance)return `<div class="card"><div class="loader"></div></div>`;const rows=state.attendance.map(r=>`<tr><td>${r.date}</td><td>${r.time}</td><td>${r.id}</td><td>${r.name}</td><td>${r.status}</td></tr>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Recent Attendance</h2><button class="btn secondary" onclick="loadAttendance()">Refresh</button></div><div class="tablewrap"><table><thead><tr><th>Date</th><th>Time</th><th>ID</th><th>Name</th><th>Status</th></tr></thead><tbody>${rows||"<tr><td colspan=5>No local attendance records.</td></tr>"}</tbody></table></div></div>`}
 function registerView(){const d=state.device||{};if(!d.wifiReady||!d.databaseReady)return `<div class="card"><h2>Register User</h2><div class="empty">Registration unavailable.<br>Please connect to WiFi.</div></div>`;const q=state.search.toLowerCase();const filtered=state.students.filter(s=>(`${s.idNumber} ${s.fullName}`.toLowerCase()).includes(q));const list=filtered.map(s=>`<button class="item" onclick="openRegister(${s.id})"><b>${s.idNumber||s.id}</b> ${s.fullName}<div class="muted">${s.department||"Student"}</div></button>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Select Student</h2><button class="btn secondary" onclick="loadStudents()">Refresh</button></div><div class="field"><label>Realtime Search</label><input placeholder="Student ID, first name, last name, full name" value="${state.search}" oninput="state.search=this.value;render()"></div>${state.loading.students?'<div class="loader"></div>':`<div class="list">${list||'<div class="empty">No matching students.</div>'}</div>`}</div>`}
 function usersView(){if(state.loading.users)return `<div class="card"><div class="loader"></div></div>`;const rows=state.users.map(u=>`<tr><td>${u.idNumber||u.userId}</td><td>${u.fullName}</td><td>${u.fingerprintId||""}</td><td>${u.smartCardId||""}</td></tr>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Local User Cache</h2><button class="btn secondary" onclick="loadUsers()">Refresh</button></div><div class="tablewrap"><table><thead><tr><th>ID</th><th>Name</th><th>Fingerprint</th><th>RFID</th></tr></thead><tbody>${rows||"<tr><td colspan=4>No cached users.</td></tr>"}</tbody></table></div></div>`}
-function wifiView(){const nets=state.networks.map(n=>`<option value="${n.ssid}">${n.ssid} (${n.rssi} dBm)</option>`).join("");const scanMsg=state.loading.scan?'Scanning WiFi...':state.scanStatus;return `<div class="card"><div class="row"><h2 style="margin-right:auto">WiFi Settings</h2><button class="btn secondary" onclick="scanWifi()">Scan</button></div>${scanMsg?'<p style="margin:8px 0;color:var(--muted)">'+scanMsg+'</p>':""}<div class="field"><label>Network</label><select id="wifiSsid">${nets}</select></div><div class="field"><label>Password</label><input id="wifiPass" type="password" placeholder="WiFi password"></div><button class="btn" onclick="saveWifi()">Save and Connect</button><button class="btn danger" onclick="resetWifi()" style="margin-top:12px">Reset WiFi</button></div>`}
+function wifiView(){const ws=state.wifiStatus||{};const connected=ws.status==="Connected";if(connected){return `<div class="card"><div class="row"><h2 style="margin-right:auto">WiFi Settings</h2></div><div style="padding:16px;border:1px solid #bbf7bb;border-radius:8px;background:#f0faf0;margin-bottom:12px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="width:12px;height:12px;border-radius:50%;background:#16a34a;display:inline-block"></span><b style="color:#16a34a">Connected</b></div><div class="field"><label>Connected to</label><div class="item"><b>${ws.ssid||""}</b></div></div><div class="field"><label>IP Address</label><div>${ws.ip||""}</div></div><div class="field"><label>Signal Strength</label><div>${ws.rssi||"0"} dBm</div></div></div><button class="btn danger" onclick="resetWifi()">Reset WiFi</button></div>`}const nets=state.networks.map(n=>`<option value="${n.ssid}">${n.ssid} (${n.rssi} dBm)</option>`).join("");const scanMsg=state.loading.scan?'Scanning WiFi...':state.scanStatus;const statusColor=ws.status==="Connecting"||ws.status==="Authenticating"?"#2563eb":ws.status==="Scanning"||ws.status==="Reconnecting"?"#ca8a04":"#dc2626";const statusDot=ws.status&&ws.status!=="Disconnected"&&ws.status!=="Connection Failed"?`<div style="padding:12px;border:1px solid ${statusColor};border-radius:8px;background:white;margin-bottom:8px;display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${statusColor};display:inline-block"></span><span>${ws.status}</span></div>`:"";return `<div class="card"><div class="row"><h2 style="margin-right:auto">WiFi Settings</h2><button class="btn secondary" onclick="scanWifi()">Scan Networks</button></div>${statusDot}${scanMsg?'<p style="margin:8px 0;color:var(--muted)">'+scanMsg+'</p>':""}<div class="field"><label>Network</label><select id="wifiSsid">${nets}</select></div><div class="field"><label>Password</label><input id="wifiPass" type="password" placeholder="WiFi password"></div><button class="btn" onclick="saveWifi()">Save and Connect</button><button class="btn danger" onclick="resetWifi()" style="margin-top:12px">Reset WiFi</button></div>`}
 function rulesView(){const d=state.device||{}, r=d.rules||{};return `<div class="card"><h2>Attendance Rules</h2><div class="field"><label>Student IN Time</label><input type="time" id="inTime" value="${r.inTime||"10:00"}"></div><div class="field"><label>Student OUT Allowed After</label><select id="outDelay">${[1,5,10,15,30,60].map(v=>`<option value="${v}" ${Number(r.outDelay)===v?"selected":""}>${v} minute${v>1?"s":""}</option>`).join("")}</select></div><button class="btn" onclick="saveRules()">Save Rules</button></div>`}
 function logsView(){if(state.loading.logs)return `<div class="card"><div class="loader"></div></div>`;const l=state.logs||{};return `<div class="grid"><div class="card"><div class="row"><h2 style="margin-right:auto">Device Logs</h2><button class="btn secondary" onclick="loadLogs()">Refresh</button></div><pre>${l.events||"No device log."}</pre></div><div class="card"><h2>Offline Sync Queue</h2><pre>${l.unsent||"No pending records."}</pre></div></div>`}
 function backupView(){return `<div class="grid"><div class="card"><h2>Backup</h2><p class="muted">Download SD files and settings. Fingerprint templates remain inside the fingerprint sensor.</p><div class="row"><button class="btn" onclick="download('/api/backup/settings','francis-key-settings.json')">Settings</button><button class="btn secondary" onclick="download('/api/backup/file?name=attendance','attendance.csv')">Attendance</button><button class="btn secondary" onclick="download('/api/backup/file?name=users','users.psv')">Users</button><button class="btn secondary" onclick="download('/api/backup/file?name=queue','unsent.psv')">Queue</button><button class="btn secondary" onclick="download('/api/backup/file?name=logs','device.log')">Logs</button></div></div><div class="card"><h2>Restore Settings</h2><div class="field"><label>Settings JSON</label><textarea id="restoreSettings"></textarea></div><button class="btn danger" onclick="restoreSettings()">Restore Settings</button></div><div class="card"><h2>Restore SD File</h2><div class="field"><label>File</label><select id="restoreFile"><option value="attendance">Attendance CSV</option><option value="users">Users cache</option><option value="queue">Unsent queue</option><option value="logs">Device log</option></select></div><div class="field"><label>Content</label><textarea id="restoreContent"></textarea></div><button class="btn danger" onclick="restoreFile()">Restore File</button></div></div>`}
@@ -1099,7 +1114,8 @@ async function loadStudents(){setLoading("students",true);try{state.students=(aw
 async function loadUsers(){setLoading("users",true);try{state.users=(await api("/api/users")).users||[]}catch(e){toast(e.message)}setLoading("users",false)}
 async function scanWifi(){setLoading("scan",true);try{const r=await api("/api/wifi/scan");state.networks=r.networks||[];state.scanStatus=state.networks.length?"Found "+state.networks.length+" 2.4GHz networks":"No 2.4GHz WiFi networks found."}catch(e){state.scanStatus="";toast(e.message)}setLoading("scan",false)}
 async function loadLogs(){setLoading("logs",true);try{state.logs=await api("/api/logs")}catch(e){toast(e.message)}setLoading("logs",false)}
-function loadView(v){if(v==="Attendance")loadAttendance();if(v==="Register User")loadStudents();if(v==="Users")loadUsers();if(v==="WiFi Settings")scanWifi();if(v==="Date/Time")loadState();if(v==="Logs")loadLogs()}
+async function loadWifiStatus(){try{state.wifiStatus=await api("/wifi/status")}catch(e){}}
+function loadView(v){if(v==="Attendance")loadAttendance();if(v==="Register User")loadStudents();if(v==="Users")loadUsers();if(v==="WiFi Settings"){loadWifiStatus();scanWifi()}if(v==="Date/Time")loadState();if(v==="Logs")loadLogs()}
 function openRegister(id){state.modalStudent=state.students.find(s=>s.id===id);showRegisterModal()}
 function showRegisterModal(){const s=state.modalStudent;if(!s)return;$("modal").innerHTML=`<h2>Register User</h2><div class="field"><label>Student ID</label><div class="item">${s.idNumber||s.id}</div></div><div class="field"><label>Full Name</label><div class="item">${s.fullName}</div></div><div class="item">Scan Fingerprint: follow TFT and browser status</div><div class="item">Scan RFID: follow TFT and browser status</div><div class="row" style="margin-top:12px"><button class="btn" onclick="startRegister()">Register</button><button class="btn secondary" onclick="closeModal()">Cancel</button></div><div style="margin-top:12px">${liveScreen()}</div>`;$("modalBg").classList.add("show")}
 function closeModal(){$("modalBg").classList.remove("show");api("/api/register/cancel",{method:"POST"}).catch(()=>{})}
@@ -1111,7 +1127,7 @@ function download(url,name){const a=document.createElement("a");a.href=url;a.dow
 async function restoreSettings(){if(!confirm("Restore settings from this JSON?"))return;try{await api("/api/restore/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:$("restoreSettings").value});toast("Settings restored.");loadState()}catch(e){toast(e.message)}}
 async function restoreFile(){if(!confirm("Replace the selected SD file?"))return;try{await api(`/api/restore/file?name=${encodeURIComponent($("restoreFile").value)}`,{method:"POST",headers:{"Content-Type":"text/plain"},body:$("restoreContent").value});toast("File restored.")}catch(e){toast(e.message)}}
 $("menuBtn").onclick=openMenu;$("overlay").onclick=closeMenu;$("backBtn").onclick=()=>{state.view="Dashboard";render();loadState()};$("modalBg").onclick=e=>{if(e.target===$("modalBg"))closeModal()};
-render();loadState();setInterval(async()=>{try{state.device=await api("/api/state");if(state.view==="Dashboard")render()}catch(e){console.log(e.message)}},2000);
+render();loadState();setInterval(async()=>{try{state.device=await api("/api/state");if(state.view==="Dashboard")render();state.wifiStatus=await api("/wifi/status");if(state.view==="WiFi Settings")render()}catch(e){console.log(e.message)}},2000);
 </script>
 </body>
 </html>
@@ -1425,6 +1441,8 @@ void handleApiWifiScan() {
     return;
   }
 
+  wifiState = WIFI_STATE_SCANNING;
+
   // Delete previous scan results and start a new async scan
   WiFi.scanDelete();
   WiFi.scanNetworks(true);
@@ -1563,6 +1581,7 @@ void handleApiWifiReset() {
   // Update status flags
   wifiReady = false;
   databaseReady = false;
+  wifiState = WIFI_STATE_DISCONNECTED;
 
   // Prevent maintainWifi() from scheduling reconnect attempts for 1 hour
   lastWifiReconnectAt = millis() + 3600000;
@@ -1571,6 +1590,36 @@ void handleApiWifiReset() {
   drawScreen("WiFi Reset", "Credentials Cleared", "AP: 192.168.4.1", "Re-scan available", ILI9341_YELLOW);
 
   sendJson(200, "{\"ok\":true,\"message\":\"WiFi credentials cleared. Device is in AP mode. You can now scan for available networks.\"}");
+}
+
+void handleApiWifiStatus() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+
+  String stateStr;
+  switch (wifiState) {
+    case WIFI_STATE_DISCONNECTED:      stateStr = "Disconnected"; break;
+    case WIFI_STATE_SCANNING:          stateStr = "Scanning"; break;
+    case WIFI_STATE_CONNECTING:        stateStr = "Connecting"; break;
+    case WIFI_STATE_AUTHENTICATING:    stateStr = "Authenticating"; break;
+    case WIFI_STATE_CONNECTED:         stateStr = "Connected"; break;
+    case WIFI_STATE_CONNECTION_FAILED: stateStr = "Connection Failed"; break;
+    case WIFI_STATE_RECONNECTING:      stateStr = "Reconnecting"; break;
+  }
+
+  String payload;
+  payload.reserve(512);
+  payload += F("{\"ok\":true,\"ssid\":\"");
+  payload += jsonEscape(wifiReady ? WiFi.SSID() : wifiSsid);
+  payload += F("\",\"status\":\"");
+  payload += stateStr;
+  payload += F("\",\"ip\":\"");
+  payload += wifiReady ? WiFi.localIP().toString() : "";
+  payload += F("\",\"rssi\":");
+  payload += wifiReady ? String(WiFi.RSSI()) : String("0");
+  payload += F("}");
+  sendJson(200, payload);
 }
 
 void handleApiRules() {
@@ -3125,7 +3174,27 @@ String makeLocalRecordId() {
 
 void maintainWifi() {
   bool wasReady = wifiReady;
-  wifiReady = WiFi.status() == WL_CONNECTED;
+  wl_status_t status = WiFi.status();
+  wifiReady = (status == WL_CONNECTED);
+
+  // Update WiFi state machine based on actual connection status
+  if (wifiReady) {
+    wifiState = WIFI_STATE_CONNECTED;
+  } else if (status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL) {
+    wifiState = WIFI_STATE_CONNECTION_FAILED;
+  } else if (status == WL_CONNECTION_LOST) {
+    wifiState = WIFI_STATE_RECONNECTING;
+  } else if (status == WL_IDLE) {
+    wifiState = (wifiSsid.length() > 0) ? WIFI_STATE_CONNECTING : WIFI_STATE_DISCONNECTED;
+  } else { // WL_DISCONNECTED
+    if (wifiSsid.length() > 0 && millis() - lastWifiReconnectAt < 30000) {
+      wifiState = WIFI_STATE_RECONNECTING;
+    } else {
+      wifiState = WIFI_STATE_DISCONNECTED;
+    }
+  }
+
+  // Handle transition events
   if (wifiReady && !wasReady) {
     logEvent("WIFI", "Station connection restored at " + WiFi.localIP().toString());
     syncClock();
