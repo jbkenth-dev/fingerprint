@@ -1127,7 +1127,7 @@ function download(url,name){const a=document.createElement("a");a.href=url;a.dow
 async function restoreSettings(){if(!confirm("Restore settings from this JSON?"))return;try{await api("/api/restore/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:$("restoreSettings").value});toast("Settings restored.");loadState()}catch(e){toast(e.message)}}
 async function restoreFile(){if(!confirm("Replace the selected SD file?"))return;try{await api(`/api/restore/file?name=${encodeURIComponent($("restoreFile").value)}`,{method:"POST",headers:{"Content-Type":"text/plain"},body:$("restoreContent").value});toast("File restored.")}catch(e){toast(e.message)}}
 $("menuBtn").onclick=openMenu;$("overlay").onclick=closeMenu;$("backBtn").onclick=()=>{state.view="Dashboard";render();loadState()};$("modalBg").onclick=e=>{if(e.target===$("modalBg"))closeModal()};
-render();loadState();setInterval(async()=>{try{state.device=await api("/api/state");if(state.view==="Dashboard")render();state.wifiStatus=await api("/api/wifi/status");if(state.view==="WiFi Settings"){var sl=$("wifiSsid"),pw=$("wifiPass"),sv=sl?sl.value:"",pv=pw?pw.value:"";render();if(sv){var s=$("wifiSsid");if(s)s.value=sv}if(pv){var p=$("wifiPass");if(p)p.value=pv}}}catch(e){console.log(e.message)}},2000);
+render();loadState();setInterval(async()=>{try{state.device=await api("/api/state");if(state.view==="Dashboard")render();state.wifiStatus=await api("/api/wifi/status")}catch(e){console.log(e.message)}},2000);
 </script>
 </body>
 </html>
