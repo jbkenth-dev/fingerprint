@@ -3184,7 +3184,7 @@ void maintainWifi() {
     wifiState = WIFI_STATE_CONNECTION_FAILED;
   } else if (status == WL_CONNECTION_LOST) {
     wifiState = WIFI_STATE_RECONNECTING;
-  } else if (status == WL_IDLE) {
+  } else if (status == WL_IDLE_STATUS) {
     wifiState = (wifiSsid.length() > 0) ? WIFI_STATE_CONNECTING : WIFI_STATE_DISCONNECTED;
   } else { // WL_DISCONNECTED
     if (wifiSsid.length() > 0 && millis() - lastWifiReconnectAt < 30000) {
