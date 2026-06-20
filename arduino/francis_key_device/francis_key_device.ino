@@ -134,6 +134,9 @@ uint16_t outDelayMinutes = DEFAULT_OUT_DELAY_MINUTES;
 String apiHost;
 String defaultApiHost;
 
+static uint16_t _pendingQueueCache = 0;
+static bool _pendingQueueCacheValid = false;
+
 void initPins();
 void loadSettings();
 void saveSettings();
@@ -1877,6 +1880,9 @@ void handleApiRestoreFile() {
   }
   file.print(server.arg("plain"));
   closeSdFile(file);
+  if (path == UNSENT_FILE) {
+    _pendingQueueCacheValid = false;
+  }
   logEvent("RESTORE", "Restored " + path + " from browser");
   sendJson(200, "{\"ok\":true}");
 }
@@ -3099,6 +3105,7 @@ void appendAttendanceCsv(const String &date, const String &time, const String &i
 
 void queueOfflineAttendance(const String &localRecordId, const String &occurredAt, const String &fingerprintId, const String &rfidUid) {
   appendLine(UNSENT_FILE, localRecordId + "|" + occurredAt + "|" + fingerprintId + "|" + rfidUid + "|" + deviceId);
+  _pendingQueueCacheValid = false;
 }
 
 void syncOfflineRecords() {
@@ -3153,6 +3160,7 @@ void syncOfflineRecords() {
       closeSdFile(emptyQueue);
     }
   }
+  _pendingQueueCacheValid = false;
 
   if (anySynced) {
     logEvent("SYNC", "Uploaded pending attendance records");
@@ -3260,19 +3268,28 @@ int minutesSinceLastIn(const String &date, const String &id, const DateTime &now
 }
 
 uint16_t pendingQueueCount() {
-  if (!sdReady || !sdFileExists(UNSENT_FILE)) {
+  if (_pendingQueueCacheValid) {
+    return _pendingQueueCache;
+  }
+  if (!sdReady) {
+    _pendingQueueCache = 0;
+    _pendingQueueCacheValid = true;
     return 0;
   }
   File file = openSdFile(UNSENT_FILE, FILE_READ);
   uint16_t count = 0;
-  while (file && file.available()) {
-    String line = file.readStringUntil('\n');
-    line.trim();
-    if (line.length() > 0) {
-      count++;
+  if (file) {
+    while (file.available()) {
+      String line = file.readStringUntil('\n');
+      line.trim();
+      if (line.length() > 0) {
+        count++;
+      }
     }
+    closeSdFile(file);
   }
-  closeSdFile(file);
+  _pendingQueueCache = count;
+  _pendingQueueCacheValid = true;
   return count;
 }
 
@@ -3581,6 +3598,8 @@ void handleApiCacheClear() {
     if (unsent) closeSdFile(unsent);
     File logFile = openSdFile(DEVICE_LOG_FILE, FILE_WRITE);
     if (logFile) closeSdFile(logFile);
+    _pendingQueueCache = 0;
+    _pendingQueueCacheValid = true;
   }
 
   String result = (errors == 0) ? "Cache cleared" : "Cleared with " + String(errors) + " errors";
