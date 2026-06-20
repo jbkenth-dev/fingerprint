@@ -211,6 +211,7 @@ void handleApiBackupFile();
 void handleApiRestoreSettings();
 void handleApiRestoreFile();
 void handleApiSdFile();
+void handleApiCacheClear();
 String buildUserOptions();
 bool getDeviceJson(const String &action, DynamicJsonDocument &response, int &httpCode, String &error);
 bool postDeviceJson(const String &action, DynamicJsonDocument &request, DynamicJsonDocument &response, int &httpCode, String &error);
@@ -607,6 +608,7 @@ void setupDeviceRoutes() {
   server.on("/api/restore/settings", HTTP_POST, handleApiRestoreSettings);
   server.on("/api/restore/file", HTTP_POST, handleApiRestoreFile);
   server.on("/api/sd/file", HTTP_GET, handleApiSdFile);
+  server.on("/api/cache/clear", HTTP_POST, handleApiCacheClear);
   server.on("/api/time/set", HTTP_POST, handleApiTimeSet);
   server.on("/api/wifi/reset", HTTP_POST, handleApiWifiReset);
   server.on("/api/wifi/status", HTTP_GET, handleApiWifiStatus);
@@ -1137,7 +1139,7 @@ function usersView(){if(state.loading.users)return `<div class="card"><div class
 function wifiView(){const ws=state.wifiStatus||{};const st=ws.status;const connected=st==="Connected";const authenticating=st==="Authenticating";const on=connected||authenticating;const connSsid=on?(ws.ssid||""):"Not Connected";const connBlock=`<div style="margin-bottom:12px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:13px;color:var(--muted);font-weight:800">WiFi Connected:</span><span style="width:10px;height:10px;border-radius:50%;background:${on?"#16a34a":"#9ca3af"};display:inline-block"></span><b>${connSsid}</b></div>`;if(connected||authenticating){const clr=connected?"#16a34a":"#ca8a04";const lbl=connected?"Connected":"Authenticated";return `<div class="card"><div class="row"><h2 style="margin-right:auto">WiFi Settings</h2></div>${connBlock}<div style="padding:16px;border:1px solid ${connected?"#bbf7bb":"#fef08a"};border-radius:8px;background:${connected?"#f0faf0":"#fefce8"};margin-bottom:12px"><div class="field"><label>SSID</label><div class="item"><b>${ws.ssid||""}</b></div></div><div class="field"><label>Status</label><div style="display:flex;align-items:center;gap:8px"><span style="width:12px;height:12px;border-radius:50%;background:${clr};display:inline-block"></span><b style="color:${clr}">${lbl}</b></div></div>${authenticating?'<div class="field"><label style="color:#dc2626">Please reset WiFi</label></div>':''}</div><button class="btn danger" onclick="resetWifi()">Reset WiFi</button></div>`}const nets=state.networks.map(n=>`<option value="${n.ssid}">${n.ssid}</option>`).join("");const scanMsg=state.loading.scan?'Scanning WiFi...':state.scanStatus;const statusColor=st==="Connecting"||st==="Authenticating"?"#2563eb":st==="Scanning"||st==="Reconnecting"?"#ca8a04":"#dc2626";const statusDot=st&&st!=="Disconnected"&&st!=="Connection Failed"?`<div style="padding:12px;border:1px solid ${statusColor};border-radius:8px;background:white;margin-bottom:8px;display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${statusColor};display:inline-block"></span><span>${st}</span></div>`:"";return `<div class="card"><div class="row"><h2 style="margin-right:auto">WiFi Settings</h2><button class="btn secondary" onclick="scanWifi()">Scan Networks</button></div>${connBlock}${statusDot}${scanMsg?'<p style="margin:8px 0;color:var(--muted)">'+scanMsg+'</p>':""}<div class="field"><label>Network</label><select id="wifiSsid">${nets}</select></div><div class="field"><label>Password</label><input id="wifiPass" type="password" placeholder="WiFi password"></div><button class="btn" onclick="saveWifi()">Save and Connect</button><button class="btn danger" onclick="resetWifi()" style="margin-top:12px">Reset WiFi</button></div>`}
 function rulesView(){const d=state.device||{}, r=d.rules||{};return `<div class="card"><h2>Attendance Rules</h2><div class="field"><label>Student IN Time</label><input type="time" id="inTime" value="${r.inTime||"10:00"}"></div><div class="field"><label>Student OUT Allowed After</label><select id="outDelay">${[1,5,10,15,30,60].map(v=>`<option value="${v}" ${Number(r.outDelay)===v?"selected":""}>${v} minute${v>1?"s":""}</option>`).join("")}</select></div><button class="btn" onclick="saveRules()">Save Rules</button></div>`}
 function logsView(){if(state.loading.logs)return `<div class="card"><div class="loader"></div></div>`;const l=state.logs||{};return `<div class="grid"><div class="card"><div class="row"><h2 style="margin-right:auto">Device Logs</h2><button class="btn secondary" onclick="loadLogs()">Refresh</button></div><pre>${l.events||"No device log."}</pre></div><div class="card"><h2>Offline Sync Queue</h2><pre>${l.unsent||"No pending records."}</pre></div></div>`}
-function backupView(){return `<div class="grid"><div class="card"><h2>Backup</h2><p class="muted">Download SD files and settings. Fingerprint templates remain inside the fingerprint sensor.</p><div class="row"><button class="btn" onclick="download('/api/backup/settings','francis-key-settings.json')">Settings</button><button class="btn secondary" onclick="download('/api/backup/file?name=attendance','attendance.csv')">Attendance</button><button class="btn secondary" onclick="download('/api/backup/file?name=users','users.psv')">Users</button><button class="btn secondary" onclick="download('/api/backup/file?name=queue','unsent.psv')">Queue</button><button class="btn secondary" onclick="download('/api/backup/file?name=logs','device.log')">Logs</button></div></div><div class="card"><h2>Restore Settings</h2><div class="field"><label>Settings JSON</label><textarea id="restoreSettings"></textarea></div><button class="btn danger" onclick="restoreSettings()">Restore Settings</button></div><div class="card"><h2>Restore SD File</h2><div class="field"><label>File</label><select id="restoreFile"><option value="attendance">Attendance CSV</option><option value="users">Users cache</option><option value="queue">Unsent queue</option><option value="logs">Device log</option></select></div><div class="field"><label>Content</label><textarea id="restoreContent"></textarea></div><button class="btn danger" onclick="restoreFile()">Restore File</button></div></div>`}
+function backupView(){return `<div class="grid"><div class="card"><h2>Backup</h2><p class="muted">Download SD files and settings. Fingerprint templates remain inside the fingerprint sensor.</p><div class="row"><button class="btn" onclick="download('/api/backup/settings','francis-key-settings.json')">Settings</button><button class="btn secondary" onclick="download('/api/backup/file?name=attendance','attendance.csv')">Attendance</button><button class="btn secondary" onclick="download('/api/backup/file?name=users','users.psv')">Users</button><button class="btn secondary" onclick="download('/api/backup/file?name=queue','unsent.psv')">Queue</button><button class="btn secondary" onclick="download('/api/backup/file?name=logs','device.log')">Logs</button></div></div><div class="card"><h2>Restore Settings</h2><div class="field"><label>Settings JSON</label><textarea id="restoreSettings"></textarea></div><button class="btn danger" onclick="restoreSettings()">Restore Settings</button></div><div class="card"><h2>Restore SD File</h2><div class="field"><label>File</label><select id="restoreFile"><option value="attendance">Attendance CSV</option><option value="users">Users cache</option><option value="queue">Unsent queue</option><option value="logs">Device log</option></select></div><div class="field"><label>Content</label><textarea id="restoreContent"></textarea></div><button class="btn danger" onclick="restoreFile()">Restore File</button></div><div class="card"><h2>Clear All Cache</h2><p class="muted">⚠ Deletes all stored fingerprint templates from the sensor, user cache, attendance records, unsent queue, and device logs. This cannot be undone.</p><button class="btn danger" onclick="clearCache()">Clear All Cache</button></div></div>`}
 function apiSettingsView(){return '<div class="card"><h2>API Settings</h2><form onsubmit="return false"><div class="field"><label>API URL</label><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="white-space:nowrap;color:var(--muted)">http://</span><input id="apiHost" value="'+(state.apiSettings?state.apiSettings.host:'')+'" style="flex:1;min-width:120px"><span style="white-space:nowrap;color:var(--muted)">/fingerprint/api/device.php</span></div></div><div style="padding:12px;background:var(--panel2);border-radius:8px;border:1px solid var(--line);margin:12px 0"><div style="font-size:13px;color:var(--muted)">Current API:</div><b style="word-break:break-all">'+(state.apiSettings?state.apiSettings.currentUrl:'')+'</b></div><div style="padding:12px;background:var(--panel2);border-radius:8px;border:1px solid var(--line);margin:12px 0"><div style="font-size:13px;color:var(--muted)">Default API:</div><b style="word-break:break-all">'+(state.apiSettings?state.apiSettings.defaultUrl:'')+'</b></div><div class="row"><button class="btn" onclick="saveApiHost()">Save</button><button class="btn secondary" onclick="makeApiDefault()">Make As Default</button><button class="btn secondary" onclick="resetApiHost()">Reset</button></div></form></div>'}
 async function loadApiSettings(){try{state.apiSettings=await api("/api/settings/api")}catch(e){}}
 async function saveApiHost(){const h=$("apiHost").value.trim();if(!h){toast("Please enter an IP address or domain");return}try{await api("/api/settings/api",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"save",host:h})});toast("API host saved.");loadApiSettings()}catch(e){toast(e.message)}}
@@ -1164,6 +1166,7 @@ async function saveRules(){try{await api("/api/rules",{method:"POST",headers:{"C
 function download(url,name){const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function restoreSettings(){if(!confirm("Restore settings from this JSON?"))return;try{await api("/api/restore/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:$("restoreSettings").value});toast("Settings restored.");loadState()}catch(e){toast(e.message)}}
 async function restoreFile(){if(!confirm("Replace the selected SD file?"))return;try{await api(`/api/restore/file?name=${encodeURIComponent($("restoreFile").value)}`,{method:"POST",headers:{"Content-Type":"text/plain"},body:$("restoreContent").value});toast("File restored.")}catch(e){toast(e.message)}}
+async function clearCache(){if(!confirm("Permanently delete ALL fingerprint templates and SD cache? This cannot be undone."))return;if(!confirm("Are you sure? All enrolled fingerprints will be erased from the sensor."))return;try{const r=await api("/api/cache/clear",{method:"POST"});toast("Cache cleared. ("+r.message+")");loadState()}catch(e){toast(e.message)}}
 $("menuBtn").onclick=openMenu;$("overlay").onclick=closeMenu;$("backBtn").onclick=()=>{state.view="Dashboard";render();loadState()};$("modalBg").onclick=e=>{if(e.target===$("modalBg"))closeModal()};
 render();loadState();setInterval(async()=>{try{state.device=await api("/api/state");if(state.view==="Dashboard")render();state.wifiStatus=await api("/api/wifi/status")}catch(e){console.log(e.message)}},2000);
 </script>
@@ -3513,4 +3516,83 @@ bool saveCredentialsLocally(uint16_t fingerprintId, const String &rfidUid, Strin
     Serial.printf("[SAVE] Error: %s\n", error.c_str());
   }
   return ok;
+}
+
+// ---- Clear all cached data on SD and fingerprint sensor ----
+void handleApiCacheClear() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+
+  int cleared = 0;
+  int errors = 0;
+  String logMsg;
+
+  // 1. Fingerprint sensor: delete all stored templates
+  if (fingerprintReady) {
+    Serial.println(F("[CACHE] Emptying fingerprint database..."));
+    uint8_t result = finger.emptyDatabase();
+    if (result == FINGERPRINT_OK) {
+      cleared++;
+      logMsg += "FP ";
+      Serial.println(F("[CACHE] Fingerprint database cleared"));
+    } else {
+      errors++;
+      Serial.printf("[CACHE] Fingerprint emptyDatabase failed: %u\n", result);
+    }
+  }
+
+  // 2. SD card user cache files
+  if (sdReady) {
+    const char *files[] = {USER_CACHE_FILE, USER_CACHE_TEMP_FILE, UNSENT_FILE, UNSENT_TEMP_FILE, DEVICE_LOG_FILE};
+    for (unsigned i = 0; i < sizeof(files) / sizeof(files[0]); i++) {
+      if (sdFileExists(files[i])) {
+        if (removeSdFile(files[i])) {
+          cleared++;
+          logMsg += String(files[i]) + " ";
+        } else {
+          errors++;
+          Serial.printf("[CACHE] Failed to remove %s\n", files[i]);
+        }
+      }
+    }
+
+    // 3. Attendance CSV: recreate with header
+    if (sdFileExists(ATTENDANCE_FILE)) {
+      if (removeSdFile(ATTENDANCE_FILE)) {
+        cleared++;
+      } else {
+        errors++;
+        Serial.println(F("[CACHE] Failed to remove attendance.csv"));
+      }
+    }
+    File attFile = openSdFile(ATTENDANCE_FILE, FILE_WRITE);
+    if (attFile) {
+      attFile.println("Date,Time,ID,Name,Status");
+      closeSdFile(attFile);
+      cleared++;
+    } else {
+      errors++;
+      Serial.println(F("[CACHE] Failed to recreate attendance.csv"));
+    }
+
+    // 4. Recreate empty files that the device expects
+    File unsent = openSdFile(UNSENT_FILE, FILE_WRITE);
+    if (unsent) closeSdFile(unsent);
+    File logFile = openSdFile(DEVICE_LOG_FILE, FILE_WRITE);
+    if (logFile) closeSdFile(logFile);
+  }
+
+  String result = (errors == 0) ? "Cache cleared" : "Cleared with " + String(errors) + " errors";
+  logMsg.trim();
+  logEvent("CACHE", "Cache clear: " + logMsg + "(" + result + ")");
+
+  drawScreen("Cache Cleared", "Fingerprint + SD", logMsg, result, errors == 0 ? ILI9341_GREEN : ILI9341_YELLOW);
+
+  String payload;
+  payload.reserve(256);
+  payload += F("{\"ok\":true,\"cleared\":"); payload += String(cleared);
+  payload += F(",\"errors\":"); payload += String(errors);
+  payload += F(",\"message\":\""); payload += jsonEscape(result); payload += F("\"}");
+  sendJson(200, payload);
 }
