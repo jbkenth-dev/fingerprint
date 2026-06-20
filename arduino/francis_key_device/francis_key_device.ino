@@ -2497,82 +2497,83 @@ bool upsertCachedUser(const LocalUser &updated, String &error) {
   }
   Serial.println(F("[CACHE] sdReady check passed"));
 
+  // ====================================================================
+  // Phase 1: read the entire existing cache into memory FIRST, then
+  // close the input.  This avoids opening two SD files at once, which
+  // would corrupt the shared-SPI bus (each openSdFile re-inits SPI).
+  // ====================================================================
+  const int MAX_LINES = 150;
+  String lines[MAX_LINES];
+  int lineCount = 0;
   bool hadCache = sdFileExists(USER_CACHE_FILE);
-  Serial.printf("[CACHE] Existing %s: %s\n", USER_CACHE_FILE, hadCache ? "yes" : "no");
 
-  bool wroteUpdated = false;
-
-  // Remove stale temp file BEFORE opening the new one.
-  if (sdFileExists(USER_CACHE_TEMP_FILE)) {
-    Serial.printf("[CACHE] Stale temp file %s found, removing...\n", USER_CACHE_TEMP_FILE);
-    if (!removeSdFile(USER_CACHE_TEMP_FILE)) {
-      Serial.println(F("[CACHE] WARNING: Could not remove stale temp file"));
+  if (hadCache) {
+    Serial.printf("[CACHE] Reading existing %s into memory...\n", USER_CACHE_FILE);
+    File input = openSdFile(USER_CACHE_FILE, FILE_READ);
+    if (input) {
+      while (input.available() && lineCount < MAX_LINES) {
+        String line = input.readStringUntil('\n');
+        line.trim();
+        if (line.length() > 0) {
+          lines[lineCount++] = line;
+        }
+        yield();
+      }
+      closeSdFile(input);
+      Serial.printf("[CACHE] Read %d lines from existing cache\n", lineCount);
+    } else {
+      Serial.println(F("[CACHE] Could not open existing cache, treating as empty"));
+      hadCache = false;
     }
   }
 
-  // Open the output temp file FIRST so we don't exhaust heap between reads.
-  Serial.printf("[CACHE] Opening temp file %s for writing...\n", USER_CACHE_TEMP_FILE);
-  Serial.printf("[CACHE] Pre-open heap: %u free, %u max block\n",
-                ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+  // ====================================================================
+  // Phase 2: remove stale temp file, then open output and write
+  // everything in one pass.
+  // ====================================================================
+  if (sdFileExists(USER_CACHE_TEMP_FILE)) {
+    Serial.printf("[CACHE] Removing stale temp %s...\n", USER_CACHE_TEMP_FILE);
+    removeSdFile(USER_CACHE_TEMP_FILE);
+  }
+
+  Serial.printf("[CACHE] Opening temp file %s for writing...  heap free: %u\n",
+                USER_CACHE_TEMP_FILE, ESP.getFreeHeap());
 
   File output = openSdFile(USER_CACHE_TEMP_FILE, FILE_WRITE);
   if (!output) {
-    error = "Cannot write local user cache (SD open failed). Check SD card and SPI bus.";
+    error = "Cannot write local user cache (SD open failed).";
     Serial.printf("[CACHE] FAIL: %s\n", error.c_str());
     debugSdStatus();
     return false;
   }
-  Serial.println(F("[CACHE] Temp file opened OK"));
 
-  // Stream lines from the existing cache to the temp file, replacing the
-  // matching user row in-flight instead of building the whole file in a String.
-  if (hadCache) {
-    Serial.println(F("[CACHE] Reading existing cache to merge..."));
-    File input = openSdFile(USER_CACHE_FILE, FILE_READ);
-    if (!input) {
-      Serial.println(F("[CACHE] WARNING: Could not open existing cache for reading, treating as empty"));
-    }
-    int linesRead = 0;
-    while (input && input.available()) {
-      String line = input.readStringUntil('\n');
-      line.trim();
-      if (line.length() == 0) {
-        continue;
-      }
+  bool wroteUpdated = false;
+  const String updatedLine = cachedUserLine(updated);
 
-      if (fieldAt(line, '|', 0) == updated.userId) {
-        output.println(cachedUserLine(updated));
-        wroteUpdated = true;
-        Serial.printf("[CACHE]   Replaced user %s at line %d\n", updated.userId.c_str(), linesRead);
-      } else {
-        output.println(line);
-      }
-      linesRead++;
-      yield();  // prevent watchdog bite on large files
+  for (int i = 0; i < lineCount; i++) {
+    if (fieldAt(lines[i], '|', 0) == updated.userId) {
+      output.println(updatedLine);
+      wroteUpdated = true;
+    } else {
+      output.println(lines[i]);
     }
-    if (input) {
-      closeSdFile(input);
-    }
-    Serial.printf("[CACHE] Merged %d lines from existing cache\n", linesRead);
+    yield();
   }
 
-  // Append the new user row if it wasn't already replaced.
   if (!wroteUpdated) {
-    Serial.printf("[CACHE] Appending new user row (userId=%s)\n", updated.userId.c_str());
-    output.println(cachedUserLine(updated));
+    output.println(updatedLine);
+    Serial.printf("[CACHE] Appended new user row (userId=%s)\n", updated.userId.c_str());
   }
 
-  Serial.println(F("[CACHE] Closing temp file..."));
   closeSdFile(output);
   Serial.println(F("[CACHE] Temp file closed"));
 
-  // Atomically replace old cache with new
-  Serial.printf("[CACHE] Removing old cache %s...\n", USER_CACHE_FILE);
-  if (hadCache && !removeSdFile(USER_CACHE_FILE)) {
-    Serial.println(F("[CACHE] WARNING: Could not remove old cache, but continuing"));
+  // ====================================================================
+  // Phase 3: atomically replace old cache with new.
+  // ====================================================================
+  if (hadCache) {
+    removeSdFile(USER_CACHE_FILE);
   }
-
-  Serial.printf("[CACHE] Renaming %s -> %s...\n", USER_CACHE_TEMP_FILE, USER_CACHE_FILE);
   if (!renameSdFile(USER_CACHE_TEMP_FILE, USER_CACHE_FILE)) {
     error = "Cannot replace local user cache (rename failed).";
     Serial.printf("[CACHE] FAIL: %s\n", error.c_str());
@@ -2707,25 +2708,46 @@ void runRegistrationWorkflow() {
     }
 
     pendingRfidUid = uid;
-    registrationPhase = "api";
-    drawScreen("Registration", "Saving Online", pendingRegistrationName, "Please wait", ILI9341_BLUE);
 
-    String apiError;
-    bool registered = registerCredentials(pendingFingerprintTemplateId, pendingRfidUid, apiError);
-    if (!registered) {
+    // ================================================================
+    // Save locally FIRST — always, regardless of API status.
+    // ================================================================
+    registrationPhase = "local";
+    String localSaveError;
+    bool localOk = false;
+    if (sdReady) {
+      localOk = saveCredentialsLocally(pendingFingerprintTemplateId, pendingRfidUid, localSaveError);
+    }
+    if (!localOk) {
       finger.deleteModel(pendingFingerprintTemplateId);
       registrationPhase = "error";
-      registrationError = apiError.length() ? apiError : "Online registration failed.";
-      drawScreen("Registration Failed", "Online Save Failed", registrationError, "Fingerprint rolled back", ILI9341_RED);
-      logEvent("REG", "Online registration failed for " + pendingRegistrationName + ": " + registrationError);
+      registrationError = localSaveError.length() ? localSaveError : "SD card save failed.";
+      drawScreen("Registration Failed", "Local Save Failed", registrationError, "Fingerprint rolled back", ILI9341_RED);
+      logEvent("REG", "Local save failed for " + pendingRegistrationName + ": " + registrationError);
       signalError();
       mode = MODE_HOME;
       return;
     }
 
-    registrationPhase = "complete";
-    drawScreen("Registration Complete", "ID: " + (pendingRegistrationIdNumber.length() ? pendingRegistrationIdNumber : String(pendingRegistrationUserId)), pendingRegistrationName, "Saved Online + Local", ILI9341_GREEN);
-    logEvent("REG", "Registration complete for " + pendingRegistrationName + " FP " + String(pendingFingerprintTemplateId) + " RFID " + pendingRfidUid);
+    // ================================================================
+    // Try online API. Keep local save even if API fails.
+    // ================================================================
+    registrationPhase = "api";
+    drawScreen("Registration", "Saving Online", pendingRegistrationName, "Please wait", ILI9341_BLUE);
+
+    String apiError;
+    bool registered = registerCredentials(pendingFingerprintTemplateId, pendingRfidUid, apiError);
+
+    if (registered) {
+      registrationPhase = "complete";
+      drawScreen("Registration Complete", "ID: " + (pendingRegistrationIdNumber.length() ? pendingRegistrationIdNumber : String(pendingRegistrationUserId)), pendingRegistrationName, "Saved Online + Local", ILI9341_GREEN);
+      logEvent("REG", "Registration complete for " + pendingRegistrationName + " FP " + String(pendingFingerprintTemplateId) + " RFID " + pendingRfidUid);
+    } else {
+      registrationPhase = "complete";
+      drawScreen("Registration Done", "ID: " + (pendingRegistrationIdNumber.length() ? pendingRegistrationIdNumber : String(pendingRegistrationUserId)), pendingRegistrationName, "Saved Locally - Will Sync", ILI9341_YELLOW);
+      logEvent("REG", "Registration saved locally for " + pendingRegistrationName + " FP " + String(pendingFingerprintTemplateId) + " RFID " + pendingRfidUid + " (online: " + apiError + ")");
+    }
+
     signalSuccess();
     delay(2500);
 
