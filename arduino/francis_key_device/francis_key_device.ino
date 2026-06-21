@@ -3157,97 +3157,70 @@ void appendAttendanceDat(const String &date, const String &time, const String &i
 
 // ---- Append-only CSV user storage (replaces users.json for local saves) ----
 // Format: fingerprintId,smartCardId,userId,idNumber,fullName — one record per line
-// Escaping: \ before special chars, \, for comma, \n for newline, \r for carriage return
+
 void appendUserCsv(const String &fingerprintId, const String &smartCardId, const String &userId, const String &idNumber, const String &fullName) {
-  if (!sdReady) {
-    Serial.println(F("[CSV] appendUserCsv skipped — sdReady=false"));
-    return;
-  }
-
-  // Escape helper: \ → \\, , → \,, \n → \\n, \r → \\r
-  auto esc = [](const String &s) -> String {
-    String r = s;
-    r.replace("\\", "\\\\");
-    r.replace(",", "\\,");
-    r.replace("\n", "\\n");
-    r.replace("\r", "\\r");
-    return r;
-  };
-
+  if (!sdReady) return;
   File file = openSdFile(USERS_CSV_FILE, FILE_APPEND);
-  if (!file) {
-    Serial.printf("[CSV ERROR] Cannot open %s for append\n", USERS_CSV_FILE);
-    return;
+  if (!file) return;
+
+  // Write 5 comma-separated fields, escaping special chars on the fly.
+  const String *fields[] = { &fingerprintId, &smartCardId, &userId, &idNumber, &fullName };
+  for (int i = 0; i < 5; i++) {
+    const String &s = *fields[i];
+    for (unsigned int j = 0; j < s.length(); j++) {
+      char c = s.charAt(j);
+      if (c == '\\')      file.print("\\\\");
+      else if (c == ',')  file.print("\\,");
+      else if (c == '\n') file.print("\\n");
+      else if (c == '\r') file.print("\\r");
+      else                file.write(c);
+    }
+    if (i < 4) file.write(',');
   }
-  file.print(esc(fingerprintId)); file.print(",");
-  file.print(esc(smartCardId));   file.print(",");
-  file.print(esc(userId));        file.print(",");
-  file.print(esc(idNumber));      file.print(",");
-  file.println(esc(fullName));
+  file.println();
   closeSdFile(file);
-  Serial.printf("[CSV] Appended: fp=%s rfid=%s user=%s id=%s name=%s\n",
-                fingerprintId.c_str(), smartCardId.c_str(),
-                userId.c_str(), idNumber.c_str(), fullName.c_str());
 }
 
-// Scan users.csv from end to start, return first (most recent) match.
-// Since we always append, the last matching row is the current state (upsert semantics).
+// Scan users.csv from start to end — last matching line wins (upsert semantics).
+// Key fields (fingerprintId, rfidUid) are compared raw — they are numeric/hex and never
+// contain special chars that the CSV escaping would transform.
 LocalUser findInUserCsv(const String &fingerprintId, const String &rfidUid) {
   LocalUser result;
-  if (!sdReady || !sdFileExists(USERS_CSV_FILE)) {
-    Serial.printf("[CSV] findInUserCsv(%s, %s) — sd not ready or file missing\n",
-                  fingerprintId.c_str(), rfidUid.c_str());
-    return result;
-  }
+  if (!sdReady || !sdFileExists(USERS_CSV_FILE)) return result;
 
   File file = openSdFile(USERS_CSV_FILE, FILE_READ);
-  if (!file) {
-    Serial.printf("[CSV ERROR] Cannot open %s for read\n", USERS_CSV_FILE);
-    return result;
-  }
+  if (!file) return result;
 
-  // Read all lines into a small buffer (max 200 users)
-  const int MAX_LINES = 200;
-  String lines[MAX_LINES];
-  int lineCount = 0;
-  while (file.available() && lineCount < MAX_LINES) {
+  while (file.available()) {
     String line = file.readStringUntil('\n');
     line.trim();
-    if (line.length() > 0) {
-      lines[lineCount++] = line;
+    if (line.length() == 0) continue;
+
+    // Key fields are safe for raw comparison (no special chars possible)
+    if (fieldAt(line, ',', 0) == fingerprintId && fieldAt(line, ',', 1) == rfidUid) {
+      result.found = true;
+      result.fingerprintId = fingerprintId;
+      result.smartCardId = rfidUid;
+      // Unescape only user-facing display fields
+      result.userId = fieldAt(line, ',', 2);
+      result.idNumber = fieldAt(line, ',', 3);
+      result.fullName = fieldAt(line, ',', 4);
+      result.userId.replace("\\\\", "\\");
+      result.userId.replace("\\r", "\r");
+      result.userId.replace("\\n", "\n");
+      result.userId.replace("\\,", ",");
+      result.idNumber.replace("\\\\", "\\");
+      result.idNumber.replace("\\r", "\r");
+      result.idNumber.replace("\\n", "\n");
+      result.idNumber.replace("\\,", ",");
+      result.fullName.replace("\\\\", "\\");
+      result.fullName.replace("\\r", "\r");
+      result.fullName.replace("\\n", "\n");
+      result.fullName.replace("\\,", ",");
     }
     serviceWeb();
   }
   closeSdFile(file);
-
-  // Unescape helper: reverse of appendUserCsv escaping
-  auto unesc = [](const String &s) -> String {
-    String r = s;
-    r.replace("\\r", "\r");
-    r.replace("\\n", "\n");
-    r.replace("\\,", ",");
-    r.replace("\\\\", "\\");
-    return r;
-  };
-
-  // Scan backwards — last match wins
-  for (int i = lineCount - 1; i >= 0; i--) {
-    String fp = unesc(fieldAt(lines[i], ',', 0));
-    String rfid = unesc(fieldAt(lines[i], ',', 1));
-    if (fp == fingerprintId && rfid == rfidUid) {
-      result.found = true;
-      result.fingerprintId = fp;
-      result.smartCardId = rfid;
-      result.userId = unesc(fieldAt(lines[i], ',', 2));
-      result.idNumber = unesc(fieldAt(lines[i], ',', 3));
-      result.fullName = unesc(fieldAt(lines[i], ',', 4));
-      Serial.printf("[CSV] Match at line %d: %s %s\n",
-                    i, result.idNumber.c_str(), result.fullName.c_str());
-      return result;
-    }
-  }
-  Serial.printf("[CSV] No match for fp=%s rfid=%s\n",
-                fingerprintId.c_str(), rfidUid.c_str());
   return result;
 }
 
@@ -3678,25 +3651,13 @@ bool saveCredentialsLocally(uint16_t fingerprintId, const String &rfidUid, Strin
   }
 
   // Use append-only CSV — no JSON parsing, no FILE_WRITE truncate.
-  // This avoids the FAT bootstrap SPI sensitivity that made users.json rewrites fail.
   appendUserCsv(
     String(fingerprintId),
     rfidUid,
     String(pendingRegistrationUserId),
-    pendingRegistrationIdNumber,    // was: String(pendingRegistrationUserId) — fixed!
+    pendingRegistrationIdNumber,
     pendingRegistrationName
   );
-  Serial.printf("[SAVE] CSV append done for fp=%u rfid=%s\n", fingerprintId, rfidUid.c_str());
-
-  // Quick read-back verification
-  LocalUser verify = findInUserCsv(String(fingerprintId), rfidUid);
-  if (!verify.found) {
-    error = "Verify failed after CSV append.";
-    Serial.println(F("[SAVE ERROR] Read-back verification FAILED!"));
-    return false;
-  }
-  Serial.printf("[SAVE] Verified OK: %s %s\n",
-                verify.idNumber.c_str(), verify.fullName.c_str());
   return true;
 }
 
