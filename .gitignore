@@ -1,2 +1,3 @@
 .env
 /node_modules
+/arduino/francis_key_device/test_sd_card.ino
