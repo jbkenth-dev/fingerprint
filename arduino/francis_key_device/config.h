@@ -29,6 +29,10 @@ static const char USER_CACHE_FILE[] = "/fingerprint/users.dat";
 static const char USER_CACHE_TEMP_FILE[] = "/users.tmp"; // no longer used (legacy)
 static const char DEVICE_LOG_FILE[] = "/device.log";    // no longer used (legacy)
 
+static const char USERS_JSON_FILE[] = "/fingerprint/users.json";
+static const char USERS_CSV_FILE[] = "/fingerprint/users.csv";
+static const char ATTENDANCE_LOG_FILE[] = "/fingerprint/attendance.log";
+
 static const char SESSION_COOKIE_NAME[] = "fk_session";
 static const uint32_t SESSION_TIMEOUT_MS = 21600000UL; // 6 hours
 
