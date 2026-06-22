@@ -270,7 +270,7 @@ String fileSizeLabel(uint32_t size);
 String backupFilePathForName(const String &name);
 void debugSdStatus();
 bool saveCredentialsLocally(uint16_t fingerprintId, const String &rfidUid, String &error);
-void appendUserCsv(const String &fingerprintId, const String &smartCardId, const String &userId, const String &idNumber, const String &fullName);
+bool appendUserCsv(const String &fingerprintId, const String &smartCardId, const String &userId, const String &idNumber, const String &fullName);
 LocalUser findInUserCsv(const String &fingerprintId, const String &rfidUid);
 void handleApiTimeSet();
 void handleApiWifiReset();
@@ -2510,31 +2510,40 @@ bool fetchAndCacheUsers() {
     j["fullName"] = String((const char *)(user["fullName"] | ""));
   }
 
-  writeUsersJsonFile(jsonDoc);
-  return true;
+  return writeUsersJsonFile(jsonDoc);
 }
 
 bool registerCredentials(uint16_t fingerprintId, const String &rfidUid, String &error) {
-  DynamicJsonDocument request(1024);
-  DynamicJsonDocument response(4096);
   int httpCode = 0;
+  bool ok = false;
+  LocalUser cached;
 
-  request["userId"] = pendingRegistrationUserId;
-  request["fingerprintId"] = String(fingerprintId);
-  request["smartCardId"] = rfidUid;
+  // Free API JSON docs (5 KB) before SD write calls (32+40 KB)
+  {
+    DynamicJsonDocument request(1024);
+    DynamicJsonDocument response(4096);
 
-  bool ok = postDeviceJson("register", request, response, httpCode, error);
-  databaseReady = ok || (httpCode > 0 && httpCode < 500);
+    request["userId"] = pendingRegistrationUserId;
+    request["fingerprintId"] = String(fingerprintId);
+    request["smartCardId"] = rfidUid;
+
+    ok = postDeviceJson("register", request, response, httpCode, error);
+    databaseReady = ok || (httpCode > 0 && httpCode < 500);
+
+    if (ok) {
+      JsonObject user = response["user"].as<JsonObject>();
+      pendingRegistrationName = String((const char *)(user["fullName"] | pendingRegistrationName.c_str()));
+      cached.found = true;
+      cached.userId = String((int)(user["id"] | pendingRegistrationUserId));
+      cached.idNumber = String((const char *)(user["idNumber"] | ""));
+      cached.fullName = pendingRegistrationName;
+      cached.fingerprintId = String(fingerprintId);
+      cached.smartCardId = rfidUid;
+    }
+  }
+  // request + response freed here
+
   if (ok) {
-    JsonObject user = response["user"].as<JsonObject>();
-    pendingRegistrationName = String((const char *) (user["fullName"] | pendingRegistrationName.c_str()));
-    LocalUser cached;
-    cached.found = true;
-    cached.userId = String((int) (user["id"] | pendingRegistrationUserId));
-    cached.idNumber = String((const char *) (user["idNumber"] | ""));
-    cached.fullName = pendingRegistrationName;
-    cached.fingerprintId = String(fingerprintId);
-    cached.smartCardId = rfidUid;
     String localError;
     if (!upsertCachedUser(cached, localError)) {
       error = localError;
@@ -2542,6 +2551,7 @@ bool registerCredentials(uint16_t fingerprintId, const String &rfidUid, String &
     }
     fetchAndCacheUsers();
   }
+
   return ok;
 }
 
@@ -2617,11 +2627,13 @@ bool upsertCachedUser(const LocalUser &updated, String &error) {
     j["userId"] = updated.userId;
     j["idNumber"] = updated.idNumber;
     j["fullName"] = updated.fullName;
-    Serial.printf("[CACHE] Appended new user record\n");
   }
 
-  writeUsersJsonFile(outDoc);
-  Serial.println(F("[CACHE] upsertCachedUser() SUCCESS"));
+  if (!writeUsersJsonFile(outDoc)) {
+    error = "Cannot write SD card.";
+    return false;
+  }
+
   return true;
 }
 
@@ -3158,27 +3170,45 @@ void appendAttendanceDat(const String &date, const String &time, const String &i
 // ---- Append-only CSV user storage (replaces users.json for local saves) ----
 // Format: fingerprintId,smartCardId,userId,idNumber,fullName — one record per line
 
-void appendUserCsv(const String &fingerprintId, const String &smartCardId, const String &userId, const String &idNumber, const String &fullName) {
-  if (!sdReady) return;
-  File file = openSdFile(USERS_CSV_FILE, FILE_APPEND);
-  if (!file) return;
+bool appendUserCsv(const String &fingerprintId, const String &smartCardId, const String &userId, const String &idNumber, const String &fullName) {
+  if (!sdReady) { Serial.println(F("[CSV] no SD")); return false; }
 
-  // Write 5 comma-separated fields, escaping special chars on the fly.
-  const String *fields[] = { &fingerprintId, &smartCardId, &userId, &idNumber, &fullName };
-  for (int i = 0; i < 5; i++) {
-    const String &s = *fields[i];
-    for (unsigned int j = 0; j < s.length(); j++) {
-      char c = s.charAt(j);
-      if (c == '\\')      file.print("\\\\");
-      else if (c == ',')  file.print("\\,");
-      else if (c == '\n') file.print("\\n");
-      else if (c == '\r') file.print("\\r");
-      else                file.write(c);
+  for (int retry = 0; retry < 3; retry++) {
+    File file = openSdFile(USERS_CSV_FILE, FILE_APPEND);
+    if (!file) {
+      if (retry < 2) { delay(50); yield(); }
+      continue;
     }
-    if (i < 4) file.write(',');
+
+    // Write 5 comma-separated fields, escaping special chars on the fly.
+    const String *fields[] = { &fingerprintId, &smartCardId, &userId, &idNumber, &fullName };
+    bool writeOk = true;
+    for (int i = 0; i < 5; i++) {
+      const String &s = *fields[i];
+      for (unsigned int j = 0; j < s.length(); j++) {
+        char c = s.charAt(j);
+        size_t cb = 0;
+        if (c == '\\')      cb = file.print("\\\\");
+        else if (c == ',')  cb = file.print("\\,");
+        else if (c == '\n') cb = file.print("\\n");
+        else if (c == '\r') cb = file.print("\\r");
+        else                cb = file.write(c);
+        if (cb == 0) { writeOk = false; break; }
+      }
+      if (!writeOk) break;
+      if (i < 4) { if (file.write(',') == 0) { writeOk = false; break; } }
+    }
+    if (writeOk && file.println() == 0) writeOk = false;
+
+    if (file) file.close();
+    endSdAccess();
+
+    if (writeOk) return true;
+
+    if (retry < 2) { delay(50); yield(); }
   }
-  file.println();
-  closeSdFile(file);
+
+  return false;
 }
 
 // Scan users.csv from start to end — last matching line wins (upsert semantics).
@@ -3443,16 +3473,25 @@ bool readUsersJsonFile(DynamicJsonDocument &doc) {
 }
 
 bool writeUsersJsonFile(DynamicJsonDocument &doc) {
-  if (!sdReady) {
-    return false;
+  if (!sdReady) { Serial.println(F("[JSON] no SD")); return false; }
+
+  for (int retry = 0; retry < 3; retry++) {
+    File file = openSdFile(USERS_JSON_FILE, FILE_WRITE);
+    if (!file) {
+      if (retry < 2) { delay(50); yield(); }
+      continue;
+    }
+
+    size_t written = serializeJson(doc, file);
+    if (file) file.close();
+    endSdAccess();
+
+    if (written > 0) return true;
+
+    if (retry < 2) { delay(50); yield(); }
   }
-  File file = openSdFile(USERS_JSON_FILE, FILE_WRITE);
-  if (!file) {
-    return false;
-  }
-  serializeJson(doc, file);
-  closeSdFile(file);
-  return true;
+
+  return false;
 }
 
 String makeLocalRecordId() {
@@ -3641,23 +3680,24 @@ void debugSdStatus() {
 
 // ---- Local-only credential save (no API) ----
 bool saveCredentialsLocally(uint16_t fingerprintId, const String &rfidUid, String &error) {
-  Serial.println(F("[SAVE] ===== saveCredentialsLocally() ====="));
-  Serial.printf("[SAVE] sdReady=%s  fingerprintId=%u  rfidUid=%s\n",
-                sdReady ? "true" : "false", fingerprintId, rfidUid.c_str());
-
   if (!sdReady) {
     error = "SD card is not ready.";
     return false;
   }
 
-  // Use append-only CSV — no JSON parsing, no FILE_WRITE truncate.
-  appendUserCsv(
+  bool csvOk = appendUserCsv(
     String(fingerprintId),
     rfidUid,
     String(pendingRegistrationUserId),
     pendingRegistrationIdNumber,
     pendingRegistrationName
   );
+
+  if (!csvOk) {
+    error = "Cannot write SD card.";
+    return false;
+  }
+
   return true;
 }
 
