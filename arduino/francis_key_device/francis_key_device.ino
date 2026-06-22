@@ -540,26 +540,25 @@ void beginTftAccess() {
 }
 
 void beginSdAccess() {
-  // Deselect both SPI devices BEFORE ending the transaction to match the
-  // proven order from test_sd_card.ino (CS HIGH → endTransaction).
-  // This prevents mid-transition glitches on the shared SPI bus that could
-  // disrupt the SD card's internal state machine.
+  // Ensure both CS lines are deasserted before any SPI state change.
   digitalWrite(TFT_CS_PIN, HIGH);
   digitalWrite(SD_CS_PIN, HIGH);
   SPI.endTransaction();
   delayMicroseconds(10);
 
-  // Explicitly reset the SPI peripheral to the SD card's configuration
-  // (500 kHz / SPI_MODE0).  The TFT library operates at 40 MHz and leaves
-  // residual frequency/mode state in the SPI controller.  Without this
-  // explicit beginTransaction/endTransaction pair, the FAT filesystem
-  // write-bootstrap inside SD.open(FILE_WRITE) can fail because the bus
-  // is not in the expected state.  Reads are far less sensitive, which is
-  // why the symptom is "writes fail but reads work".
-  // Note: SPI.beginTransaction() is safe here — it does NOT re-assert any
-  // chip-select line or reconfigure GPIO pins (only SPI.begin() does).
-  SPI.beginTransaction(SPISettings(500000UL, MSBFIRST, SPI_MODE0));
-  SPI.endTransaction();
+  // Full SPI peripheral reinit — the TFT library (40 MHz, SPI_MODE0)
+  // leaves residual clock-divider state in the SPI controller that the
+  // SD library's internal beginTransaction() cannot always override.
+  // SPI.beginTransaction() alone writes a clock register but does NOT
+  // reset the peripheral, so a 40 MHz divisor can "stick" after the TFT
+  // has been active.  This is why SD.exists() (short CMD13 reads) work
+  // but SD.open(FILE_WRITE) (multi-byte block writes with CRC validation)
+  // fail: the high clock corrupts the CRC check at the card.
+  // The proven fix is the same SPI.end() → SPI.begin() cycle used in
+  // initBusesAndDevices() before SD.begin().
+  SPI.end();
+  delayMicroseconds(5);
+  SPI.begin(SPI_SCLK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
   delayMicroseconds(5);
 }
 
