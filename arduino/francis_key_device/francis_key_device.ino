@@ -164,7 +164,6 @@ void closeSdFile(File &file);
 bool removeSdFile(const char *path);
 bool renameSdFile(const char *fromPath, const char *toPath);
 void startInstallPortal();
-void setupPortalRoutes();
 void setupDeviceRoutes();
 void connectToSavedWifi();
 bool connectToWifi(const String &ssid, const String &password, uint32_t timeoutMs);
@@ -193,12 +192,10 @@ void signalError();
 void signalUnauthorized();
 void pulseLed(uint8_t pin, uint16_t durationMs);
 void buzz(uint16_t durationMs, uint16_t pauseMs = 0);
-String htmlPage(const String &title, const String &body);
 void sendLoginPage(const String &message = "");
 void sendAppShell();
 String htmlEscape(String value);
 String jsonEscape(String value);
-bool requireAdmin();
 bool requireApiAdmin();
 bool isAuthenticated();
 void beginSession();
@@ -227,7 +224,6 @@ void handleApiRestoreSettings();
 void handleApiRestoreFile();
 void handleApiSdFile();
 void handleApiCacheClear();
-String buildUserOptions();
 bool getDeviceJson(const String &action, DynamicJsonDocument &response, int &httpCode, String &error);
 bool postDeviceJson(const String &action, DynamicJsonDocument &request, DynamicJsonDocument &response, int &httpCode, String &error);
 String endpointFor(const String &action);
@@ -235,10 +231,6 @@ bool checkApiStatus();
 bool fetchAndCacheUsers();
 bool registerCredentials(uint16_t fingerprintId, const String &rfidUid, String &error);
 bool upsertCachedUser(const LocalUser &updated, String &error);
-void writeUserRecord(File &file, uint32_t fingerprintId, const String &rfidUid, const String &userId, const String &idNumber, const String &fullName);
-bool readUserRecord(File &file, uint32_t &fingerprintId, String &rfidUid, String &userId, String &idNumber, String &fullName);
-void writeAttendanceRecord(File &file, uint32_t unixtime, const String &studentId, const String &fullName, uint8_t status);
-bool readAttendanceRecord(File &file, uint32_t &unixtime, String &studentId, String &fullName, uint8_t &status);
 AttendanceResult postAttendance(const String &fingerprintId, const String &rfidUid, const String &occurredAt, const String &localRecordId);
 void runRegistrationWorkflow();
 bool enrollFingerprint(uint16_t templateId, String &errorMsg);
@@ -268,7 +260,6 @@ String sdChildPath(const String &parentPath, const String &childName);
 String urlEncode(const String &value);
 String fileSizeLabel(uint32_t size);
 String backupFilePathForName(const String &name);
-void debugSdStatus();
 bool saveCredentialsLocally(uint16_t fingerprintId, const String &rfidUid, String &error);
 bool appendUserCsv(const String &fingerprintId, const String &smartCardId, const String &userId, const String &idNumber, const String &fullName);
 LocalUser findInUserCsv(const String &fingerprintId, const String &rfidUid);
@@ -448,27 +439,16 @@ void initBusesAndDevices() {
   delay(5);
 
   beginSdAccess();
-  Serial.println(F("[INIT] Initializing SD card..."));
-  Serial.printf("[INIT]   Heap before SD.begin: %u free\n", ESP.getFreeHeap());
-  // Use a very conservative SPI frequency (500 kHz).  Micro SD adapters have
-  // long traces that degrade signal integrity.  4+ MHz can detect the card's
-  // hardware (short commands succeed) but cause CRC / data corruption on
-  // multi-byte sector reads, so the FAT filesystem mount fails silently.
+  Serial.println(F("[INIT] SD begin"));
   sdReady = SD.begin(SD_CS_PIN, SPI, 500000UL);
   endSdAccess();
 
-  // ---- Filesystem health check ----
-  // SD.begin() can return true when the card hardware is detected but the FAT
-  // volume mount silently fails (esp. after the TFT has been active on the
-  // shared SPI bus).  SD.totalBytes() returning 0 is the tell: it calls
-  // f_getfree(), which requires a live FAT mount.
   if (sdReady) {
     beginSdAccess();
     uint64_t total = SD.totalBytes();
     endSdAccess();
     if (total == 0) {
-      Serial.println(F("[INIT]   SD CARD DETECTED BUT FILESYSTEM NOT MOUNTED!"));
-      Serial.println(F("[INIT]   Retrying with full SPI teardown..."));
+      Serial.println(F("[INIT] FAT not mounted, retry..."));
       SPI.end();
       delay(10);
       digitalWrite(TFT_CS_PIN, HIGH);
@@ -484,7 +464,7 @@ void initBusesAndDevices() {
         total = SD.totalBytes();
         endSdAccess();
         if (total == 0) {
-          Serial.println(F("[INIT]   SD: retry FAILED — filesystem still not accessible!"));
+          Serial.println(F("[INIT] retry FAIL"));
           sdReady = false;
         }
       }
@@ -494,9 +474,23 @@ void initBusesAndDevices() {
   if (sdReady) {
     uint8_t ct = SD.cardType();
     uint64_t sz = SD.cardSize() / (1024 * 1024);
-    Serial.printf("[INIT]   SD OK - cardType=%u size=%llu MB filesystem=ready\n", ct, sz);
+    Serial.printf("[INIT] SD OK ct=%u sz=%llu MB\n", ct, sz);
+
+    beginSdAccess();
+    uint64_t total = SD.totalBytes();
+    uint64_t used  = SD.usedBytes();
+    File wf = SD.open("/sd_boot_test.tmp", FILE_WRITE);
+    endSdAccess();
+    if (wf) {
+      beginSdAccess();
+      wf.println("ok"); wf.close(); SD.remove("/sd_boot_test.tmp");
+      endSdAccess();
+    } else {
+      Serial.println(F("[INIT] SD read-only or FULL"));
+      sdReady = false;
+    }
   } else {
-    Serial.println(F("[INIT]   SD FAILED to initialize!"));
+    Serial.println(F("[INIT] SD FAIL"));
   }
 
   rtcReady = rtc.begin();
@@ -521,6 +515,33 @@ void initBusesAndDevices() {
                 tftReady ? "OK" : "NO");
 }
 
+// ---- SD card recovery when filesystem mount is lost ----
+// The shared SPI bus (TFT + SD) can occasionally glitch the SD card's
+// internal state.  If SD.totalBytes() returns 0 (filesystem unmounted),
+// call this to re-run the full SD init sequence in-place.
+bool reinitSdCard() {
+  Serial.println(F("[SD] reinit"));
+  digitalWrite(TFT_CS_PIN, HIGH);
+  digitalWrite(SD_CS_PIN, HIGH);
+  SPI.endTransaction();
+  delay(10);
+  beginSdAccess();
+  bool ok = SD.begin(SD_CS_PIN, SPI, 500000UL);
+  endSdAccess();
+  if (ok) {
+    beginSdAccess();
+    uint64_t total = SD.totalBytes();
+    endSdAccess();
+    if (total > 0) {
+      sdReady = true;
+      return true;
+    }
+    Serial.println(F("[SD] reinit: no FS"));
+  }
+  sdReady = false;
+  return false;
+}
+
 void deselectSpiDevices() {
   digitalWrite(TFT_CS_PIN, HIGH);
   digitalWrite(SD_CS_PIN, HIGH);
@@ -540,26 +561,29 @@ void beginTftAccess() {
 }
 
 void beginSdAccess() {
-  // Ensure both CS lines are deasserted before any SPI state change.
+  // Deassert both CS lines to prevent any mid-transition glitches.
+  // IMPORTANT: Do NOT call SPI.end() / SPI.begin() here — doing so
+  // frees the underlying ESP-IDF SPI bus (spi_bus_free), which also
+  // invalidates the sdspi layer's device handle registered during
+  // SD.begin().  After that, SD.open(FILE_WRITE) fails because every
+  // block write needs a real SPI transaction on a destroyed bus, while
+  // SD.exists() / SD.cardType() appear to still work because FATFS
+  // caches directory entries in RAM.
+  //
+  // Both the TFT and SD libraries manage their own SPI transactions
+  // internally via beginTransaction/endTransaction, each with the
+  // correct clock speed for that device.  We only need to ensure both
+  // CS lines are high before the SD library starts its own transaction.
+  //
+  // However, we DO call SPI.endTransaction() here because the TFT
+  // library may have left a transaction open (e.g. if an interrupt or
+  // error path skipped its endTransaction).  If we don't close it, the
+  // SD library's subsequent spi_device_polling_transmit() blocks or
+  // fails because the TFT device handle still holds the bus lock.
+  SPI.endTransaction();
   digitalWrite(TFT_CS_PIN, HIGH);
   digitalWrite(SD_CS_PIN, HIGH);
-  SPI.endTransaction();
-  delayMicroseconds(10);
-
-  // Full SPI peripheral reinit — the TFT library (40 MHz, SPI_MODE0)
-  // leaves residual clock-divider state in the SPI controller that the
-  // SD library's internal beginTransaction() cannot always override.
-  // SPI.beginTransaction() alone writes a clock register but does NOT
-  // reset the peripheral, so a 40 MHz divisor can "stick" after the TFT
-  // has been active.  This is why SD.exists() (short CMD13 reads) work
-  // but SD.open(FILE_WRITE) (multi-byte block writes with CRC validation)
-  // fail: the high clock corrupts the CRC check at the card.
-  // The proven fix is the same SPI.end() → SPI.begin() cycle used in
-  // initBusesAndDevices() before SD.begin().
-  SPI.end();
-  delayMicroseconds(5);
-  SPI.begin(SPI_SCLK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
-  delayMicroseconds(5);
+  delayMicroseconds(1);
 }
 
 void endSdAccess() {
@@ -571,76 +595,61 @@ void endSdAccess() {
 }
 
 bool sdFileExists(const char *path) {
-  if (!sdReady) {
-    Serial.printf("[SD] sdFileExists(%s) -> false (sdReady=false)\n", path);
-    return false;
-  }
-
+  if (!sdReady) return false;
   beginSdAccess();
   bool exists = SD.exists(path);
   endSdAccess();
-  Serial.printf("[SD] sdFileExists(%s) -> %s\n", path, exists ? "true" : "false");
   return exists;
 }
 
 File openSdFile(const char *path, const char *mode) {
-  Serial.printf("[SD] openSdFile(%s, %s) called | heap free: %u\n", path, mode, ESP.getFreeHeap());
-
   if (!sdReady) {
-    Serial.printf("[SD ERROR] openSdFile(%s) skipped — sdReady=false\n", path);
     return File();
   }
 
-  Serial.printf("[SD] Opening %s with mode=%s...\n", path, mode);
   beginSdAccess();
   File file = SD.open(path, mode);
   if (!file) {
-    Serial.printf("[SD ERROR] Failed to open %s (mode=%s)\n", path, mode);
-    Serial.printf("[SD ERROR]   heap free: %u | sdReady=%s\n",
-                  ESP.getFreeHeap(), sdReady ? "true" : "false");
-    uint8_t ct = SD.cardType();
-    Serial.printf("[SD ERROR]   cardType=%u (NONE=0,MMC=1,SD=2,SDHC=3)\n", ct);
+    if (mode[0] == 'w' || mode[0] == 'a') {
+      uint64_t total = SD.totalBytes();
+      uint64_t used  = SD.usedBytes();
+      if (total == 0 && used == 0) {
+        endSdAccess();
+        if (reinitSdCard()) {
+          beginSdAccess();
+          file = SD.open(path, mode);
+          if (file) {
+            return file;
+          }
+        }
+        beginSdAccess();
+      }
+    }
     endSdAccess();
-  } else {
-    Serial.printf("[SD] File opened successfully: %s (%s)\n", path, mode);
   }
   return file;
 }
 
 void closeSdFile(File &file) {
   if (file) {
-    Serial.println(F("[SD] closeSdFile() closing file..."));
     file.close();
-    Serial.println(F("[SD] closeSdFile() — file closed OK"));
-  } else {
-    Serial.println(F("[SD] closeSdFile() — file was already invalid, skipping close"));
   }
   endSdAccess();
 }
 
 bool removeSdFile(const char *path) {
-  if (!sdReady) {
-    Serial.printf("[SD] removeSdFile(%s) -> false (sdReady=false)\n", path);
-    return false;
-  }
-
+  if (!sdReady) return false;
   beginSdAccess();
   bool removed = SD.remove(path);
   endSdAccess();
-  Serial.printf("[SD] removeSdFile(%s) -> %s\n", path, removed ? "true" : "false");
   return removed;
 }
 
 bool renameSdFile(const char *fromPath, const char *toPath) {
-  if (!sdReady) {
-    Serial.printf("[SD] renameSdFile(%s -> %s) -> false (sdReady=false)\n", fromPath, toPath);
-    return false;
-  }
-
+  if (!sdReady) return false;
   beginSdAccess();
   bool renamed = SD.rename(fromPath, toPath);
   endSdAccess();
-  Serial.printf("[SD] renameSdFile(%s -> %s) -> %s\n", fromPath, toPath, renamed ? "true" : "false");
   return renamed;
 }
 
@@ -664,10 +673,6 @@ void startInstallPortal() {
   dnsServer.start(53, "*", WiFi.softAPIP());
   setupDeviceRoutes();
   server.begin();
-}
-
-void setupPortalRoutes() {
-  setupDeviceRoutes();
 }
 
 void setupDeviceRoutes() {
@@ -1049,28 +1054,6 @@ void buzz(uint16_t durationMs, uint16_t pauseMs) {
   }
 }
 
-String htmlPage(const String &title, const String &body) {
-  String page;
-  page.reserve(body.length() + 1400);
-  page += F("<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>");
-  page += F("<title>");
-  page += htmlEscape(title);
-  page += F("</title><style>");
-  page += F("body{margin:0;font-family:Arial,sans-serif;background:#080b10;color:#ecfeff}");
-  page += F("main{max-width:860px;margin:0 auto;padding:24px}a{color:#67e8f9}");
-  page += F(".card{border:1px solid #1f2937;background:#101720;border-radius:8px;padding:18px;margin:14px 0}");
-  page += F("input,select,button{width:100%;box-sizing:border-box;padding:12px;margin:8px 0;border-radius:6px;border:1px solid #334155;background:#0f172a;color:#fff}");
-  page += F("button{background:#0891b2;border:0;font-weight:700;cursor:pointer}.danger{background:#dc2626}.ok{color:#22c55e}.bad{color:#ef4444}");
-  page += F("table{border-collapse:collapse;width:100%;font-size:14px}td,th{border-bottom:1px solid #1f2937;padding:8px;text-align:left}");
-  page += F("pre{white-space:pre-wrap;word-break:break-word;overflow:auto}");
-  page += F("</style></head><body><main><h1>");
-  page += htmlEscape(title);
-  page += F("</h1>");
-  page += body;
-  page += F("</main></body></html>");
-  return page;
-}
-
 String htmlEscape(String value) {
   value.replace("&", "&amp;");
   value.replace("<", "&lt;");
@@ -1141,15 +1124,6 @@ bool requireApiAdmin() {
     return true;
   }
   sendJson(401, "{\"ok\":false,\"error\":\"Login required.\"}");
-  return false;
-}
-
-bool requireAdmin() {
-  if (isAuthenticated()) {
-    return true;
-  }
-
-  sendLoginPage();
   return false;
 }
 
@@ -2016,383 +1990,6 @@ void handleApiTimeSet() {
   }
 }
 
-void handlePortalRoot() {
-  int networks = WiFi.scanNetworks();
-  String options;
-
-  for (int i = 0; i < networks; i++) {
-    String ssid = WiFi.SSID(i);
-    if (ssid.length() == 0) {
-      continue;
-    }
-
-    options += "<option value='";
-    options += htmlEscape(ssid);
-    options += "'>";
-    options += htmlEscape(ssid);
-    options += " (";
-    options += String(WiFi.RSSI(i));
-    options += " dBm, ";
-    options += WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? "Open" : "Secured";
-    options += ")</option>";
-  }
-
-  String body;
-  body += F("<div class='card'><h2>Select a WiFi to connect this device</h2>");
-  body += F("<p>ESP32 scans 2.4GHz networks only.</p>");
-  body += F("<form method='post' action='/connect'><label>WiFi Network</label><select name='ssid'>");
-  body += options;
-  body += F("</select><label>Password</label><input name='password' type='password' autocomplete='current-password'>");
-  body += F("<button type='submit'>Connect</button></form></div>");
-  server.send(200, "text/html", htmlPage("Install Francis Key Device", body));
-}
-
-void handlePortalConnect() {
-  String ssid = server.arg("ssid");
-  String password = server.arg("password");
-
-  drawScreen("WiFi Setup", "Connecting...", "Please wait...", ssid, ILI9341_BLUE);
-  server.send(200, "text/html", htmlPage("Connecting", "<div class='card'><h2>Connecting...</h2><p>Please wait. The device will restart when successful.</p></div>"));
-
-  if (connectToWifi(ssid, password, WIFI_CONNECT_TIMEOUT_MS)) {
-    prefs.putString("ssid", ssid);
-    prefs.putString("pass", password);
-    drawScreen("WiFi Setup", "Connected", "Restarting", "", ILI9341_GREEN);
-    signalSuccess();
-    delay(1200);
-    ESP.restart();
-  }
-
-  drawScreen("WiFi Setup", "Connection Failed", "Please Try Again", "", ILI9341_RED);
-  signalError();
-}
-
-void handleStatusPage() {
-  if (!requireAdmin()) {
-    return;
-  }
-
-  checkApiStatus();
-  DateTime now = currentDateTime();
-  String body;
-  body += F("<div class='card'><h2>Device Status</h2><table>");
-  body += F("<tr><th>Device ID</th><td>");
-  body += htmlEscape(deviceId);
-  body += F("</td></tr><tr><th>IP Address</th><td>");
-  body += htmlEscape(WiFi.localIP().toString());
-  body += F("</td></tr><tr><th>Current Time</th><td>");
-  body += htmlEscape(formatDate(now) + " " + formatTime12(now));
-  body += F("</td></tr><tr><th>WiFi</th><td class='");
-  body += wifiReady ? "ok" : "bad";
-  body += F("'>");
-  body += wifiReady ? "Connected" : "Offline";
-  body += F("</td></tr><tr><th>Database API</th><td class='");
-  body += databaseReady ? "ok" : "bad";
-  body += F("'>");
-  body += databaseReady ? "Connected" : "Offline";
-  body += F("</td></tr><tr><th>SD Card</th><td class='");
-  body += sdReady ? "ok" : "bad";
-  body += F("'>");
-  body += sdReady ? "Ready" : "Missing";
-  body += F("</td></tr><tr><th>Fingerprint</th><td class='");
-  body += fingerprintReady ? "ok" : "bad";
-  body += F("'>");
-  body += fingerprintReady ? "Ready" : "Missing";
-  body += F("</td></tr><tr><th>PN532</th><td class='");
-  body += nfcReady ? "ok" : "bad";
-  body += F("'>");
-  body += nfcReady ? "Ready" : "Missing";
-  body += F("</td></tr>");
-  body += F("</table></div>");
-  body += F("<div class='card'><a href='/register'>Register User</a> | <a href='/attendance'>Attendance</a> | <a href='/logs'>Logs</a> | <a href='/settings'>Settings</a></div>");
-  server.send(200, "text/html", htmlPage("Francis Key Device", body));
-}
-
-void handleRegisterPage() {
-  if (!requireAdmin()) {
-    return;
-  }
-
-  String body;
-  body += F("<div class='card'><h2>Select Existing User</h2>");
-  body += F("<form method='post' action='/register'><select name='userId'>");
-  body += buildUserOptions();
-  body += F("</select><input name='userName' placeholder='Selected user display name'><button type='submit'>Register User</button></form>");
-  body += F("<p>The TFT will request 3 fingerprint scans, then 2 RFID scans.</p></div>");
-  server.send(200, "text/html", htmlPage("Register Fingerprint and RFID", body));
-}
-
-void handleRegisterPost() {
-  if (!requireAdmin()) {
-    return;
-  }
-
-  pendingRegistrationUserId = server.arg("userId").toInt();
-  pendingRegistrationName = server.arg("userName");
-  if (pendingRegistrationUserId <= 0) {
-    server.send(400, "text/html", htmlPage("Registration Error", "<div class='card bad'>Please select a valid user.</div>"));
-    return;
-  }
-  if (!sdReady) {
-    server.send(503, "text/html", htmlPage("Registration Error", "<div class='card bad'>SD card storage is required for local registration.</div>"));
-    return;
-  }
-
-  pendingFingerprintTemplateId = fingerprintTemplateForUser(pendingRegistrationUserId);
-  mode = MODE_REGISTER_FINGERPRINT;
-  server.send(200, "text/html", htmlPage("Registration Started", "<div class='card'><h2>Registration started.</h2><p>Follow the instructions on the LCD display.</p></div>"));
-}
-
-void handleAttendancePage() {
-  if (!requireAdmin()) {
-    return;
-  }
-
-  String body;
-  body += F("<div class='card'><h2>Recent Local Attendance</h2><table><tr><th>Date</th><th>Time</th><th>ID</th><th>Name</th><th>Status</th></tr>");
-
-  if (sdReady && sdFileExists(ATTENDANCE_LOG_FILE)) {
-    File file = openSdFile(ATTENDANCE_LOG_FILE, FILE_READ);
-    int rowCount = 0;
-    while (file.available() && rowCount < 80) {
-      String line = file.readStringUntil('\n');
-      line.trim();
-      if (line.length() == 0) continue;
-      String d = fieldAt(line, ',', 0);
-      String id = fieldAt(line, ',', 1);
-      String st = fieldAt(line, ',', 2);
-      String t = fieldAt(line, ',', 3);
-      body += F("<tr><td>");
-      body += htmlEscape(d);
-      body += F("</td><td>");
-      body += htmlEscape(t);
-      body += F("</td><td>");
-      body += htmlEscape(id);
-      body += F("</td><td>");
-      body += htmlEscape(id);
-      body += F("</td><td>");
-      body += htmlEscape(st);
-      body += F("</td></tr>");
-      rowCount++;
-    }
-    closeSdFile(file);
-  }
-
-  body += F("</table></div><div class='card'><a href='/'>Back to status</a></div>");
-  server.send(200, "text/html", htmlPage("Attendance Logs", body));
-}
-
-void handleLogsPage() {
-  if (!requireAdmin()) {
-    return;
-  }
-
-  String body;
-  body += F("<div class='card'><h2>Device Logs</h2><p>Logs are printed to Serial only in the binary storage system.</p></div>");
-  body += F("<div class='card'><a href='/'>Back to status</a></div>");
-  server.send(200, "text/html", htmlPage("Device Logs", body));
-}
-
-void handleSettingsPage() {
-  if (!requireAdmin()) {
-    return;
-  }
-
-  String body;
-  body += F("<div class='card'><form method='post' action='/settings'>");
-  body += F("<label>Project API URL</label><input name='apiUrl' value='");
-  body += htmlEscape(apiUrl);
-  body += F("'><label>Device API Key</label><input name='apiKey' value='");
-  body += htmlEscape(apiKey);
-  body += F("'><label>Device ID</label><input name='deviceId' value='");
-  body += htmlEscape(deviceId);
-  body += F("'><label>Admin User</label><input name='adminUser' value='");
-  body += htmlEscape(adminUser);
-  body += F("'><label>Admin Password</label><input name='adminPassword' type='password' value='");
-  body += htmlEscape(adminPassword);
-  body += F("'>");
-  body += F("<button type='submit'>Save Settings</button></form></div>");
-  body += F("<div class='card'><h2>SD Card Storage</h2><p>Status: <span class='");
-  body += sdReady ? "ok" : "bad";
-  body += F("'>");
-  body += sdReady ? "Ready" : "Missing";
-  body += F("</span></p><a href='/sd?path=/'>View SD card files</a></div>");
-  body += F("<div class='card'><form method='post' action='/reset-wifi'><button class='danger' type='submit'>Reset WiFi Setup</button></form></div>");
-  server.send(200, "text/html", htmlPage("Device Settings", body));
-}
-
-void handleSettingsPost() {
-  if (!requireAdmin()) {
-    return;
-  }
-
-  apiUrl = server.arg("apiUrl");
-  apiKey = server.arg("apiKey");
-  deviceId = server.arg("deviceId");
-  adminUser = server.arg("adminUser");
-  adminPassword = server.arg("adminPassword");
-  saveSettings();
-  checkApiStatus();
-
-  server.send(200, "text/html", htmlPage("Settings Saved", "<div class='card'><h2>Settings saved.</h2><a href='/'>Back to status</a></div>"));
-}
-
-void handleWifiResetPost() {
-  if (!requireAdmin()) {
-    return;
-  }
-
-  prefs.remove("ssid");
-  prefs.remove("pass");
-  server.send(200, "text/html", htmlPage("WiFi Reset", "<div class='card'><h2>WiFi settings cleared.</h2><p>The device will restart into installation mode.</p></div>"));
-  delay(1000);
-  ESP.restart();
-}
-
-void handleSdBrowserPage() {
-  if (!requireAdmin()) {
-    return;
-  }
-
-  if (!sdReady) {
-    server.send(503, "text/html", htmlPage("SD Card Storage", "<div class='card bad'>SD card is missing or not ready.</div><div class='card'><a href='/settings'>Back to settings</a></div>"));
-    return;
-  }
-
-  String path = normalizeSdPath(server.hasArg("path") ? server.arg("path") : "/");
-  if (path.length() == 0) {
-    server.send(400, "text/html", htmlPage("SD Card Storage", "<div class='card bad'>Invalid SD path.</div><div class='card'><a href='/sd?path=/'>Open root</a></div>"));
-    return;
-  }
-
-  File item = openSdFile(path.c_str(), FILE_READ);
-  if (!item) {
-    server.send(404, "text/html", htmlPage("SD Card Storage", "<div class='card bad'>Path was not found on the SD card.</div><div class='card'><a href='/sd?path=/'>Open root</a></div>"));
-    return;
-  }
-
-  String body;
-  body += F("<div class='card'><a href='/settings'>Settings</a> | <a href='/sd?path=/'>SD root</a>");
-  if (path != "/") {
-    body += F(" | <a href='/sd?path=");
-    body += urlEncode(parentSdPath(path));
-    body += F("'>Parent folder</a>");
-  }
-  body += F("</div>");
-
-  if (item.isDirectory()) {
-    body += F("<div class='card'><h2>");
-    body += htmlEscape(path);
-    body += F("</h2><table><tr><th>Name</th><th>Type</th><th>Size</th></tr>");
-
-    File entry = item.openNextFile();
-    while (entry) {
-      String name = String(entry.name());
-      String entryPath = name.startsWith("/") ? name : sdChildPath(path, name);
-      body += F("<tr><td><a href='/sd?path=");
-      body += urlEncode(entryPath);
-      body += F("'>");
-      body += htmlEscape(name);
-      body += F("</a></td><td>");
-      if (entry.isDirectory()) {
-        body += "Folder";
-      } else {
-        body += "File";
-      }
-      body += F("</td><td>");
-      if (entry.isDirectory()) {
-        body += "-";
-      } else {
-        body += fileSizeLabel(entry.size());
-      }
-      body += F("</td></tr>");
-      entry.close();
-      entry = item.openNextFile();
-    }
-
-    body += F("</table></div>");
-  } else {
-    body += F("<div class='card'><h2>");
-    body += htmlEscape(path);
-    body += F("</h2><p>Size: ");
-    body += fileSizeLabel(item.size());
-    body += F("</p><pre>");
-
-    uint16_t shown = 0;
-    while (item.available() && shown < SD_FILE_PREVIEW_BYTES) {
-      char c = (char) item.read();
-      if (c == '\r') {
-        continue;
-      }
-      body += htmlEscape(String(c));
-      shown++;
-    }
-
-    body += F("</pre>");
-    if (item.available()) {
-      body += F("<p>Preview stopped because the file is larger than the browser limit.</p>");
-    }
-    body += F("</div>");
-  }
-
-  closeSdFile(item);
-  server.send(200, "text/html", htmlPage("SD Card Storage", body));
-}
-
-String buildUserOptions() {
-  DynamicJsonDocument response(24576);
-  int httpCode = 0;
-  String error;
-  String options;
-
-  if (!getDeviceJson("users", response, httpCode, error)) {
-    options += "<option value=''>Unable to load users: ";
-    options += htmlEscape(error);
-    options += "</option>";
-    return options;
-  }
-
-  JsonArray users = response["users"].as<JsonArray>();
-  if (sdReady) {
-    DynamicJsonDocument jsonDoc(16384);
-    JsonArray jsonUsers = jsonDoc.to<JsonArray>();
-    for (JsonObject user : users) {
-      String userId = String((int) user["id"]);
-      String idNumber = String((const char *) (user["idNumber"] | ""));
-      String fullName = String((const char *) (user["fullName"] | ""));
-      String fingerprintId = String((const char *) (user["fingerprintId"] | ""));
-      String smartCardId = String((const char *) (user["smartCardId"] | ""));
-
-      JsonObject j = jsonUsers.createNestedObject();
-      j["fingerprintId"] = fingerprintId;
-      j["smartCardId"] = smartCardId;
-      j["userId"] = userId;
-      j["idNumber"] = idNumber;
-      j["fullName"] = fullName;
-
-      options += F("<option value='");
-      options += htmlEscape(userId);
-      options += F("'>");
-      options += htmlEscape(idNumber + " - " + fullName);
-      options += "</option>";
-    }
-    writeUsersJsonFile(jsonDoc);
-  } else {
-    for (JsonObject user : users) {
-      String userId = String((int) user["id"]);
-      String idNumber = String((const char *) (user["idNumber"] | ""));
-      String fullName = String((const char *) (user["fullName"] | ""));
-      options += F("<option value='");
-      options += htmlEscape(userId);
-      options += F("'>");
-      options += htmlEscape(idNumber + " - " + fullName);
-      options += "</option>";
-    }
-  }
-
-  return options;
-}
-
 bool getDeviceJson(const String &action, DynamicJsonDocument &response, int &httpCode, String &error) {
   if (!wifiReady) {
     httpCode = 0;
@@ -3062,81 +2659,54 @@ void completeAttendanceAttempt() {
 
 void ensureSdFiles() {
   if (!sdReady) {
-    Serial.println(F("[SD] ensureSdFiles: sdReady=false, skipping"));
+    Serial.println(F("[SD] no SD"));
     return;
   }
-
-  Serial.println(F("[SD] ensureSdFiles: verifying /fingerprint/ directory and files..."));
 
   // Create /fingerprint/ directory if it doesn't exist
   beginSdAccess();
   bool fpDirExists = SD.exists("/fingerprint");
   endSdAccess();
   if (!fpDirExists) {
-    Serial.println(F("[SD]   Creating /fingerprint/ directory..."));
     beginSdAccess();
     bool dirOk = SD.mkdir("/fingerprint");
     endSdAccess();
     if (dirOk) {
-      Serial.println(F("[SD]   /fingerprint/ created OK"));
+      Serial.println(F("[SD] /fingerprint/ OK"));
     } else {
-      Serial.println(F("[SD ERROR]   Failed to create /fingerprint/ directory!"));
+      Serial.println(F("[SD] mkdir /fingerprint FAIL"));
     }
-  } else {
-    Serial.println(F("[SD]   /fingerprint/ — exists"));
   }
 
   // Ensure users.dat exists
   if (!sdFileExists(USER_CACHE_FILE)) {
-    Serial.printf("[SD]   %s — missing, creating empty...\n", USER_CACHE_FILE);
     File f = openSdFile(USER_CACHE_FILE, FILE_WRITE);
     if (f) closeSdFile(f);
-    Serial.printf("[SD]   %s — created OK\n", USER_CACHE_FILE);
-  } else {
-    Serial.printf("[SD]   %s — exists\n", USER_CACHE_FILE);
   }
 
   // Ensure attendance.dat exists
   if (!sdFileExists(ATTENDANCE_FILE)) {
-    Serial.printf("[SD]   %s — missing, creating empty...\n", ATTENDANCE_FILE);
     File f = openSdFile(ATTENDANCE_FILE, FILE_WRITE);
     if (f) closeSdFile(f);
-    Serial.printf("[SD]   %s — created OK\n", ATTENDANCE_FILE);
-  } else {
-    Serial.printf("[SD]   %s — exists\n", ATTENDANCE_FILE);
   }
 
   // Ensure users.json exists
   if (!sdFileExists(USERS_JSON_FILE)) {
-    Serial.printf("[SD]   %s — missing, creating empty...\n", USERS_JSON_FILE);
     File f = openSdFile(USERS_JSON_FILE, FILE_WRITE);
     if (f) { f.print("[]"); closeSdFile(f); }
-    Serial.printf("[SD]   %s — created OK\n", USERS_JSON_FILE);
-  } else {
-    Serial.printf("[SD]   %s — exists\n", USERS_JSON_FILE);
   }
 
   // Ensure attendance.log exists
   if (!sdFileExists(ATTENDANCE_LOG_FILE)) {
-    Serial.printf("[SD]   %s — missing, creating empty...\n", ATTENDANCE_LOG_FILE);
     File f = openSdFile(ATTENDANCE_LOG_FILE, FILE_WRITE);
     if (f) closeSdFile(f);
-    Serial.printf("[SD]   %s — created OK\n", ATTENDANCE_LOG_FILE);
-  } else {
-    Serial.printf("[SD]   %s — exists\n", ATTENDANCE_LOG_FILE);
   }
 
   // Ensure users.csv exists
   if (!sdFileExists(USERS_CSV_FILE)) {
-    Serial.printf("[SD]   %s — missing, creating empty...\n", USERS_CSV_FILE);
     File f = openSdFile(USERS_CSV_FILE, FILE_WRITE);
     if (f) closeSdFile(f);
-    Serial.printf("[SD]   %s — created OK\n", USERS_CSV_FILE);
-  } else {
-    Serial.printf("[SD]   %s — exists\n", USERS_CSV_FILE);
   }
-
-  Serial.println(F("[SD] ensureSdFiles: done"));
 }
 
 // (appendLine removed — direct binary writes used instead)
@@ -3368,95 +2938,6 @@ String fieldAt(const String &line, char separator, int index) {
   return "";
 }
 
-// ---- Binary record I/O helpers ----
-void writeUserRecord(File &file, uint32_t fingerprintId, const String &rfidUid, const String &userId, const String &idNumber, const String &fullName) {
-  uint8_t buf[USER_RECORD_SIZE];
-  memset(buf, 0, USER_RECORD_SIZE);
-  // fingerprintId at offset 0 (4 bytes, LE)
-  buf[0] = fingerprintId & 0xFF;
-  buf[1] = (fingerprintId >> 8) & 0xFF;
-  buf[2] = (fingerprintId >> 16) & 0xFF;
-  buf[3] = (fingerprintId >> 24) & 0xFF;
-  // rfidUid at offset 4 (16 bytes)
-  size_t rlen = rfidUid.length();
-  if (rlen > 15) rlen = 15;
-  memcpy(buf + 4, rfidUid.c_str(), rlen);
-  buf[4 + 15] = '\0';
-  // userId at offset 20 (12 bytes)
-  size_t ulen = userId.length();
-  if (ulen > 11) ulen = 11;
-  memcpy(buf + 20, userId.c_str(), ulen);
-  // idNumber at offset 32 (12 bytes)
-  size_t ilen = idNumber.length();
-  if (ilen > 11) ilen = 11;
-  memcpy(buf + 32, idNumber.c_str(), ilen);
-  // fullName at offset 44 (52 bytes)
-  size_t nlen = fullName.length();
-  if (nlen > 51) nlen = 51;
-  memcpy(buf + 44, fullName.c_str(), nlen);
-  file.write(buf, USER_RECORD_SIZE);
-}
-
-bool readUserRecord(File &file, uint32_t &fingerprintId, String &rfidUid, String &userId, String &idNumber, String &fullName) {
-  if ((uint32_t)(file.position() + USER_RECORD_SIZE) > file.size()) {
-    return false;
-  }
-  uint8_t buf[USER_RECORD_SIZE];
-  size_t n = file.read(buf, USER_RECORD_SIZE);
-  if (n < USER_RECORD_SIZE) {
-    return false;
-  }
-  fingerprintId = (uint32_t)buf[0] | ((uint32_t)buf[1] << 8) | ((uint32_t)buf[2] << 16) | ((uint32_t)buf[3] << 24);
-  buf[4 + 15] = '\0';
-  rfidUid = String((char*)(buf + 4));
-  buf[20 + 11] = '\0';
-  userId = String((char*)(buf + 20));
-  buf[32 + 11] = '\0';
-  idNumber = String((char*)(buf + 32));
-  buf[44 + 51] = '\0';
-  fullName = String((char*)(buf + 44));
-  return true;
-}
-
-void writeAttendanceRecord(File &file, uint32_t unixtime, const String &studentId, const String &fullName, uint8_t status) {
-  uint8_t buf[ATTENDANCE_RECORD_SIZE];
-  memset(buf, 0, ATTENDANCE_RECORD_SIZE);
-  // unixtime at offset 0 (4 bytes, LE)
-  buf[0] = unixtime & 0xFF;
-  buf[1] = (unixtime >> 8) & 0xFF;
-  buf[2] = (unixtime >> 16) & 0xFF;
-  buf[3] = (unixtime >> 24) & 0xFF;
-  // studentId at offset 4 (24 bytes)
-  size_t slen = studentId.length();
-  if (slen > 23) slen = 23;
-  memcpy(buf + 4, studentId.c_str(), slen);
-  // fullName at offset 28 (32 bytes)
-  size_t nlen = fullName.length();
-  if (nlen > 31) nlen = 31;
-  memcpy(buf + 28, fullName.c_str(), nlen);
-  // status at offset 60
-  buf[60] = status;
-  file.write(buf, ATTENDANCE_RECORD_SIZE);
-}
-
-bool readAttendanceRecord(File &file, uint32_t &unixtime, String &studentId, String &fullName, uint8_t &status) {
-  if ((uint32_t)(file.position() + ATTENDANCE_RECORD_SIZE) > file.size()) {
-    return false;
-  }
-  uint8_t buf[ATTENDANCE_RECORD_SIZE];
-  size_t n = file.read(buf, ATTENDANCE_RECORD_SIZE);
-  if (n < ATTENDANCE_RECORD_SIZE) {
-    return false;
-  }
-  unixtime = (uint32_t)buf[0] | ((uint32_t)buf[1] << 8) | ((uint32_t)buf[2] << 16) | ((uint32_t)buf[3] << 24);
-  buf[4 + 23] = '\0';
-  studentId = String((char*)(buf + 4));
-  buf[28 + 31] = '\0';
-  fullName = String((char*)(buf + 28));
-  status = buf[60];
-  return true;
-}
-
 // ---- JSON users database helpers ----
 bool readUsersJsonFile(DynamicJsonDocument &doc) {
   if (!sdReady || !sdFileExists(USERS_JSON_FILE)) {
@@ -3618,63 +3099,6 @@ String backupFilePathForName(const String &name) {
     return USERS_JSON_FILE;
   }
   return "";
-}
-
-// ---- SD card diagnostics ----
-void debugSdStatus() {
-  Serial.println(F("[SD DEBUG] ========== SD Card Diagnostics =========="));
-  Serial.printf("  sdReady flag: %s\n", sdReady ? "true" : "false");
-  Serial.printf("  Free heap: %u bytes\n", ESP.getFreeHeap());
-  Serial.printf("  Largest allocable block: %u bytes\n", ESP.getMaxAllocHeap());
-  Serial.printf("  SPI pins: SCLK=%d MISO=%d MOSI=%d\n", SPI_SCLK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
-  Serial.printf("  CS pins: TFT=%d SD=%d\n", TFT_CS_PIN, SD_CS_PIN);
-
-  if (!sdReady) {
-    Serial.println(F("[SD DEBUG] SD not marked ready — skipping hardware checks"));
-    Serial.println(F("[SD DEBUG] =========================================="));
-    return;
-  }
-
-  // Deselect everything and access SD
-  beginSdAccess();
-
-  uint8_t cardType = SD.cardType();
-  Serial.printf("  Card type: %u ", cardType);
-  switch (cardType) {
-    case CARD_NONE:  Serial.println(F("(NONE — no card detected!)")); break;
-    case CARD_MMC:   Serial.println(F("(MMC)")); break;
-    case CARD_SD:    Serial.println(F("(SD)")); break;
-    case CARD_SDHC:  Serial.println(F("(SDHC)")); break;
-    default:         Serial.println(F("(UNKNOWN)")); break;
-  }
-
-  if (cardType != CARD_NONE) {
-    uint64_t cardSizeMB = SD.cardSize() / (1024 * 1024);
-    Serial.printf("  Card size: %llu MB\n", cardSizeMB);
-    Serial.printf("  Total bytes: %llu\n", SD.totalBytes());
-    Serial.printf("  Used bytes: %llu\n", SD.usedBytes());
-  }
-
-  // Test write capability
-  const char *testPath = "/sd_debug_write_test.tmp";
-  File testFile = SD.open(testPath, FILE_WRITE);
-  if (testFile) {
-    size_t written = testFile.println("debug ok");
-    testFile.close();
-    SD.remove(testPath);
-    Serial.printf("  Write test: PASS (wrote %u bytes to %s)\n", written, testPath);
-  } else {
-    Serial.printf("  Write test: FAIL — cannot create %s\n", testPath);
-  }
-
-  // Check if the critical files exist
-  Serial.printf("  %s exists: %s\n", USERS_JSON_FILE, SD.exists(USERS_JSON_FILE) ? "yes" : "no");
-  Serial.printf("  %s exists: %s\n", ATTENDANCE_LOG_FILE, SD.exists(ATTENDANCE_LOG_FILE) ? "yes" : "no");
-  Serial.printf("  %s (legacy) exists: %s\n", USER_CACHE_FILE, SD.exists(USER_CACHE_FILE) ? "yes" : "no");
-  Serial.printf("  %s (legacy) exists: %s\n", ATTENDANCE_FILE, SD.exists(ATTENDANCE_FILE) ? "yes" : "no");
-
-  endSdAccess();
-  Serial.println(F("[SD DEBUG] =========================================="));
 }
 
 // ---- Local-only credential save (no API) ----
