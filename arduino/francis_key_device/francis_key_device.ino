@@ -117,7 +117,7 @@ bool homeScreenVisible = false;
 String lastHomeDateText;
 String lastHomeTimeText;
 String lastHomeDayText;
-String lastHomeIpText;
+// String lastHomeIpText;  // removed with IP display
 
 uint32_t lastHomeUpdateAt = 0;
 uint32_t lastApiCheckAt = 0;
@@ -655,8 +655,6 @@ void drawHomeScreen() {
   lastHomeDateText = "";
   lastHomeTimeText = "";
   lastHomeDayText = "";
-  lastHomeIpText = "";
-
   tft.fillScreen(ILI9341_BLACK);
 
   updateHomeClock(true);
@@ -695,16 +693,8 @@ void updateHomeClock(bool force) {
 }
 
 void drawHomeNetworkLine(bool force) {
-  beginTftAccess();
-  String line = wifiReady ? "STA: " + WiFi.localIP().toString() : "AP: 192.168.4.1";
-
-  if (!force && line == lastHomeIpText) {
-    return;
-  }
-
-  tft.fillRect(0, 198, 320, 16, ILI9341_BLACK);
-  drawCentered(202, line, wifiReady ? ILI9341_LIGHTGREY : ILI9341_RED, 1);
-  lastHomeIpText = line;
+  // IP display removed per user request
+  (void)force;
 }
 
 void drawStatusFooter() {
@@ -906,7 +896,7 @@ void sendAppShell() {
 <div class="overlay" id="overlay"></div>
 <div class="app">
   <aside class="sidebar" id="sidebar">
-    <div class="brand"><div class="mark">FK</div><div><b>FRANCIS KEY</b><span>Attendance Appliance</span></div></div>
+    <div class="brand"><div class="mark">FK</div><div><b>FRANCIS KEY</b></div></div>
     <nav class="nav" id="nav"></nav>
   </aside>
   <main class="main">
