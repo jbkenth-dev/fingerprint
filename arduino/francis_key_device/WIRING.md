@@ -17,10 +17,10 @@ Power all modules from a stable supply. The ESP32 logic pins are 3.3V. Use level
 | ILI9341 TFT | LED/BL/BLK | 3V3 | TFT backlight. Use 3.3V as the safe default. Some modules also allow 5V. |
 | MicroSD module | VCC | 3V3 or 5V per module | Prefer a module with 3.3V-safe logic. |
 | MicroSD module | GND | GND | Common ground required. |
-| MicroSD module | SCK | GPIO18 | Shared SPI clock. |
-| MicroSD module | MISO | GPIO19 | Shared SPI MISO. |
-| MicroSD module | MOSI | GPIO23 | Shared SPI MOSI. |
-| MicroSD module | CS | GPIO13 | SD chip select. |
+| MicroSD module | SCK | GPIO14 | Dedicated HSPI clock (not shared with TFT). |
+| MicroSD module | MISO | GPIO35 | Dedicated HSPI MISO (input-only pin — fine because MISO is input to ESP32). |
+| MicroSD module | MOSI | GPIO13 | Dedicated HSPI MOSI. |
+| MicroSD module | CS | GPIO12 | ⚠️ Requires external 10kΩ pull-down resistor to GND for reliable boot (SD module pull-up on CS otherwise conflicts with GPIO12 strapping). |
 | PN532 NFC/RFID V3 | VCC | 3V3 | Set PN532 board to I2C mode. |
 | PN532 NFC/RFID V3 | GND | GND | Common ground required. |
 | PN532 NFC/RFID V3 | SDA | GPIO21 | Shared I2C data. |
@@ -49,9 +49,11 @@ Power all modules from a stable supply. The ESP32 logic pins are 3.3V. Use level
 ## Bus layout
 
 ```text
-ESP32 SPI: GPIO18 SCK, GPIO19 MISO, GPIO23 MOSI
+ESP32 VSPI (TFT): GPIO18 SCK, GPIO19 MISO, GPIO23 MOSI
   - ILI9341 TFT uses CS GPIO5
-  - MicroSD uses CS GPIO13
+
+ESP32 HSPI (microSD): GPIO14 SCK, GPIO35 MISO, GPIO13 MOSI
+  - MicroSD uses CS GPIO12
 
 ESP32 I2C: GPIO21 SDA, GPIO22 SCL
   - PN532 in I2C mode

@@ -8,7 +8,11 @@ static constexpr uint8_t TFT_CS_PIN = 5;
 static constexpr uint8_t TFT_DC_PIN = 2;
 static constexpr uint8_t TFT_RST_PIN = 4;
 
-static constexpr uint8_t SD_CS_PIN = 13;
+// SD on dedicated HSPI bus (not shared with TFT VSPI)
+static constexpr uint8_t SD_SCLK_PIN = 14;
+static constexpr uint8_t SD_MISO_PIN = 35;  // input-only — MISO is input to ESP32
+static constexpr uint8_t SD_MOSI_PIN = 13;
+static constexpr uint8_t SD_CS_PIN = 12;   // needs 10kΩ pull-down to GND (GPIO12 strapping)
 
 static constexpr uint8_t I2C_SDA_PIN = 21;
 static constexpr uint8_t I2C_SCL_PIN = 22;

@@ -94,6 +94,9 @@ DNSServer dnsServer;
 WebServer server(80);
 HardwareSerial fingerSerial(2);
 
+// Dedicated SPI bus for SD card (HSPI) — TFT uses the default VSPI bus
+SPIClass sdSPI(HSPI);
+
 Adafruit_ILI9341 tft(TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
 Adafruit_PN532 nfc(PN532_IRQ_PIN, PN532_RESET_PIN, &Wire);
 Adafruit_Fingerprint finger(&fingerSerial);
@@ -425,23 +428,14 @@ void initDisplay() {
 void initBusesAndDevices() {
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
 
-  // TFT was initialised first on the shared SPI bus.  Fully tear down and
-  // re-initialize the bus here (once, not per-operation) so the SD library
-  // starts with a completely clean GPIO and clock state.  This must happen
-  // before SD.begin() — after that, we never call SPI.begin() again.
-  SPI.end();
-  delay(5);
-  // Force both chip selects HIGH before bus re-init to prevent glitches.
-  digitalWrite(TFT_CS_PIN, HIGH);
+  // SD is on its own HSPI bus — no SPI.end()/begin() dance needed.
+  // TFT already initialised VSPI in initDisplay(); they don't conflict.
   digitalWrite(SD_CS_PIN, HIGH);
   delayMicroseconds(10);
-  SPI.begin(SPI_SCLK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
-  delay(5);
+  sdSPI.begin(SD_SCLK_PIN, SD_MISO_PIN, SD_MOSI_PIN);
+  delay(1);
 
-  beginSdAccess();
-  Serial.println(F("[INIT] SD begin"));
-  sdReady = SD.begin(SD_CS_PIN, SPI, 500000UL);
-  endSdAccess();
+  sdReady = SD.begin(SD_CS_PIN, sdSPI, 500000UL);
 
   if (sdReady) {
     beginSdAccess();
@@ -449,16 +443,8 @@ void initBusesAndDevices() {
     endSdAccess();
     if (total == 0) {
       Serial.println(F("[INIT] FAT not mounted, retry..."));
-      SPI.end();
-      delay(10);
-      digitalWrite(TFT_CS_PIN, HIGH);
-      digitalWrite(SD_CS_PIN, HIGH);
-      delayMicroseconds(10);
-      SPI.begin(SPI_SCLK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
-      delay(10);
-      beginSdAccess();
-      sdReady = SD.begin(SD_CS_PIN, SPI, 500000UL);
-      endSdAccess();
+      delay(50);
+      sdReady = SD.begin(SD_CS_PIN, sdSPI, 500000UL);
       if (sdReady) {
         beginSdAccess();
         total = SD.totalBytes();
@@ -516,18 +502,13 @@ void initBusesAndDevices() {
 }
 
 // ---- SD card recovery when filesystem mount is lost ----
-// The shared SPI bus (TFT + SD) can occasionally glitch the SD card's
-// internal state.  If SD.totalBytes() returns 0 (filesystem unmounted),
-// call this to re-run the full SD init sequence in-place.
+// SD is on its own HSPI bus, so this is just a fresh SD.begin() call
+// with the dedicated bus — no cross-peripheral interference to worry about.
 bool reinitSdCard() {
   Serial.println(F("[SD] reinit"));
-  digitalWrite(TFT_CS_PIN, HIGH);
   digitalWrite(SD_CS_PIN, HIGH);
-  SPI.endTransaction();
   delay(10);
-  beginSdAccess();
-  bool ok = SD.begin(SD_CS_PIN, SPI, 500000UL);
-  endSdAccess();
+  bool ok = SD.begin(SD_CS_PIN, sdSPI, 500000UL);
   if (ok) {
     beginSdAccess();
     uint64_t total = SD.totalBytes();
@@ -548,49 +529,23 @@ void deselectSpiDevices() {
   delayMicroseconds(1);
 }
 
-// TFT and microSD share SPI.  Each library manages its own CS line, but
-// the SPI peripheral (clock / mode / frequency) must be clean before
-// switching devices.  We deselect both devices BEFORE ending the
-// transaction (matching the proven order from test_sd_card.ino) to
-// prevent mid-transition glitches on the shared bus.
+// TFT (VSPI) and SD (HSPI) are on separate SPI buses — no cross-device
+// state to clean.  We just ensure no stale transaction lingers.
 void beginTftAccess() {
-  digitalWrite(SD_CS_PIN, HIGH);
-  digitalWrite(TFT_CS_PIN, HIGH);
   SPI.endTransaction();
-  delayMicroseconds(1);
 }
 
 void beginSdAccess() {
-  // Deassert both CS lines to prevent any mid-transition glitches.
-  // IMPORTANT: Do NOT call SPI.end() / SPI.begin() here — doing so
-  // frees the underlying ESP-IDF SPI bus (spi_bus_free), which also
-  // invalidates the sdspi layer's device handle registered during
-  // SD.begin().  After that, SD.open(FILE_WRITE) fails because every
-  // block write needs a real SPI transaction on a destroyed bus, while
-  // SD.exists() / SD.cardType() appear to still work because FATFS
-  // caches directory entries in RAM.
-  //
-  // Both the TFT and SD libraries manage their own SPI transactions
-  // internally via beginTransaction/endTransaction, each with the
-  // correct clock speed for that device.  We only need to ensure both
-  // CS lines are high before the SD library starts its own transaction.
-  //
-  // However, we DO call SPI.endTransaction() here because the TFT
-  // library may have left a transaction open (e.g. if an interrupt or
-  // error path skipped its endTransaction).  If we don't close it, the
-  // SD library's subsequent spi_device_polling_transmit() blocks or
-  // fails because the TFT device handle still holds the bus lock.
-  SPI.endTransaction();
-  digitalWrite(TFT_CS_PIN, HIGH);
+  // SD is on its own HSPI bus — no shared-bus concerns with TFT.
+  // sdSPI.endTransaction() clears any stale state before an SD operation.
+  sdSPI.endTransaction();
   digitalWrite(SD_CS_PIN, HIGH);
   delayMicroseconds(1);
 }
 
 void endSdAccess() {
-  // Deselect both SPI devices so no CS line is left asserted.
   digitalWrite(SD_CS_PIN, HIGH);
-  digitalWrite(TFT_CS_PIN, HIGH);
-  SPI.endTransaction();
+  sdSPI.endTransaction();
   delayMicroseconds(10);
 }
 
