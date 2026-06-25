@@ -6,8 +6,6 @@
 #include <ArduinoJson.h>
 #include <Wire.h>
 #include <SPI.h>
-#include <SD.h>
-#include <FS.h>
 #include <time.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ILI9341.h>
@@ -73,29 +71,10 @@ struct UiState {
   uint32_t updatedAt = 0;
 };
 
-// ---- Binary record sizes for .dat files ----
-// users.dat: 96 bytes per record
-static const size_t USER_RECORD_SIZE = 96;
-//   [0]  uint32_t   fingerprintId     4 bytes  (LE)
-//   [4]  char       rfidUid[16]      16 bytes  (null-terminated)
-//   [20] char       userId[12]       12 bytes  (null-terminated, API user ID — matching key)
-//   [32] char       idNumber[12]     12 bytes  (null-terminated, display student ID)
-//   [44] char       fullName[52]     52 bytes  (null-terminated)
-// attendance.dat: 64 bytes per record
-static const size_t ATTENDANCE_RECORD_SIZE = 64;
-//   [0]  uint32_t   unixtime          4 bytes  (LE)
-//   [4]  char       studentId[24]    24 bytes  (null-terminated cached copy)
-//   [28] char       fullName[32]     32 bytes  (null-terminated cached copy)
-//   [60] uint8_t    status            1 byte   (0=IN, 1=OUT)
-//   [61] char       _pad[3]          3 bytes
-
 Preferences prefs;
 DNSServer dnsServer;
 WebServer server(80);
 HardwareSerial fingerSerial(2);
-
-// Dedicated SPI bus for SD card (HSPI) — TFT uses the default VSPI bus
-SPIClass sdSPI(HSPI);
 
 Adafruit_ILI9341 tft(TFT_CS_PIN, TFT_DC_PIN, TFT_RST_PIN);
 Adafruit_PN532 nfc(PN532_IRQ_PIN, PN532_RESET_PIN, &Wire);
@@ -116,7 +95,6 @@ uint32_t sessionExpiresAt = 0;
 
 bool wifiReady = false;
 bool databaseReady = false;
-bool sdReady = false;
 bool rtcReady = false;
 bool nfcReady = false;
 bool fingerprintReady = false;
@@ -157,15 +135,7 @@ void loadSettings();
 void saveSettings();
 void initDisplay();
 void initBusesAndDevices();
-void deselectSpiDevices();
 void beginTftAccess();
-void beginSdAccess();
-void endSdAccess();
-bool sdFileExists(const char *path);
-File openSdFile(const char *path, const char *mode);
-void closeSdFile(File &file);
-bool removeSdFile(const char *path);
-bool renameSdFile(const char *fromPath, const char *toPath);
 void startInstallPortal();
 void setupDeviceRoutes();
 void connectToSavedWifi();
@@ -222,10 +192,7 @@ void handleApiWifiStatus();
 void handleApiRules();
 void handleApiLogs();
 void handleApiBackupSettings();
-void handleApiBackupFile();
 void handleApiRestoreSettings();
-void handleApiRestoreFile();
-void handleApiSdFile();
 void handleApiCacheClear();
 bool getDeviceJson(const String &action, DynamicJsonDocument &response, int &httpCode, String &error);
 bool postDeviceJson(const String &action, DynamicJsonDocument &request, DynamicJsonDocument &response, int &httpCode, String &error);
@@ -246,32 +213,13 @@ String bytesToHex(const uint8_t *bytes, uint8_t length);
 void runAttendanceWorkflow();
 int scanFingerprintForAttendance();
 void completeAttendanceAttempt();
-void ensureSdFiles();
 void logEvent(const String &category, const String &message);
-void appendAttendanceDat(const String &date, const String &time, const String &id, const String &name, const String &status);
-LocalUser findCachedUserByCredentials(const String &fingerprintId, const String &rfidUid);
-String localNextStatus(const String &date, const String &id);
-int minutesSinceLastIn(const String &date, const String &id, const DateTime &now);
-uint16_t pendingQueueCount();
-String fieldAt(const String &line, char separator, int index);
 String makeLocalRecordId();
 void maintainWifi();
-void saveRules();
-String normalizeSdPath(String path);
-String parentSdPath(const String &path);
-String sdChildPath(const String &parentPath, const String &childName);
-String urlEncode(const String &value);
-String fileSizeLabel(uint32_t size);
-String backupFilePathForName(const String &name);
-bool saveCredentialsLocally(uint16_t fingerprintId, const String &rfidUid, String &error);
-bool appendUserCsv(const String &fingerprintId, const String &smartCardId, const String &userId, const String &idNumber, const String &fullName);
-LocalUser findInUserCsv(const String &fingerprintId, const String &rfidUid);
-void handleApiTimeSet();
 void handleApiWifiReset();
 void handleApiSettingsApi();
+void handleApiTimeSet();
 void saveDefaultHost();
-bool readUsersJsonFile(DynamicJsonDocument &doc);
-bool writeUsersJsonFile(DynamicJsonDocument &doc);
 
 void setup() {
   Serial.begin(115200);
@@ -281,7 +229,6 @@ void setup() {
   loadSettings();
   initDisplay();
   initBusesAndDevices();
-  ensureSdFiles();
   randomSeed((uint32_t) esp_random());
 
   startInstallPortal();
@@ -294,7 +241,7 @@ void setup() {
       checkApiStatus();
       fetchAndCacheUsers();
     } else {
-      drawScreen("Offline Mode", "WiFi unavailable", "AP: 192.168.4.1", "Saved locally", ILI9341_YELLOW);
+      drawScreen("Offline Mode", "WiFi unavailable", "AP: 192.168.4.1", "API offline", ILI9341_YELLOW);
       logEvent("WIFI", "Saved WiFi failed to connect; appliance remains available on AP");
       delay(1200);
     }
@@ -344,8 +291,7 @@ void loop() {
 
 void initPins() {
   pinMode(TFT_CS_PIN, OUTPUT);
-  pinMode(SD_CS_PIN, OUTPUT);
-  deselectSpiDevices();
+  digitalWrite(TFT_CS_PIN, HIGH);
 
   pinMode(RED_LED_PIN, OUTPUT);
   pinMode(BLUE_LED_PIN, OUTPUT);
@@ -428,57 +374,6 @@ void initDisplay() {
 void initBusesAndDevices() {
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
 
-  // SD is on its own HSPI bus — no SPI.end()/begin() dance needed.
-  // TFT already initialised VSPI in initDisplay(); they don't conflict.
-  digitalWrite(SD_CS_PIN, HIGH);
-  delayMicroseconds(10);
-  sdSPI.begin(SD_SCLK_PIN, SD_MISO_PIN, SD_MOSI_PIN);
-  delay(1);
-
-  sdReady = SD.begin(SD_CS_PIN, sdSPI, 500000UL);
-
-  if (sdReady) {
-    beginSdAccess();
-    uint64_t total = SD.totalBytes();
-    endSdAccess();
-    if (total == 0) {
-      Serial.println(F("[INIT] FAT not mounted, retry..."));
-      delay(50);
-      sdReady = SD.begin(SD_CS_PIN, sdSPI, 500000UL);
-      if (sdReady) {
-        beginSdAccess();
-        total = SD.totalBytes();
-        endSdAccess();
-        if (total == 0) {
-          Serial.println(F("[INIT] retry FAIL"));
-          sdReady = false;
-        }
-      }
-    }
-  }
-
-  if (sdReady) {
-    uint8_t ct = SD.cardType();
-    uint64_t sz = SD.cardSize() / (1024 * 1024);
-    Serial.printf("[INIT] SD OK ct=%u sz=%llu MB\n", ct, sz);
-
-    beginSdAccess();
-    uint64_t total = SD.totalBytes();
-    uint64_t used  = SD.usedBytes();
-    File wf = SD.open("/sd_boot_test.tmp", FILE_WRITE);
-    endSdAccess();
-    if (wf) {
-      beginSdAccess();
-      wf.println("ok"); wf.close(); SD.remove("/sd_boot_test.tmp");
-      endSdAccess();
-    } else {
-      Serial.println(F("[INIT] SD read-only or FULL"));
-      sdReady = false;
-    }
-  } else {
-    Serial.println(F("[INIT] SD FAIL"));
-  }
-
   rtcReady = rtc.begin();
   if (rtcReady && rtc.lostPower()) {
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
@@ -495,117 +390,14 @@ void initBusesAndDevices() {
     nfc.SAMConfig();
   }
 
-  Serial.printf("[INIT] Devices: SD=%s RTC=%s FP=%s NFC=%s TFT=%s\n",
-                sdReady ? "OK" : "NO", rtcReady ? "OK" : "NO",
+  Serial.printf("[INIT] Devices: RTC=%s FP=%s NFC=%s TFT=%s\n",
+                rtcReady ? "OK" : "NO",
                 fingerprintReady ? "OK" : "NO", nfcReady ? "OK" : "NO",
                 tftReady ? "OK" : "NO");
 }
 
-// ---- SD card recovery when filesystem mount is lost ----
-// SD is on its own HSPI bus, so this is just a fresh SD.begin() call
-// with the dedicated bus — no cross-peripheral interference to worry about.
-bool reinitSdCard() {
-  Serial.println(F("[SD] reinit"));
-  digitalWrite(SD_CS_PIN, HIGH);
-  delay(10);
-  bool ok = SD.begin(SD_CS_PIN, sdSPI, 500000UL);
-  if (ok) {
-    beginSdAccess();
-    uint64_t total = SD.totalBytes();
-    endSdAccess();
-    if (total > 0) {
-      sdReady = true;
-      return true;
-    }
-    Serial.println(F("[SD] reinit: no FS"));
-  }
-  sdReady = false;
-  return false;
-}
-
-void deselectSpiDevices() {
-  digitalWrite(TFT_CS_PIN, HIGH);
-  digitalWrite(SD_CS_PIN, HIGH);
-  delayMicroseconds(1);
-}
-
-// TFT (VSPI) and SD (HSPI) are on separate SPI buses — no cross-device
-// state to clean.  We just ensure no stale transaction lingers.
 void beginTftAccess() {
   SPI.endTransaction();
-}
-
-void beginSdAccess() {
-  // SD is on its own HSPI bus — no shared-bus concerns with TFT.
-  // sdSPI.endTransaction() clears any stale state before an SD operation.
-  sdSPI.endTransaction();
-  digitalWrite(SD_CS_PIN, HIGH);
-  delayMicroseconds(1);
-}
-
-void endSdAccess() {
-  digitalWrite(SD_CS_PIN, HIGH);
-  sdSPI.endTransaction();
-  delayMicroseconds(10);
-}
-
-bool sdFileExists(const char *path) {
-  if (!sdReady) return false;
-  beginSdAccess();
-  bool exists = SD.exists(path);
-  endSdAccess();
-  return exists;
-}
-
-File openSdFile(const char *path, const char *mode) {
-  if (!sdReady) {
-    return File();
-  }
-
-  beginSdAccess();
-  File file = SD.open(path, mode);
-  if (!file) {
-    if (mode[0] == 'w' || mode[0] == 'a') {
-      uint64_t total = SD.totalBytes();
-      uint64_t used  = SD.usedBytes();
-      if (total == 0 && used == 0) {
-        endSdAccess();
-        if (reinitSdCard()) {
-          beginSdAccess();
-          file = SD.open(path, mode);
-          if (file) {
-            return file;
-          }
-        }
-        beginSdAccess();
-      }
-    }
-    endSdAccess();
-  }
-  return file;
-}
-
-void closeSdFile(File &file) {
-  if (file) {
-    file.close();
-  }
-  endSdAccess();
-}
-
-bool removeSdFile(const char *path) {
-  if (!sdReady) return false;
-  beginSdAccess();
-  bool removed = SD.remove(path);
-  endSdAccess();
-  return removed;
-}
-
-bool renameSdFile(const char *fromPath, const char *toPath) {
-  if (!sdReady) return false;
-  beginSdAccess();
-  bool renamed = SD.rename(fromPath, toPath);
-  endSdAccess();
-  return renamed;
 }
 
 void startInstallPortal() {
@@ -652,10 +444,7 @@ void setupDeviceRoutes() {
   server.on("/api/rules", HTTP_POST, handleApiRules);
   server.on("/api/logs", HTTP_GET, handleApiLogs);
   server.on("/api/backup/settings", HTTP_GET, handleApiBackupSettings);
-  server.on("/api/backup/file", HTTP_GET, handleApiBackupFile);
   server.on("/api/restore/settings", HTTP_POST, handleApiRestoreSettings);
-  server.on("/api/restore/file", HTTP_POST, handleApiRestoreFile);
-  server.on("/api/sd/file", HTTP_GET, handleApiSdFile);
   server.on("/api/cache/clear", HTTP_POST, handleApiCacheClear);
   server.on("/api/time/set", HTTP_POST, handleApiTimeSet);
   server.on("/api/wifi/reset", HTTP_POST, handleApiWifiReset);
@@ -929,10 +718,6 @@ void drawStatusFooter() {
   tft.setTextColor(databaseReady ? ILI9341_GREEN : ILI9341_RED);
   tft.setCursor(112, 224);
   tft.print(databaseReady ? "DB:OK" : "DB:OFF");
-
-  tft.setTextColor(sdReady ? ILI9341_GREEN : ILI9341_RED);
-  tft.setCursor(214, 224);
-  tft.print(sdReady ? "SD:OK" : "SD:OFF");
 }
 
 void drawCentered(int y, const String &text, uint16_t color, uint8_t size) {
@@ -1147,9 +932,9 @@ function openMenu(){$("sidebar").classList.add("open");$("overlay").classList.ad
 function nav(){const n=$("nav");n.innerHTML="";menu.forEach(name=>{const b=document.createElement("button");b.textContent=name;b.className=state.view===name?"active":"";b.onclick=()=>{if(name==="Logout"){location.href="/logout";return}state.view=name;closeMenu();render();loadView(name)};n.appendChild(b)})}
 function shell(){nav();$("pageTitle").textContent=state.view;$("backBtn").style.visibility=state.view==="Dashboard"?"hidden":"visible"}
 function statusPill(label,on){return `<span class="pill ${on?"ok":"bad"}">${label}: ${on?"OK":"OFF"}</span>`}
-function deviceCards(){const d=state.device||{};return `<div class="grid cards"><div class="card stat"><span>WiFi</span><b class="${d.wifiReady?"ok":"bad"}">${d.wifiReady?"Online":"Offline"}</b></div><div class="card stat"><span>Database API</span><b class="${d.databaseReady?"ok":"bad"}">${d.databaseReady?"Ready":"Offline"}</b></div><div class="card stat"><span>SD Queue</span><b>${d.pendingQueue||0}</b></div><div class="card stat"><span>Device Time</span><b>${d.time||"--:--"}</b></div></div>`}
+function deviceCards(){const d=state.device||{};return `<div class="grid cards"><div class="card stat"><span>WiFi</span><b class="${d.wifiReady?"ok":"bad"}">${d.wifiReady?"Online":"Offline"}</b></div><div class="card stat"><span>Database API</span><b class="${d.databaseReady?"ok":"bad"}">${d.databaseReady?"Ready":"Offline"}</b></div><div class="card stat"><span>Device Time</span><b>${d.time||"--:--"}</b></div></div>`}
 function liveScreen(){const u=(state.device&&state.device.ui)||{};return `<div class="screen"><div class="kind">${u.type||"state"}</div><div class="big">${u.title||"FRANCIS KEY"}</div><div class="line">${u.line1||""}</div><div class="line">${u.line2||""}</div><div class="line">${u.line3||""}</div></div>`}
-function dashboard(){const d=state.device||{};return `${deviceCards()}<div class="grid wide"><div class="card"><h2>Live Device Screen</h2>${liveScreen()}<div class="row" style="margin-top:12px">${statusPill("Fingerprint",d.fingerprintReady)}${statusPill("RFID",d.nfcReady)}${statusPill("RTC",d.rtcReady)}${statusPill("TFT",d.tftReady)}${statusPill("SD",d.sdReady)}</div></div><div class="card"><h2>Appliance</h2><div class="field"><label>Access Point</label><div class="item"><b>FRANCIS_KEY</b><div class="muted">Password: 12345678 / IP: 192.168.4.1</div></div></div><div class="field"><label>Station IP</label><div>${d.staIp||"Offline"}</div></div><div class="field"><label>API URL</label><div class="muted">${d.apiUrl||""}</div></div></div></div>`}
+function dashboard(){const d=state.device||{};return `${deviceCards()}<div class="grid wide"><div class="card"><h2>Live Device Screen</h2>${liveScreen()}<div class="row" style="margin-top:12px">${statusPill("Fingerprint",d.fingerprintReady)}${statusPill("RFID",d.nfcReady)}${statusPill("RTC",d.rtcReady)}${statusPill("TFT",d.tftReady)}</div></div><div class="card"><h2>Appliance</h2><div class="field"><label>Access Point</label><div class="item"><b>FRANCIS_KEY</b><div class="muted">Password: 12345678 / IP: 192.168.4.1</div></div></div><div class="field"><label>Station IP</label><div>${d.staIp||"Offline"}</div></div><div class="field"><label>API URL</label><div class="muted">${d.apiUrl||""}</div></div></div></div>`}
 function attendance(){if(state.loading.attendance)return `<div class="card"><div class="loader"></div></div>`;const rows=state.attendance.map(r=>`<tr><td>${r.date}</td><td>${r.time}</td><td>${r.id}</td><td>${r.name}</td><td>${r.status}</td></tr>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Recent Attendance</h2><button class="btn secondary" onclick="loadAttendance()">Refresh</button></div><div class="tablewrap"><table><thead><tr><th>Date</th><th>Time</th><th>ID</th><th>Name</th><th>Status</th></tr></thead><tbody>${rows||"<tr><td colspan=5>No local attendance records.</td></tr>"}</tbody></table></div></div>`}
 function registerView(){const d=state.device||{};if(!d.wifiReady||!d.databaseReady)return `<div class="card"><h2>Register User</h2><div class="empty">Registration unavailable.<br>Please connect to WiFi.</div></div>`;const q=state.search.toLowerCase();const filtered=state.students.filter(s=>(`${s.idNumber} ${s.fullName}`.toLowerCase()).includes(q));const list=filtered.map(s=>`<button class="item" onclick="openRegister(${s.id})"><b>${s.idNumber||s.id}</b> ${s.fullName}<div class="muted">${s.department||"Student"}</div></button>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Select Student</h2><button class="btn secondary" onclick="loadStudents()">Refresh</button></div><div class="field"><label>Realtime Search</label><input placeholder="Student ID, first name, last name, full name" value="${state.search}" oninput="state.search=this.value;render()"></div>${state.loading.students?'<div class="loader"></div>':`<div class="list">${list||'<div class="empty">No matching students.</div>'}</div>`}</div>`}
 function usersView(){if(state.loading.users)return `<div class="card"><div class="loader"></div></div>`;const rows=state.users.map(u=>`<tr><td>${u.idNumber||u.userId}</td><td>${u.fullName}</td><td>${u.fingerprintId||""}</td><td>${u.smartCardId||""}</td></tr>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Local User Cache</h2><button class="btn secondary" onclick="loadUsers()">Refresh</button></div><div class="tablewrap"><table><thead><tr><th>ID</th><th>Name</th><th>Fingerprint</th><th>RFID</th></tr></thead><tbody>${rows||"<tr><td colspan=4>No cached users.</td></tr>"}</tbody></table></div></div>`}
@@ -1244,12 +1029,10 @@ void handleApiState() {
   payload += F(",\"mode\":\""); payload += String((int) mode); payload += F("\"");
   payload += F(",\"wifiReady\":"); payload += wifiReady ? F("true") : F("false");
   payload += F(",\"databaseReady\":"); payload += databaseReady ? F("true") : F("false");
-  payload += F(",\"sdReady\":"); payload += sdReady ? F("true") : F("false");
   payload += F(",\"rtcReady\":"); payload += rtcReady ? F("true") : F("false");
   payload += F(",\"nfcReady\":"); payload += nfcReady ? F("true") : F("false");
   payload += F(",\"fingerprintReady\":"); payload += fingerprintReady ? F("true") : F("false");
   payload += F(",\"tftReady\":"); payload += tftReady ? F("true") : F("false");
-  payload += F(",\"pendingQueue\":"); payload += String(pendingQueueCount());
   payload += F(",\"rules\":{\"inTime\":\""); payload += minutesToTimeInput(studentInMinutes);
   payload += F("\",\"outDelay\":"); payload += String(outDelayMinutes); payload += F("}");
   payload += F(",\"ui\":{\"seq\":"); payload += String(uiState.seq);
@@ -1324,10 +1107,6 @@ void handleApiRegisterStart() {
   }
   if (!wifiReady || !checkApiStatus()) {
     sendJson(503, "{\"ok\":false,\"error\":\"Registration unavailable. Please connect to WiFi.\"}");
-    return;
-  }
-  if (!sdReady) {
-    sendJson(503, "{\"ok\":false,\"error\":\"SD card storage is required for local registration.\"}");
     return;
   }
 
@@ -1420,92 +1199,14 @@ void handleApiAttendance() {
   if (!requireApiAdmin()) {
     return;
   }
-  String payload;
-  payload.reserve(10000);
-  payload += F("{\"ok\":true,\"records\":[");
-  bool first = true;
-  const int MAX_LINES = 80;
-  struct LogRow {
-    String date;
-    String time;
-    String id;
-    String status;
-  };
-  LogRow rows[MAX_LINES];
-  int count = 0;
-
-  if (sdReady && sdFileExists(ATTENDANCE_LOG_FILE)) {
-    File file = openSdFile(ATTENDANCE_LOG_FILE, FILE_READ);
-    while (file.available()) {
-      String line = file.readStringUntil('\n');
-      line.trim();
-      if (line.length() == 0) continue;
-      String d = fieldAt(line, ',', 0);
-      String id = fieldAt(line, ',', 1);
-      String st = fieldAt(line, ',', 2);
-      String t = fieldAt(line, ',', 3);
-      if (count < MAX_LINES) {
-        rows[count].date = d;
-        rows[count].time = t;
-        rows[count].id = id;
-        rows[count].status = st;
-        count++;
-      } else {
-        for (int i = 1; i < MAX_LINES; i++) {
-          rows[i - 1] = rows[i];
-        }
-        rows[MAX_LINES - 1].date = d;
-        rows[MAX_LINES - 1].time = t;
-        rows[MAX_LINES - 1].id = id;
-        rows[MAX_LINES - 1].status = st;
-      }
-      serviceWeb();
-    }
-    closeSdFile(file);
-  }
-
-  for (int i = count - 1; i >= 0; i--) {
-    if (!first) payload += ",";
-    first = false;
-    payload += F("{\"date\":\""); payload += jsonEscape(rows[i].date);
-    payload += F("\",\"time\":\""); payload += jsonEscape(rows[i].time);
-    payload += F("\",\"id\":\""); payload += jsonEscape(rows[i].id);
-    payload += F("\",\"name\":\""); payload += jsonEscape(rows[i].id);
-    payload += F("\",\"status\":\""); payload += jsonEscape(rows[i].status); payload += F("\"}");
-  }
-  payload += F("]}");
-  sendJson(200, payload);
+  sendJson(200, "{\"ok\":true,\"records\":[]}");
 }
 
 void handleApiUsers() {
   if (!requireApiAdmin()) {
     return;
   }
-  String payload;
-  payload.reserve(10000);
-  payload += F("{\"ok\":true,\"users\":[");
-  bool first = true;
-
-  if (sdReady && sdFileExists(USERS_JSON_FILE)) {
-    DynamicJsonDocument doc(16384);
-    if (readUsersJsonFile(doc)) {
-      JsonArray users = doc.as<JsonArray>();
-      for (JsonObject u : users) {
-        if (!first) payload += ",";
-        first = false;
-        payload += F("{\"userId\":\""); payload += jsonEscape(String((const char *)(u["userId"] | "")));
-        payload += F("\",\"idNumber\":\""); payload += jsonEscape(String((const char *)(u["idNumber"] | "")));
-        payload += F("\",\"fullName\":\""); payload += jsonEscape(String((const char *)(u["fullName"] | "")));
-        payload += F("\",\"fingerprintId\":\""); payload += jsonEscape(String((const char *)(u["fingerprintId"] | "")));
-        payload += F("\",\"smartCardId\":\""); payload += jsonEscape(String((const char *)(u["smartCardId"] | "")));
-        payload += F("\"}");
-        serviceWeb();
-      }
-    }
-  }
-
-  payload += F("]}");
-  sendJson(200, payload);
+  sendJson(200, "{\"ok\":true,\"users\":[]}");
 }
 
 void handleApiWifiScan() {
@@ -1805,30 +1506,6 @@ void handleApiBackupSettings() {
   sendJson(200, payload);
 }
 
-void handleApiBackupFile() {
-  if (!requireApiAdmin()) {
-    return;
-  }
-  String path = backupFilePathForName(server.arg("name"));
-  if (path.length() == 0) {
-    sendJson(400, "{\"ok\":false,\"error\":\"Unknown backup file.\"}");
-    return;
-  }
-  if (!sdReady || !sdFileExists(path.c_str())) {
-    sendJson(404, "{\"ok\":false,\"error\":\"File is not available on SD.\"}");
-    return;
-  }
-  File file = openSdFile(path.c_str(), FILE_READ);
-  if (!file) {
-    sendJson(500, "{\"ok\":false,\"error\":\"Cannot open SD file.\"}");
-    return;
-  }
-  String filename = path.substring(1);
-  server.sendHeader("Content-Disposition", "attachment; filename=" + filename);
-  server.streamFile(file, "text/plain");
-  closeSdFile(file);
-}
-
 void handleApiRestoreSettings() {
   if (!requireApiAdmin()) {
     return;
@@ -1861,50 +1538,6 @@ void handleApiRestoreSettings() {
   prefs.putString("pass", wifiPassword);
   logEvent("RESTORE", "Settings restored from browser");
   sendJson(200, "{\"ok\":true}");
-}
-
-void handleApiRestoreFile() {
-  if (!requireApiAdmin()) {
-    return;
-  }
-  String path = backupFilePathForName(server.arg("name"));
-  if (path.length() == 0) {
-    sendJson(400, "{\"ok\":false,\"error\":\"Unknown restore file.\"}");
-    return;
-  }
-  if (!sdReady) {
-    sendJson(503, "{\"ok\":false,\"error\":\"SD card is not ready.\"}");
-    return;
-  }
-  removeSdFile(path.c_str());
-  File file = openSdFile(path.c_str(), FILE_WRITE);
-  if (!file) {
-    sendJson(500, "{\"ok\":false,\"error\":\"Cannot write SD file.\"}");
-    return;
-  }
-  file.print(server.arg("plain"));
-  closeSdFile(file);
-  logEvent("RESTORE", "Restored " + path + " from browser");
-  sendJson(200, "{\"ok\":true}");
-}
-
-void handleApiSdFile() {
-  if (!requireApiAdmin()) {
-    return;
-  }
-  String path = normalizeSdPath(server.arg("path"));
-  if (path.length() == 0 || !sdReady || !sdFileExists(path.c_str())) {
-    sendJson(404, "{\"ok\":false,\"error\":\"SD file not found.\"}");
-    return;
-  }
-  File file = openSdFile(path.c_str(), FILE_READ);
-  if (!file || file.isDirectory()) {
-    closeSdFile(file);
-    sendJson(400, "{\"ok\":false,\"error\":\"Path is not a readable file.\"}");
-    return;
-  }
-  server.streamFile(file, "text/plain");
-  closeSdFile(file);
 }
 
 void handleApiTimeSet() {
@@ -2043,25 +1676,8 @@ bool fetchAndCacheUsers() {
   if (!getDeviceJson("users", response, httpCode, error)) {
     return false;
   }
-
-  if (!sdReady) {
-    return true;
-  }
-
-  DynamicJsonDocument jsonDoc(16384);
-  JsonArray jsonUsers = jsonDoc.to<JsonArray>();
-
-  JsonArray users = response["users"].as<JsonArray>();
-  for (JsonObject user : users) {
-    JsonObject j = jsonUsers.createNestedObject();
-    j["fingerprintId"] = String((const char *)(user["fingerprintId"] | "0"));
-    j["smartCardId"] = String((const char *)(user["smartCardId"] | ""));
-    j["userId"] = String((int)user["id"]);
-    j["idNumber"] = String((const char *)(user["idNumber"] | ""));
-    j["fullName"] = String((const char *)(user["fullName"] | ""));
-  }
-
-  return writeUsersJsonFile(jsonDoc);
+  databaseReady = true;
+  return true;
 }
 
 bool registerCredentials(uint16_t fingerprintId, const String &rfidUid, String &error) {
@@ -2107,84 +1723,9 @@ bool registerCredentials(uint16_t fingerprintId, const String &rfidUid, String &
 }
 
 bool upsertCachedUser(const LocalUser &updated, String &error) {
-  Serial.println(F("[CACHE] upsertCachedUser() called"));
-  Serial.printf("[CACHE]   userId=%s  idNumber=%s  fullName=%s  fpId=%s  cardId=%s\n",
-                updated.userId.c_str(), updated.idNumber.c_str(),
-                updated.fullName.c_str(), updated.fingerprintId.c_str(),
-                updated.smartCardId.c_str());
-
-  if (!sdReady) {
-    error = "SD card is not ready.";
-    return false;
-  }
-
-  // Read all existing users from JSON into memory, then rewrite.
-  const int MAX_USERS = 150;
-  struct JsonUser {
-    String fingerprintId;
-    String smartCardId;
-    String userId;
-    String idNumber;
-    String fullName;
-  };
-  JsonUser users[MAX_USERS];
-  int userCount = 0;
-
-  DynamicJsonDocument doc(16384);
-  if (sdFileExists(USERS_JSON_FILE) && readUsersJsonFile(doc)) {
-    JsonArray arr = doc.as<JsonArray>();
-    for (JsonObject u : arr) {
-      if (userCount >= MAX_USERS) break;
-      users[userCount].fingerprintId = String((const char *)(u["fingerprintId"] | ""));
-      users[userCount].smartCardId = String((const char *)(u["smartCardId"] | ""));
-      users[userCount].userId = String((const char *)(u["userId"] | ""));
-      users[userCount].idNumber = String((const char *)(u["idNumber"] | ""));
-      users[userCount].fullName = String((const char *)(u["fullName"] | ""));
-      userCount++;
-      yield();
-    }
-    Serial.printf("[CACHE] Read %d user records from %s\n", userCount, USERS_JSON_FILE);
-  }
-
-  // Rewrite with updated entry
-  DynamicJsonDocument outDoc(16384);
-  JsonArray outArr = outDoc.to<JsonArray>();
-  bool wroteUpdated = false;
-
-  for (int i = 0; i < userCount; i++) {
-    if (users[i].userId == updated.userId && !wroteUpdated) {
-      JsonObject j = outArr.createNestedObject();
-      j["fingerprintId"] = updated.fingerprintId;
-      j["smartCardId"] = updated.smartCardId;
-      j["userId"] = updated.userId;
-      j["idNumber"] = updated.idNumber;
-      j["fullName"] = updated.fullName;
-      wroteUpdated = true;
-    } else {
-      JsonObject j = outArr.createNestedObject();
-      j["fingerprintId"] = users[i].fingerprintId;
-      j["smartCardId"] = users[i].smartCardId;
-      j["userId"] = users[i].userId;
-      j["idNumber"] = users[i].idNumber;
-      j["fullName"] = users[i].fullName;
-    }
-    yield();
-  }
-
-  if (!wroteUpdated) {
-    JsonObject j = outArr.createNestedObject();
-    j["fingerprintId"] = updated.fingerprintId;
-    j["smartCardId"] = updated.smartCardId;
-    j["userId"] = updated.userId;
-    j["idNumber"] = updated.idNumber;
-    j["fullName"] = updated.fullName;
-  }
-
-  if (!writeUsersJsonFile(outDoc)) {
-    error = "Cannot write SD card.";
-    return false;
-  }
-
+  // No SD cache — always succeed. Registration is stored via API.
+  (void)updated;
+  (void)error;
   return true;
 }
 
@@ -2298,27 +1839,7 @@ void runRegistrationWorkflow() {
     pendingRfidUid = uid;
 
     // ================================================================
-    // Save locally FIRST — always, regardless of API status.
-    // ================================================================
-    registrationPhase = "local";
-    String localSaveError;
-    bool localOk = false;
-    if (sdReady) {
-      localOk = saveCredentialsLocally(pendingFingerprintTemplateId, pendingRfidUid, localSaveError);
-    }
-    if (!localOk) {
-      finger.deleteModel(pendingFingerprintTemplateId);
-      registrationPhase = "error";
-      registrationError = localSaveError.length() ? localSaveError : "SD card save failed.";
-      drawScreen("Registration Failed", "Local Save Failed", registrationError, "Fingerprint rolled back", ILI9341_RED);
-      logEvent("REG", "Local save failed for " + pendingRegistrationName + ": " + registrationError);
-      signalError();
-      mode = MODE_HOME;
-      return;
-    }
-
-    // ================================================================
-    // Try online API. Keep local save even if API fails.
+    // Save via API (no SD local storage available).
     // ================================================================
     registrationPhase = "api";
     drawScreen("Registration", "Saving Online", pendingRegistrationName, "Please wait", ILI9341_BLUE);
@@ -2328,12 +1849,12 @@ void runRegistrationWorkflow() {
 
     if (registered) {
       registrationPhase = "complete";
-      drawScreen("Registration Complete", "ID: " + (pendingRegistrationIdNumber.length() ? pendingRegistrationIdNumber : String(pendingRegistrationUserId)), pendingRegistrationName, "Saved Online + Local", ILI9341_GREEN);
+      drawScreen("Registration Complete", "ID: " + (pendingRegistrationIdNumber.length() ? pendingRegistrationIdNumber : String(pendingRegistrationUserId)), pendingRegistrationName, "Saved Online", ILI9341_GREEN);
       logEvent("REG", "Registration complete for " + pendingRegistrationName + " FP " + String(pendingFingerprintTemplateId) + " RFID " + pendingRfidUid);
     } else {
       registrationPhase = "complete";
-      drawScreen("Registration Done", "ID: " + (pendingRegistrationIdNumber.length() ? pendingRegistrationIdNumber : String(pendingRegistrationUserId)), pendingRegistrationName, "Saved Locally - Will Sync", ILI9341_YELLOW);
-      logEvent("REG", "Registration saved locally for " + pendingRegistrationName + " FP " + String(pendingFingerprintTemplateId) + " RFID " + pendingRfidUid + " (online: " + apiError + ")");
+      drawScreen("Registration Failed", "ID: " + (pendingRegistrationIdNumber.length() ? pendingRegistrationIdNumber : String(pendingRegistrationUserId)), pendingRegistrationName, "API Error: " + apiError, ILI9341_RED);
+      logEvent("REG", "Registration API failed for " + pendingRegistrationName + " FP " + String(pendingFingerprintTemplateId) + " RFID " + pendingRfidUid + ": " + apiError);
     }
 
     signalSuccess();
@@ -2572,514 +2093,53 @@ int scanFingerprintForAttendance() {
 void completeAttendanceAttempt() {
   String occurredAt = isoNow();
   String localRecordId = makeLocalRecordId();
-  LocalUser cached = findCachedUserByCredentials(attendanceFingerprintId, attendanceRfidUid);
-  if (!cached.found) {
-    drawScreen("Access Denied", "RFID mismatch", "No Local Match", "Access Denied", ILI9341_RED);
-    logEvent("ATTENDANCE", "Denied local mismatch FP " + attendanceFingerprintId + " RFID " + attendanceRfidUid);
-    signalUnauthorized();
+
+  AttendanceResult result = postAttendance(attendanceFingerprintId, attendanceRfidUid, occurredAt, localRecordId);
+  if (!result.ok) {
+    drawScreen("Attendance Failed", String("ID: ") + result.idNumber, result.fullName, result.error.length() ? result.error : "API error", ILI9341_RED);
+    logEvent("ATTENDANCE", "Failed FP " + attendanceFingerprintId + " RFID " + attendanceRfidUid + ": " + result.error);
+    signalError();
     delay(2500);
     return;
   }
 
-  DateTime now = currentDateTime();
-  String date = String(now.year()) + "-" + (now.month() < 10 ? "0" : "") + String(now.month()) + "-" + (now.day() < 10 ? "0" : "") + String(now.day());
-  char timeBuffer[12];
-  snprintf(timeBuffer, sizeof(timeBuffer), "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
-  String localId = cached.idNumber.length() ? cached.idNumber : cached.userId;
-  String status = localNextStatus(date, localId);
-  if (status == "OUT") {
-    int elapsedMinutes = minutesSinceLastIn(date, localId, now);
-    if (elapsedMinutes >= 0 && elapsedMinutes <= (int) outDelayMinutes) {
-      int waitMinutes = outDelayMinutes - elapsedMinutes;
-      drawScreen("Attendance Blocked", "OUT Not Allowed", "Wait " + String(waitMinutes) + " min", cached.fullName, ILI9341_RED);
-      logEvent("ATTENDANCE", "Blocked early OUT for " + localId + " after " + String(elapsedMinutes) + " minutes");
-      signalError();
-      delay(2500);
-      return;
-    }
-  }
-
-  appendAttendanceDat(date, String(timeBuffer), localId, cached.fullName, status);
-  AttendanceResult result = postAttendance(attendanceFingerprintId, attendanceRfidUid, occurredAt, localRecordId);
-  if (!result.ok) {
-    logEvent("ATTENDANCE", "Saved offline " + status + " for " + localId + " " + cached.fullName);
-  } else {
-    logEvent("ATTENDANCE", "Uploaded " + status + " for " + localId + " " + cached.fullName);
-  }
-
-  drawScreen(result.ok ? "Attendance Success" : "Saved Local", String("ID: ") + localId, cached.fullName, String("Status: ") + status, result.ok ? ILI9341_GREEN : ILI9341_YELLOW);
+  String status = result.status.length() ? result.status : "IN";
+  logEvent("ATTENDANCE", status + " for " + result.idNumber + " " + result.fullName);
+  drawScreen("Attendance Success", String("ID: ") + result.idNumber, result.fullName, String("Status: ") + status, ILI9341_GREEN);
   signalSuccess();
   delay(2500);
 }
 
-void ensureSdFiles() {
-  if (!sdReady) {
-    Serial.println(F("[SD] no SD"));
-    return;
-  }
-
-  // Create /fingerprint/ directory if it doesn't exist
-  beginSdAccess();
-  bool fpDirExists = SD.exists("/fingerprint");
-  endSdAccess();
-  if (!fpDirExists) {
-    beginSdAccess();
-    bool dirOk = SD.mkdir("/fingerprint");
-    endSdAccess();
-    if (dirOk) {
-      Serial.println(F("[SD] /fingerprint/ OK"));
-    } else {
-      Serial.println(F("[SD] mkdir /fingerprint FAIL"));
-    }
-  }
-
-  // Ensure users.dat exists
-  if (!sdFileExists(USER_CACHE_FILE)) {
-    File f = openSdFile(USER_CACHE_FILE, FILE_WRITE);
-    if (f) closeSdFile(f);
-  }
-
-  // Ensure attendance.dat exists
-  if (!sdFileExists(ATTENDANCE_FILE)) {
-    File f = openSdFile(ATTENDANCE_FILE, FILE_WRITE);
-    if (f) closeSdFile(f);
-  }
-
-  // Ensure users.json exists
-  if (!sdFileExists(USERS_JSON_FILE)) {
-    File f = openSdFile(USERS_JSON_FILE, FILE_WRITE);
-    if (f) { f.print("[]"); closeSdFile(f); }
-  }
-
-  // Ensure attendance.log exists
-  if (!sdFileExists(ATTENDANCE_LOG_FILE)) {
-    File f = openSdFile(ATTENDANCE_LOG_FILE, FILE_WRITE);
-    if (f) closeSdFile(f);
-  }
-
-  // Ensure users.csv exists
-  if (!sdFileExists(USERS_CSV_FILE)) {
-    File f = openSdFile(USERS_CSV_FILE, FILE_WRITE);
-    if (f) closeSdFile(f);
-  }
-}
-
-// (appendLine removed — direct binary writes used instead)
+// SD removed
 
 void logEvent(const String &category, const String &message) {
   Serial.printf("[LOG] %s | %s\n", category.c_str(), message.c_str());
 }
 
-void appendAttendanceDat(const String &date, const String &time, const String &id, const String &name, const String &status) {
-  (void)name;
-  if (!sdReady) {
-    return;
-  }
-  // Format: date,IDnumber,IN/OUT,time — one record per line
-  File file = openSdFile(ATTENDANCE_LOG_FILE, FILE_APPEND);
-  if (!file) {
-    Serial.printf("[SD ERROR] Cannot open %s for append\n", ATTENDANCE_LOG_FILE);
-    return;
-  }
-  file.print(date);
-  file.print(",");
-  file.print(id);
-  file.print(",");
-  file.print(status);
-  file.print(",");
-  file.println(time);
-  closeSdFile(file);
-}
-
-// ---- Append-only CSV user storage (replaces users.json for local saves) ----
-// Format: fingerprintId,smartCardId,userId,idNumber,fullName — one record per line
-
-bool appendUserCsv(const String &fingerprintId, const String &smartCardId, const String &userId, const String &idNumber, const String &fullName) {
-  if (!sdReady) { Serial.println(F("[CSV] no SD")); return false; }
-
-  for (int retry = 0; retry < 3; retry++) {
-    File file = openSdFile(USERS_CSV_FILE, FILE_APPEND);
-    if (!file) {
-      if (retry < 2) { delay(50); yield(); }
-      continue;
-    }
-
-    // Write 5 comma-separated fields, escaping special chars on the fly.
-    const String *fields[] = { &fingerprintId, &smartCardId, &userId, &idNumber, &fullName };
-    bool writeOk = true;
-    for (int i = 0; i < 5; i++) {
-      const String &s = *fields[i];
-      for (unsigned int j = 0; j < s.length(); j++) {
-        char c = s.charAt(j);
-        size_t cb = 0;
-        if (c == '\\')      cb = file.print("\\\\");
-        else if (c == ',')  cb = file.print("\\,");
-        else if (c == '\n') cb = file.print("\\n");
-        else if (c == '\r') cb = file.print("\\r");
-        else                cb = file.write(c);
-        if (cb == 0) { writeOk = false; break; }
-      }
-      if (!writeOk) break;
-      if (i < 4) { if (file.write(',') == 0) { writeOk = false; break; } }
-    }
-    if (writeOk && file.println() == 0) writeOk = false;
-
-    if (file) file.close();
-    endSdAccess();
-
-    if (writeOk) return true;
-
-    if (retry < 2) { delay(50); yield(); }
-  }
-
-  return false;
-}
-
-// Scan users.csv from start to end — last matching line wins (upsert semantics).
-// Key fields (fingerprintId, rfidUid) are compared raw — they are numeric/hex and never
-// contain special chars that the CSV escaping would transform.
-LocalUser findInUserCsv(const String &fingerprintId, const String &rfidUid) {
-  LocalUser result;
-  if (!sdReady || !sdFileExists(USERS_CSV_FILE)) return result;
-
-  File file = openSdFile(USERS_CSV_FILE, FILE_READ);
-  if (!file) return result;
-
-  while (file.available()) {
-    String line = file.readStringUntil('\n');
-    line.trim();
-    if (line.length() == 0) continue;
-
-    // Key fields are safe for raw comparison (no special chars possible)
-    if (fieldAt(line, ',', 0) == fingerprintId && fieldAt(line, ',', 1) == rfidUid) {
-      result.found = true;
-      result.fingerprintId = fingerprintId;
-      result.smartCardId = rfidUid;
-      // Unescape only user-facing display fields
-      result.userId = fieldAt(line, ',', 2);
-      result.idNumber = fieldAt(line, ',', 3);
-      result.fullName = fieldAt(line, ',', 4);
-      result.userId.replace("\\\\", "\\");
-      result.userId.replace("\\r", "\r");
-      result.userId.replace("\\n", "\n");
-      result.userId.replace("\\,", ",");
-      result.idNumber.replace("\\\\", "\\");
-      result.idNumber.replace("\\r", "\r");
-      result.idNumber.replace("\\n", "\n");
-      result.idNumber.replace("\\,", ",");
-      result.fullName.replace("\\\\", "\\");
-      result.fullName.replace("\\r", "\r");
-      result.fullName.replace("\\n", "\n");
-      result.fullName.replace("\\,", ",");
-    }
-    serviceWeb();
-  }
-  closeSdFile(file);
-  return result;
-}
-
-// (syncOfflineRecords removed — queue is no longer used)
-
-LocalUser findCachedUserByCredentials(const String &fingerprintId, const String &rfidUid) {
-  // Check CSV first (append-only, always has the latest local registrations)
-  LocalUser result = findInUserCsv(fingerprintId, rfidUid);
-  if (result.found) {
-    Serial.printf("[CACHE] CSV match: %s %s\n",
-                  result.idNumber.c_str(), result.fullName.c_str());
-    return result;
-  }
-
-  // Fallback to users.json (legacy / API-fetched users)
-  if (!sdReady || !sdFileExists(USERS_JSON_FILE)) {
-    return result;
-  }
-
-  DynamicJsonDocument doc(16384);
-  if (!readUsersJsonFile(doc)) {
-    return result;
-  }
-
-  JsonArray users = doc.as<JsonArray>();
-  for (JsonObject user : users) {
-    String fp = String((const char *)(user["fingerprintId"] | ""));
-    String rfid = String((const char *)(user["smartCardId"] | ""));
-    if (fp == fingerprintId && rfid == rfidUid) {
-      result.found = true;
-      result.userId = String((const char *)(user["userId"] | ""));
-      result.idNumber = String((const char *)(user["idNumber"] | ""));
-      result.fullName = String((const char *)(user["fullName"] | ""));
-      result.fingerprintId = fp;
-      result.smartCardId = rfid;
-      break;
-    }
-  }
-  return result;
-}
-
-String localNextStatus(const String &date, const String &id) {
-  if (!sdReady || !sdFileExists(ATTENDANCE_LOG_FILE)) {
-    return "IN";
-  }
-
-  File file = openSdFile(ATTENDANCE_LOG_FILE, FILE_READ);
-  int count = 0;
-  while (file.available()) {
-    String line = file.readStringUntil('\n');
-    line.trim();
-    if (line.length() == 0) continue;
-    // Format: date,IDnumber,IN/OUT,time
-    String lineDate = fieldAt(line, ',', 0);
-    String lineId = fieldAt(line, ',', 1);
-    if (lineDate == date && lineId == id) {
-      count++;
-    }
-  }
-  closeSdFile(file);
-
-  return count % 2 == 0 ? "IN" : "OUT";
-}
-
-int minutesSinceLastIn(const String &date, const String &id, const DateTime &now) {
-  if (!sdReady || !sdFileExists(ATTENDANCE_LOG_FILE)) {
-    return -1;
-  }
-
-  File file = openSdFile(ATTENDANCE_LOG_FILE, FILE_READ);
-  int lastInMinute = -1;
-  while (file.available()) {
-    String line = file.readStringUntil('\n');
-    line.trim();
-    if (line.length() == 0) continue;
-    String lineDate = fieldAt(line, ',', 0);
-    String lineId = fieldAt(line, ',', 1);
-    String lineStatus = fieldAt(line, ',', 2);
-    String lineTime = fieldAt(line, ',', 3);
-    if (lineDate == date && lineId == id && lineStatus == "IN") {
-      int h = 0, m = 0, s = 0;
-      sscanf(lineTime.c_str(), "%d:%d:%d", &h, &m, &s);
-      lastInMinute = h * 60 + m;
-    }
-    serviceWeb();
-  }
-  closeSdFile(file);
-
-  if (lastInMinute < 0) {
-    return -1;
-  }
-  int currentMinute = now.hour() * 60 + now.minute();
-  int elapsed = currentMinute - lastInMinute;
-  if (elapsed < 0) {
-    elapsed += 24 * 60;
-  }
-  return elapsed;
-}
-
-uint16_t pendingQueueCount() {
-  return 0;
-}
-
-String fieldAt(const String &line, char separator, int index) {
-  int current = 0;
-  int start = 0;
-  for (int i = 0; i <= line.length(); i++) {
-    if (i == line.length() || line.charAt(i) == separator) {
-      if (current == index) {
-        return line.substring(start, i);
-      }
-      current++;
-      start = i + 1;
-    }
-  }
-  return "";
-}
-
-// ---- JSON users database helpers ----
-bool readUsersJsonFile(DynamicJsonDocument &doc) {
-  if (!sdReady || !sdFileExists(USERS_JSON_FILE)) {
-    return false;
-  }
-  File file = openSdFile(USERS_JSON_FILE, FILE_READ);
-  if (!file) {
-    return false;
-  }
-  DeserializationError err = deserializeJson(doc, file);
-  closeSdFile(file);
-  return !err;
-}
-
-bool writeUsersJsonFile(DynamicJsonDocument &doc) {
-  if (!sdReady) { Serial.println(F("[JSON] no SD")); return false; }
-
-  for (int retry = 0; retry < 3; retry++) {
-    File file = openSdFile(USERS_JSON_FILE, FILE_WRITE);
-    if (!file) {
-      if (retry < 2) { delay(50); yield(); }
-      continue;
-    }
-
-    size_t written = serializeJson(doc, file);
-    if (file) file.close();
-    endSdAccess();
-
-    if (written > 0) return true;
-
-    if (retry < 2) { delay(50); yield(); }
-  }
-
-  return false;
-}
-
 String makeLocalRecordId() {
-  DateTime now = currentDateTime();
-  return deviceId + "-" + String(now.unixtime()) + "-" + String((uint32_t) millis());
+  static uint32_t counter = 0;
+  counter++;
+  return String((uint32_t) esp_random(), HEX) + String(millis(), HEX) + String(counter);
 }
 
 void maintainWifi() {
-  bool wasReady = wifiReady;
-  wl_status_t status = WiFi.status();
-  wifiReady = (status == WL_CONNECTED);
-
-  // Update WiFi state machine based on actual connection status
+  if (wifiSsid.length() == 0) return;
+  if (wifiReady && WiFi.status() == WL_CONNECTED) return;
+  const uint32_t nowMs = millis();
+  if (nowMs - lastWifiReconnectAt < 30000) return;
+  lastWifiReconnectAt = nowMs;
+  wifiState = WIFI_STATE_RECONNECTING;
+  wifiReady = connectToWifi(wifiSsid, wifiPassword, 10000);
   if (wifiReady) {
-    wifiState = WIFI_STATE_CONNECTED;
-  } else if (status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL) {
-    wifiState = WIFI_STATE_CONNECTION_FAILED;
-  } else if (status == WL_CONNECTION_LOST) {
-    wifiState = WIFI_STATE_RECONNECTING;
-  } else if (status == WL_IDLE_STATUS) {
-    wifiState = (wifiSsid.length() > 0) ? WIFI_STATE_CONNECTING : WIFI_STATE_DISCONNECTED;
-  } else { // WL_DISCONNECTED
-    if (wifiSsid.length() > 0 && millis() - lastWifiReconnectAt < 30000) {
-      wifiState = WIFI_STATE_RECONNECTING;
-    } else {
-      wifiState = WIFI_STATE_DISCONNECTED;
-    }
-  }
-
-  // Handle transition events
-  if (wifiReady && !wasReady) {
-    logEvent("WIFI", "Station connection restored at " + WiFi.localIP().toString());
-    syncClock();
+    printNetworkInfo("WiFi reconnected");
     checkApiStatus();
+    fetchAndCacheUsers();
+    if (mode == MODE_HOME) drawHomeScreen();
+  } else {
+    wifiState = WIFI_STATE_DISCONNECTED;
   }
-  if (!wifiReady && wasReady) {
-    databaseReady = false;
-    logEvent("WIFI", "Station connection lost");
-  }
-  if (wifiReady || wifiSsid.length() == 0) {
-    return;
-  }
-
-  if (millis() - lastWifiReconnectAt < 15000) {
-    return;
-  }
-
-  lastWifiReconnectAt = millis();
-  WiFi.disconnect();
-  WiFi.begin(wifiSsid.c_str(), wifiPassword.c_str());
 }
 
-String normalizeSdPath(String path) {
-  path.trim();
-  path.replace("\\", "/");
-  if (path.length() == 0) {
-    path = "/";
-  }
-  if (!path.startsWith("/")) {
-    path = "/" + path;
-  }
-  while (path.indexOf("//") >= 0) {
-    path.replace("//", "/");
-  }
-  if (path.indexOf("..") >= 0) {
-    return "";
-  }
-  if (path.length() > 1 && path.endsWith("/")) {
-    path.remove(path.length() - 1);
-  }
-  return path;
-}
-
-String parentSdPath(const String &path) {
-  if (path == "/") {
-    return "/";
-  }
-  int slash = path.lastIndexOf('/');
-  if (slash <= 0) {
-    return "/";
-  }
-  return path.substring(0, slash);
-}
-
-String sdChildPath(const String &parentPath, const String &childName) {
-  if (parentPath == "/") {
-    return "/" + childName;
-  }
-  return parentPath + "/" + childName;
-}
-
-String urlEncode(const String &value) {
-  static const char hex[] = "0123456789ABCDEF";
-  String encoded;
-  encoded.reserve(value.length() * 3);
-  for (size_t i = 0; i < value.length(); i++) {
-    char c = value.charAt(i);
-    bool safe = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~' || c == '/';
-    if (safe) {
-      encoded += c;
-    } else {
-      encoded += '%';
-      encoded += hex[((uint8_t) c >> 4) & 0x0F];
-      encoded += hex[(uint8_t) c & 0x0F];
-    }
-  }
-  return encoded;
-}
-
-String fileSizeLabel(uint32_t size) {
-  if (size < 1024) {
-    return String(size) + " B";
-  }
-  if (size < 1024UL * 1024UL) {
-    return String(size / 1024.0, 1) + " KB";
-  }
-  return String(size / 1048576.0, 1) + " MB";
-}
-
-String backupFilePathForName(const String &name) {
-  if (name == "attendance") {
-    return ATTENDANCE_LOG_FILE;
-  }
-  if (name == "users") {
-    return USERS_JSON_FILE;
-  }
-  return "";
-}
-
-// ---- Local-only credential save (no API) ----
-bool saveCredentialsLocally(uint16_t fingerprintId, const String &rfidUid, String &error) {
-  if (!sdReady) {
-    error = "SD card is not ready.";
-    return false;
-  }
-
-  bool csvOk = appendUserCsv(
-    String(fingerprintId),
-    rfidUid,
-    String(pendingRegistrationUserId),
-    pendingRegistrationIdNumber,
-    pendingRegistrationName
-  );
-
-  if (!csvOk) {
-    error = "Cannot write SD card.";
-    return false;
-  }
-
-  return true;
-}
-
-// ---- Clear all cached data on SD and fingerprint sensor ----
 void handleApiCacheClear() {
   if (!requireApiAdmin()) {
     return;
@@ -3103,43 +2163,8 @@ void handleApiCacheClear() {
     }
   }
 
-  // 2. SD card: remove users.json, users.csv, and attendance.log
-  if (sdReady) {
-    if (sdFileExists(USERS_JSON_FILE)) {
-      if (removeSdFile(USERS_JSON_FILE)) {
-        cleared++;
-        logMsg += "users.json ";
-      } else {
-        errors++;
-      }
-    }
-    if (sdFileExists(USERS_CSV_FILE)) {
-      if (removeSdFile(USERS_CSV_FILE)) {
-        cleared++;
-        logMsg += "users.csv ";
-      } else {
-        errors++;
-      }
-    }
-    if (sdFileExists(ATTENDANCE_LOG_FILE)) {
-      if (removeSdFile(ATTENDANCE_LOG_FILE)) {
-        cleared++;
-        logMsg += "attendance.log ";
-      } else {
-        errors++;
-      }
-    }
-    // Recreate empty files
-    File uf = openSdFile(USERS_JSON_FILE, FILE_WRITE);
-    if (uf) { uf.print("[]"); closeSdFile(uf); }
-    File cf = openSdFile(USERS_CSV_FILE, FILE_WRITE);
-    if (cf) closeSdFile(cf);
-    File lf = openSdFile(ATTENDANCE_LOG_FILE, FILE_WRITE);
-    if (lf) closeSdFile(lf);
-  }
-
-  String result = (errors == 0) ? "Cache cleared" : "Cleared with " + String(errors) + " errors";
-  logMsg.trim();
+  String result = "Fingerprint database cleared";
+  (void)errors;
   logEvent("CACHE", "Cache clear: " + logMsg + "(" + result + ")");
 
   drawScreen("Cache Cleared", "Fingerprint + SD", logMsg, result, errors == 0 ? ILI9341_GREEN : ILI9341_YELLOW);

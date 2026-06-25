@@ -22,17 +22,6 @@ static const char TIMEZONE_POSIX[] = "PST-8";
 static const char NTP_SERVER_1[] = "pool.ntp.org";
 static const char NTP_SERVER_2[] = "time.google.com";
 
-static const char ATTENDANCE_FILE[] = "/fingerprint/attendance.dat";
-static const char UNSENT_FILE[] = "/unsent.psv";        // no longer used (legacy)
-static const char UNSENT_TEMP_FILE[] = "/unsent.tmp";   // no longer used (legacy)
-static const char USER_CACHE_FILE[] = "/fingerprint/users.dat";
-static const char USER_CACHE_TEMP_FILE[] = "/users.tmp"; // no longer used (legacy)
-static const char DEVICE_LOG_FILE[] = "/device.log";    // no longer used (legacy)
-
-static const char USERS_JSON_FILE[] = "/fingerprint/users.json";
-static const char USERS_CSV_FILE[] = "/fingerprint/users.csv";
-static const char ATTENDANCE_LOG_FILE[] = "/fingerprint/attendance.log";
-
 static const char SESSION_COOKIE_NAME[] = "fk_session";
 static const uint32_t SESSION_TIMEOUT_MS = 21600000UL; // 6 hours
 
