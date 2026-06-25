@@ -12,6 +12,7 @@
 #include <Adafruit_PN532.h>
 #include <Adafruit_Fingerprint.h>
 #include <RTClib.h>
+#include <LittleFS.h>
 
 #include "config.h"
 #include "pins.h"
@@ -99,6 +100,7 @@ bool rtcReady = false;
 bool nfcReady = false;
 bool fingerprintReady = false;
 bool tftReady = false;
+bool lfsReady = false;
 
 int pendingRegistrationUserId = 0;
 String pendingRegistrationIdNumber;
@@ -122,6 +124,7 @@ String lastHomeDayText;
 uint32_t lastHomeUpdateAt = 0;
 uint32_t lastApiCheckAt = 0;
 uint32_t lastWifiReconnectAt = 0;
+uint32_t lastSyncUnsentAt = 0;
 WifiState wifiState = WIFI_STATE_DISCONNECTED;
 
 UiState uiState;
@@ -221,11 +224,28 @@ void handleApiSettingsApi();
 void handleApiTimeSet();
 void saveDefaultHost();
 
+// LittleFS helpers
+bool isFingerprintInLFS(uint16_t fingerprintId);
+bool isRfidUuidInLFS(const String &uuid);
+LocalUser findStudentInLFS(const String &fingerprintId, const String &uuid);
+bool addAttendanceToLFS(const String &idNumber, const String &name, const String &timestamp, const String &type);
+bool cacheUsersToLFS(DynamicJsonDocument &doc);
+bool loadCachedUsersFromLFS(DynamicJsonDocument &doc);
+bool upsertStudentInLFS(const String &idNumber, const String &fullName, const String &fingerprintId, const String &uuid, String &error);
+void syncUnsentAttendance();
+
 void setup() {
   Serial.begin(115200);
   delay(300);
 
   initPins();
+  lfsReady = LittleFS.begin();
+  if (!lfsReady) {
+    Serial.println(F("[LFS] Mount failed — formatting..."));
+    LittleFS.format();
+    lfsReady = LittleFS.begin();
+  }
+  Serial.printf("[LFS] %s\n", lfsReady ? "OK" : "FAILED");
   loadSettings();
   initDisplay();
   initBusesAndDevices();
@@ -270,7 +290,11 @@ void loop() {
     lastApiCheckAt = nowMs;
   }
 
-  // (offline sync removed — attendance is stored locally in attendance.dat)
+  // Unsent-attendance sync (throttled to once per sync interval)
+  if (lfsReady && wifiReady && nowMs - lastSyncUnsentAt > OFFLINE_SYNC_INTERVAL_MS) {
+    syncUnsentAttendance();
+    lastSyncUnsentAt = nowMs;
+  }
 
   if (mode == MODE_REGISTER_FINGERPRINT || mode == MODE_REGISTER_RFID) {
     runRegistrationWorkflow();
@@ -1046,16 +1070,17 @@ void handleApiStudents() {
   if (!requireApiAdmin()) {
     return;
   }
-  if (!wifiReady || !checkApiStatus()) {
-    sendJson(503, "{\"ok\":false,\"error\":\"Registration unavailable. Please connect to WiFi.\"}");
-    return;
-  }
 
+  // Try live API first; fall back to LittleFS cache for offline registration
   DynamicJsonDocument response(24576);
   int httpCode = 0;
   String error;
-  if (!getDeviceJson("users", response, httpCode, error)) {
-    sendJson(503, String("{\"ok\":false,\"error\":\"") + jsonEscape(error.length() ? error : "Registration unavailable. Please connect to WiFi.") + "\"}");
+  bool apiOk = wifiReady && getDeviceJson("users", response, httpCode, error);
+  if (apiOk) {
+    // Refresh the LFS cache for future offline use
+    cacheUsersToLFS(response);
+  } else if (!loadCachedUsersFromLFS(response)) {
+    sendJson(503, "{\"ok\":false,\"error\":\"No student data available. \"}");
     return;
   }
 
@@ -1095,10 +1120,6 @@ void handleApiRegisterStart() {
     sendJson(409, "{\"ok\":false,\"error\":\"Registration is already running.\"}");
     return;
   }
-  if (!wifiReady || !checkApiStatus()) {
-    sendJson(503, "{\"ok\":false,\"error\":\"Registration unavailable. Please connect to WiFi.\"}");
-    return;
-  }
 
   DynamicJsonDocument request(512);
   DeserializationError parseError = deserializeJson(request, server.arg("plain"));
@@ -1112,32 +1133,39 @@ void handleApiRegisterStart() {
     return;
   }
 
+  // Try live API first; fall back to LittleFS cache for offline registration
   DynamicJsonDocument response(24576);
   int httpCode = 0;
   String error;
-  if (!getDeviceJson("users", response, httpCode, error)) {
-    sendJson(503, String("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}");
-    return;
+  bool apiOk = wifiReady && getDeviceJson("users", response, httpCode, error);
+  if (!apiOk) {
+    response.clear();
+    loadCachedUsersFromLFS(response);
+  } else {
+    // Refresh LFS cache for future offline use
+    cacheUsersToLFS(response);
   }
 
   bool found = false;
-  for (JsonObject user : response["users"].as<JsonArray>()) {
-    if ((int) user["id"] != userId) {
-      continue;
+  JsonArray users = response["users"].as<JsonArray>();
+  if (!users) { users = response.as<JsonArray>(); } // handle bare-array cache
+  for (JsonObject user : users) {
+    // Match by userId for API data, or by idNumber for LFS cache
+    if ((int) user["id"] == userId) {
+      String role = String((const char *) (user["role"] | "student"));
+      String status = String((const char *) (user["status"] | "active"));
+      role.toLowerCase();
+      status.toLowerCase();
+      if (role != "student" || status != "active") {
+        sendJson(409, "{\"ok\":false,\"error\":\"Selected student is not active.\"}");
+        return;
+      }
+      pendingRegistrationUserId = userId;
+      pendingRegistrationIdNumber = String((const char *) (user["idNumber"] | ""));
+      pendingRegistrationName = String((const char *) (user["fullName"] | ""));
+      found = true;
+      break;
     }
-    String role = String((const char *) (user["role"] | ""));
-    String status = String((const char *) (user["status"] | ""));
-    role.toLowerCase();
-    status.toLowerCase();
-    if (role != "student" || status != "active") {
-      sendJson(409, "{\"ok\":false,\"error\":\"Selected student is not active.\"}");
-      return;
-    }
-    pendingRegistrationUserId = userId;
-    pendingRegistrationIdNumber = String((const char *) (user["idNumber"] | ""));
-    pendingRegistrationName = String((const char *) (user["fullName"] | ""));
-    found = true;
-    break;
   }
   if (!found) {
     sendJson(404, "{\"ok\":false,\"error\":\"Selected student was not found.\"}");
@@ -1189,14 +1217,73 @@ void handleApiAttendance() {
   if (!requireApiAdmin()) {
     return;
   }
-  sendJson(200, "{\"ok\":true,\"records\":[]}");
+  DynamicJsonDocument doc(16384);
+  String payload;
+  payload.reserve(12000);
+  payload += F("{\"ok\":true,\"records\":[");
+  if (lfsReady && LittleFS.exists("/attendance.json")) {
+    File file = LittleFS.open("/attendance.json", "r");
+    if (file) {
+      DeserializationError err = deserializeJson(doc, file);
+      file.close();
+      if (!err) {
+        bool first = true;
+        for (JsonObject rec : doc.as<JsonArray>()) {
+          if (!first) payload += ",";
+          first = false;
+          payload += F("{\"id\":\"");
+          payload += jsonEscape(String((const char *)(rec["id_number"] | "")));
+          payload += F("\",\"name\":\"");
+          payload += jsonEscape(String((const char *)(rec["name"] | "")));
+          payload += F("\",\"date\":\"");
+          String ts = String((const char *)(rec["timestamp"] | ""));
+          payload += jsonEscape(ts.substring(0, 10));
+          payload += F("\",\"time\":\"");
+          payload += jsonEscape(ts.length() > 11 ? ts.substring(11, 19) : "");
+          payload += F("\",\"status\":\"");
+          payload += jsonEscape(String((const char *)(rec["type"] | "IN")));
+          payload += F("\"}");
+        }
+      }
+    }
+  }
+  payload += F("]}");
+  sendJson(200, payload);
 }
 
 void handleApiUsers() {
   if (!requireApiAdmin()) {
     return;
   }
-  sendJson(200, "{\"ok\":true,\"users\":[]}");
+  DynamicJsonDocument doc(8192);
+  String payload;
+  payload.reserve(8000);
+  payload += F("{\"ok\":true,\"users\":[");
+  if (lfsReady && LittleFS.exists("/students.json")) {
+    File file = LittleFS.open("/students.json", "r");
+    if (file) {
+      DeserializationError err = deserializeJson(doc, file);
+      file.close();
+      if (!err) {
+        bool first = true;
+        for (JsonObject s : doc.as<JsonArray>()) {
+          if (!first) payload += ",";
+          first = false;
+          payload += F("{\"idNumber\":\"");
+          payload += jsonEscape(String((const char *)(s["id_number"] | "")));
+          payload += F("\",\"fullName\":\"");
+          payload += jsonEscape(String((const char *)(s["name"] | "")));
+          payload += F("\",\"fingerprintId\":\"");
+          payload += jsonEscape(String((const char *)(s["fingerprint_id"] | "")));
+          payload += F("\",\"smartCardId\":\"");
+          payload += jsonEscape(String((const char *)(s["uuid"] | "")));
+          payload += F("\"}");
+        }
+      }
+    }
+  }
+  payload += F("]}");
+  sendJson(200, payload);
 }
 
 void handleApiWifiScan() {
@@ -1471,7 +1558,25 @@ void handleApiLogs() {
   if (!requireApiAdmin()) {
     return;
   }
-  sendJson(200, "{\"ok\":true,\"events\":\"\",\"unsent\":\"\"}");
+  int unsentCount = 0;
+  DynamicJsonDocument doc(16384);
+  if (lfsReady && LittleFS.exists("/attendance.json")) {
+    File file = LittleFS.open("/attendance.json", "r");
+    if (file) {
+      if (deserializeJson(doc, file) == DeserializationError::Ok) {
+        for (JsonObject rec : doc.as<JsonArray>()) {
+          if (!(rec["synced"] | true)) unsentCount++;
+        }
+      }
+      file.close();
+    }
+  }
+  String payload;
+  payload.reserve(256);
+  payload += F("{\"ok\":true,\"events\":\"\",\"unsent\":\"");
+  payload += String(unsentCount);
+  payload += F(" pending\"}");
+  sendJson(200, payload);
 }
 
 void handleApiBackupSettings() {
@@ -1667,6 +1772,8 @@ bool fetchAndCacheUsers() {
     return false;
   }
   databaseReady = true;
+  // Cache the full user list to LittleFS for offline registration
+  cacheUsersToLFS(response);
   return true;
 }
 
@@ -1701,22 +1808,40 @@ bool registerCredentials(uint16_t fingerprintId, const String &rfidUid, String &
   // request + response freed here
 
   if (ok) {
+    // API registration succeeded — also cache to LittleFS
     String localError;
     if (!upsertCachedUser(cached, localError)) {
       error = localError;
       return false;
     }
     fetchAndCacheUsers();
+    return true;
   }
 
-  return ok;
+  // ===== API unavailable — save to LittleFS only (offline registration) =====
+  String lfsError;
+  if (upsertStudentInLFS(pendingRegistrationIdNumber, pendingRegistrationName,
+                          String(fingerprintId), rfidUid, lfsError)) {
+    logEvent("REG", "Offline registration saved to LittleFS for " + pendingRegistrationName);
+    // Mark that we succeeded without the API so the caller knows it worked
+    ok = true;
+    error = "";
+    return true;
+  }
+  // Both API and LittleFS failed — report the original API error
+  return false;
 }
 
 bool upsertCachedUser(const LocalUser &updated, String &error) {
-  // No SD cache — always succeed. Registration is stored via API.
-  (void)updated;
-  (void)error;
-  return true;
+  if (!updated.found) {
+    error = "No user data provided.";
+    return false;
+  }
+  // Save the registered student to LittleFS in the local schema:
+  // { id_number, name, fingerprint_id, uuid }
+  return upsertStudentInLFS(updated.idNumber, updated.fullName,
+                            updated.fingerprintId, updated.smartCardId,
+                            error);
 }
 
 AttendanceResult postAttendance(const String &fingerprintId, const String &rfidUid, const String &occurredAt, const String &localRecordId) {
@@ -1752,6 +1877,217 @@ AttendanceResult postAttendance(const String &fingerprintId, const String &rfidU
   result.date = String((const char *) (response["date"] | ""));
   result.time = String((const char *) (response["time"] | ""));
   return result;
+}
+
+// ==============================================================
+// LittleFS helpers — offline-first student cache, attendance,
+// fingerprint / RFID duplicate checks, and unsent sync
+// ==============================================================
+
+bool isFingerprintInLFS(uint16_t fingerprintId) {
+  if (!lfsReady) return false;
+  if (!LittleFS.exists("/students.json")) return false;
+  File file = LittleFS.open("/students.json", "r");
+  if (!file) return false;
+  DynamicJsonDocument doc(8192);
+  DeserializationError err = deserializeJson(doc, file);
+  file.close();
+  if (err) return false;
+  String fpStr = String(fingerprintId);
+  for (JsonObject s : doc.as<JsonArray>()) {
+    if (String((const char *)(s["fingerprint_id"] | "")) == fpStr) return true;
+  }
+  return false;
+}
+
+bool isRfidUuidInLFS(const String &uuid) {
+  if (!lfsReady) return false;
+  if (!LittleFS.exists("/students.json")) return false;
+  File file = LittleFS.open("/students.json", "r");
+  if (!file) return false;
+  DynamicJsonDocument doc(8192);
+  DeserializationError err = deserializeJson(doc, file);
+  file.close();
+  if (err) return false;
+  String needle = uuid;
+  needle.toUpperCase();
+  for (JsonObject s : doc.as<JsonArray>()) {
+    String stored = String((const char *)(s["uuid"] | ""));
+    stored.toUpperCase();
+    if (stored == needle) return true;
+  }
+  return false;
+}
+
+LocalUser findStudentInLFS(const String &fingerprintId, const String &uuid) {
+  LocalUser user;
+  if (!lfsReady) return user;
+  if (!LittleFS.exists("/students.json")) return user;
+  File file = LittleFS.open("/students.json", "r");
+  if (!file) return user;
+  DynamicJsonDocument doc(8192);
+  DeserializationError err = deserializeJson(doc, file);
+  file.close();
+  if (err) return user;
+  String fpStr = fingerprintId;
+  fpStr.trim();
+  String uuidStr = uuid;
+  uuidStr.trim();
+  uuidStr.toUpperCase();
+  for (JsonObject s : doc.as<JsonArray>()) {
+    String sFp = String((const char *)(s["fingerprint_id"] | ""));
+    String sUuid = String((const char *)(s["uuid"] | ""));
+    sFp.trim();
+    sUuid.trim();
+    sUuid.toUpperCase();
+    if (fpStr.length() > 0 && uuidStr.length() > 0) {
+      if (sFp == fpStr && sUuid == uuidStr) {
+        user.found = true;
+        user.idNumber = String((const char *)(s["id_number"] | ""));
+        user.fullName = String((const char *)(s["name"] | ""));
+        user.fingerprintId = sFp;
+        user.smartCardId = sUuid;
+        return user;
+      }
+    }
+  }
+  return user;
+}
+
+bool addAttendanceToLFS(const String &idNumber, const String &name,
+                        const String &timestamp, const String &type) {
+  if (!lfsReady) return false;
+  DynamicJsonDocument doc(16384);
+  JsonArray records;
+  File file;
+  if (LittleFS.exists("/attendance.json")) {
+    file = LittleFS.open("/attendance.json", "r");
+    if (file) {
+      DeserializationError err = deserializeJson(doc, file);
+      file.close();
+      records = err ? doc.to<JsonArray>() : doc.as<JsonArray>();
+    } else {
+      records = doc.to<JsonArray>();
+    }
+  } else {
+    records = doc.to<JsonArray>();
+  }
+  JsonObject r = records.createNestedObject();
+  r["id_number"] = idNumber;
+  r["name"] = name;
+  r["timestamp"] = timestamp;
+  r["type"] = type;
+  r["synced"] = false;
+  file = LittleFS.open("/attendance.json", "w");
+  if (!file) return false;
+  serializeJson(doc, file);
+  file.close();
+  return true;
+}
+
+bool cacheUsersToLFS(DynamicJsonDocument &doc) {
+  if (!lfsReady) return false;
+  File file = LittleFS.open("/api_users_cache.json", "w");
+  if (!file) return false;
+  serializeJson(doc, file);
+  file.close();
+  return true;
+}
+
+bool loadCachedUsersFromLFS(DynamicJsonDocument &doc) {
+  if (!lfsReady) return false;
+  if (!LittleFS.exists("/api_users_cache.json")) return false;
+  File file = LittleFS.open("/api_users_cache.json", "r");
+  if (!file) return false;
+  DeserializationError err = deserializeJson(doc, file);
+  file.close();
+  return err == DeserializationError::Ok;
+}
+
+bool upsertStudentInLFS(const String &idNumber, const String &fullName,
+                        const String &fingerprintId, const String &uuid,
+                        String &error) {
+  if (!lfsReady) { error = "LittleFS not available"; return false; }
+  DynamicJsonDocument doc(8192);
+  JsonArray students;
+  if (LittleFS.exists("/students.json")) {
+    File file = LittleFS.open("/students.json", "r");
+    if (file) {
+      DeserializationError err = deserializeJson(doc, file);
+      file.close();
+      if (!err) {
+        students = doc.as<JsonArray>();
+        for (size_t i = 0; i < students.size(); i++) {
+          String existingId = String((const char *)(students[i]["id_number"] | ""));
+          if (existingId == idNumber) {
+            students.remove(i);
+            break;
+          }
+        }
+      }
+    }
+  }
+  if (!students) {
+    doc.clear();
+    students = doc.to<JsonArray>();
+  }
+  JsonObject s = students.createNestedObject();
+  s["id_number"] = idNumber;
+  s["name"] = fullName;
+  s["fingerprint_id"] = fingerprintId;
+  s["uuid"] = uuid;
+  File file = LittleFS.open("/students.json", "w");
+  if (!file) { error = "Failed to write /students.json"; return false; }
+  serializeJson(doc, file);
+  file.close();
+  return true;
+}
+
+void syncUnsentAttendance() {
+  if (!lfsReady || !wifiReady) return;
+  if (!LittleFS.exists("/attendance.json")) return;
+  DynamicJsonDocument doc(16384);
+  File file = LittleFS.open("/attendance.json", "r");
+  if (!file) return;
+  DeserializationError err = deserializeJson(doc, file);
+  file.close();
+  if (err) return;
+  JsonArray records = doc.as<JsonArray>();
+  bool changed = false;
+  for (JsonObject rec : records) {
+    bool synced = rec["synced"] | true;
+    if (synced) continue;
+    String idNumber = String((const char *)(rec["id_number"] | ""));
+    String name = String((const char *)(rec["name"] | ""));
+    String timestamp = String((const char *)(rec["timestamp"] | ""));
+    String type = String((const char *)(rec["type"] | ""));
+    DynamicJsonDocument req(1024);
+    DynamicJsonDocument resp(4096);
+    int httpCode = 0;
+    String error;
+    req["fingerprintId"] = "";
+    req["smartCardId"] = "";
+    req["occurredAt"] = timestamp;
+    req["localRecordId"] = makeLocalRecordId();
+    req["idNumber"] = idNumber;
+    req["name"] = name;
+    req["type"] = type;
+    req["offlineSync"] = true;
+    bool ok = postDeviceJson("attendance", req, resp, httpCode, error);
+    if (ok) {
+      rec["synced"] = true;
+      changed = true;
+      logEvent("SYNC", "Uploaded attendance for " + idNumber + " " + name);
+      delay(50);
+    }
+  }
+  if (changed) {
+    file = LittleFS.open("/attendance.json", "w");
+    if (file) {
+      serializeJson(doc, file);
+      file.close();
+    }
+  }
 }
 
 void runRegistrationWorkflow() {
@@ -1829,7 +2165,7 @@ void runRegistrationWorkflow() {
     pendingRfidUid = uid;
 
     // ================================================================
-    // Save via API (no SD local storage available).
+    // Save to API (online) or LittleFS (offline).
     // ================================================================
     registrationPhase = "api";
     drawScreen("Registration", "Saving Online", pendingRegistrationName, "Please wait", ILI9341_BLUE);
@@ -1839,7 +2175,7 @@ void runRegistrationWorkflow() {
 
     if (registered) {
       registrationPhase = "complete";
-      drawScreen("Registration Complete", "ID: " + (pendingRegistrationIdNumber.length() ? pendingRegistrationIdNumber : String(pendingRegistrationUserId)), pendingRegistrationName, "Saved Online", ILI9341_GREEN);
+      drawScreen("Registration Complete", "ID: " + (pendingRegistrationIdNumber.length() ? pendingRegistrationIdNumber : String(pendingRegistrationUserId)), pendingRegistrationName, "Saved", ILI9341_GREEN);
       logEvent("REG", "Registration complete for " + pendingRegistrationName + " FP " + String(pendingFingerprintTemplateId) + " RFID " + pendingRfidUid);
     } else {
       registrationPhase = "complete";
@@ -1873,6 +2209,25 @@ bool enrollFingerprint(uint16_t templateId, String &errorMsg) {
     errorMsg = "Fingerprint scan timed out.";
     return false;
   }
+  // ===== Duplicate fingerprint check (finger is still on sensor) =====
+  {
+    uint8_t srchResult = finger.fingerFastSearch();
+    if (srchResult == FINGERPRINT_OK) {
+      // Physical fingerprint already exists in sensor DB
+      errorMsg = "Fingerprint Already Registered";
+      signalError();
+      waitForFingerRelease(5000);
+      return false;
+    }
+    // Also check whether the template ID is already assigned in LittleFS
+    if (isFingerprintInLFS(pendingFingerprintTemplateId)) {
+      errorMsg = "Fingerprint Already Registered";
+      signalError();
+      waitForFingerRelease(5000);
+      return false;
+    }
+  }
+  // =================================================================
   signalFingerprint();
   drawScreen("Fingerprint", "Scan 1 of " + String(FINGERPRINT_REGISTER_SCANS), "Accepted", "Remove finger", ILI9341_BLUE);
   waitForFingerRelease(8000);
@@ -1978,6 +2333,14 @@ bool enrollRfid(String &uid) {
 
     if (scan == 1) {
       firstUid = currentUid;
+      // ===== RFID UUID duplicate check =====
+      if (isRfidUuidInLFS(firstUid)) {
+        drawScreen("RFID Registration", "ID Card Already Registered", firstUid, "", ILI9341_RED);
+        signalError();
+        delay(2500);
+        return false;
+      }
+      // ======================================
     } else if (currentUid != firstUid) {
       return false;
     }
@@ -2082,21 +2445,39 @@ int scanFingerprintForAttendance() {
 
 void completeAttendanceAttempt() {
   String occurredAt = isoNow();
-  String localRecordId = makeLocalRecordId();
 
+  // ===== Primary verification via LittleFS =====
+  LocalUser matched = findStudentInLFS(attendanceFingerprintId, attendanceRfidUid);
+  if (matched.found) {
+    // Attendance verified via local cache
+    addAttendanceToLFS(matched.idNumber, matched.fullName, occurredAt, "IN");
+    logEvent("ATTENDANCE", "IN for " + matched.idNumber + " " + matched.fullName + " (LFS)");
+    drawScreen("Attendance Success", "ID: " + matched.idNumber, matched.fullName, "Status: IN", ILI9341_GREEN);
+    signalSuccess();
+    delay(2500);
+    // Attempt to sync pending records to API (best-effort)
+    if (wifiReady) {
+      syncUnsentAttendance();
+    }
+    return;
+  }
+
+  // ===== Fallback: try the online API =====
+  String localRecordId = makeLocalRecordId();
   AttendanceResult result = postAttendance(attendanceFingerprintId, attendanceRfidUid, occurredAt, localRecordId);
-  if (!result.ok) {
-    drawScreen("Attendance Failed", String("ID: ") + result.idNumber, result.fullName, result.error.length() ? result.error : "API error", ILI9341_RED);
-    logEvent("ATTENDANCE", "Failed FP " + attendanceFingerprintId + " RFID " + attendanceRfidUid + ": " + result.error);
-    signalError();
+  if (result.ok) {
+    String status = result.status.length() ? result.status : "IN";
+    logEvent("ATTENDANCE", status + " for " + result.idNumber + " " + result.fullName + " (API)");
+    drawScreen("Attendance Success", "ID: " + result.idNumber, result.fullName, "Status: " + status, ILI9341_GREEN);
+    signalSuccess();
     delay(2500);
     return;
   }
 
-  String status = result.status.length() ? result.status : "IN";
-  logEvent("ATTENDANCE", status + " for " + result.idNumber + " " + result.fullName);
-  drawScreen("Attendance Success", String("ID: ") + result.idNumber, result.fullName, String("Status: ") + status, ILI9341_GREEN);
-  signalSuccess();
+  // Not found in either LFS or API
+  drawScreen("Attendance Failed", "Cannot Be Recognized", "", "", ILI9341_RED);
+  logEvent("ATTENDANCE", "Failed FP " + attendanceFingerprintId + " RFID " + attendanceRfidUid + ": not in LFS or API");
+  signalError();
   delay(2500);
 }
 
