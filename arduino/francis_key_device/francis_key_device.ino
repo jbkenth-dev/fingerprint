@@ -892,13 +892,13 @@ void sendLoginPage(const String &message) {
   body += F("<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>");
   body += F("<title>Francis Key Login</title><style>");
   body += F(":root{--bg:#0b1218;--panel:#131d26;--line:#284150;--text:#f5fbff;--muted:#9cb1bd;--brand:#25c3b8;--bad:#ef6b6b}*{box-sizing:border-box}body{margin:0;min-height:100dvh;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:linear-gradient(145deg,#071017,#101d26);color:var(--text);display:grid;place-items:center;padding:18px}.login{width:min(420px,100%);border:1px solid var(--line);background:rgba(19,29,38,.94);border-radius:8px;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.35)}h1{margin:0 0 4px;font-size:28px}p{color:var(--muted);line-height:1.5}.brand{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--brand);font-weight:800}label{display:block;margin:16px 0 6px;color:#dbe8ed;font-size:13px;font-weight:700}input,button{width:100%;border-radius:8px;border:1px solid var(--line);padding:13px 14px;background:#0d151d;color:var(--text);font:inherit}button{margin-top:18px;background:var(--brand);border:0;color:#061012;font-weight:800;cursor:pointer}.msg{border:1px solid rgba(239,107,107,.35);background:rgba(239,107,107,.1);color:#ffd5d5;border-radius:8px;padding:10px;margin-top:16px}.foot{font-size:12px}</style></head><body><main class='login'>");
-  body += F("<div class='brand'>Francis Key Appliance</div><h1>Admin Login</h1><p>Connect to <b>FRANCIS_KEY</b> and manage the attendance device at <b>192.168.4.1</b>.</p>");
+  body += F("<h1 class='brand'>Admin Login</h1>");
   if (message.length()) {
     body += F("<div class='msg'>");
     body += htmlEscape(message);
     body += F("</div>");
   }
-  body += F("<form method='post' action='/login'><label>Username</label><input name='username' autocomplete='username' required><label>Password</label><input name='password' type='password' autocomplete='current-password' required><button type='submit'>Login</button></form><p class='foot'>Default: admin / francis123</p></main></body></html>");
+  body += F("<form method='post' action='/login'><label>Username</label><input name='username' autocomplete='username' required><label>Password</label><input name='password' type='password' autocomplete='current-password' required><button type='submit'>Login</button></form></main></body></html>");
   server.send(200, "text/html", body);
 }
 
