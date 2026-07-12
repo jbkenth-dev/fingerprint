@@ -77,14 +77,6 @@ export async function apiFetch(path, options = {}) {
     headers,
   });
 
-  // Handle 401 - session expired or invalid
-  if (res.status === 401) {
-    clearSession();
-    // Dispatch a custom event so AuthContext can react
-    window.dispatchEvent(new CustomEvent('auth:expired'));
-    throw new Error('Session expired. Please sign in again.');
-  }
-
   // Try to parse JSON, fall back to text
   let data;
   const contentType = res.headers.get('content-type') || '';
@@ -97,6 +89,19 @@ export async function apiFetch(path, options = {}) {
     } catch {
       data = { error: text };
     }
+  }
+
+  // Handle 401 — use the backend's actual error message (e.g. "Invalid credentials")
+  // instead of a hardcoded string, so login failures show the right feedback.
+  if (res.status === 401) {
+    // Only clear session / dispatch expiry for non-login requests.
+    // Login POST to auth.php returns 401 for wrong credentials — that's not a session expiry.
+    const isLoginAttempt = path.endsWith('/auth.php') && (options.method || 'GET').toUpperCase() === 'POST';
+    if (!isLoginAttempt) {
+      clearSession();
+      window.dispatchEvent(new CustomEvent('auth:expired'));
+    }
+    throw new Error(data.error || 'Session expired. Please sign in again.');
   }
 
   if (!res.ok) {
