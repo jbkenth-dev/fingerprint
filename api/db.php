@@ -9,10 +9,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-$DB_HOST = '127.0.0.1';
-$DB_NAME = 'francis_key';
-$DB_USER = 'root';
-$DB_PASS = '';
+// Load .env file from project root (one level above /api/)
+$envFile = __DIR__ . '/../.env';
+if (file_exists($envFile)) {
+    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        $line = trim($line);
+        // Skip comments
+        if (str_starts_with($line, '#')) continue;
+        if (str_contains($line, '=')) {
+            [$key, $value] = explode('=', $line, 2);
+            $key = trim($key);
+            $value = trim($value);
+            // Remove surrounding quotes if present
+            if ((str_starts_with($value, '"') && str_ends_with($value, '"')) ||
+                (str_starts_with($value, "'") && str_ends_with($value, "'"))) {
+                $value = substr($value, 1, -1);
+            }
+            putenv("$key=$value");
+        }
+    }
+}
+
+$DB_HOST = getenv('DB_HOST') ?: '127.0.0.1';
+$DB_NAME = getenv('DB_NAME') ?: 'francis_key';
+$DB_USER = getenv('DB_USER') ?: 'root';
+$DB_PASS = getenv('DB_PASS') ?: '';
 
 try {
     $pdo = new PDO("mysql:host=$DB_HOST;dbname=$DB_NAME;charset=utf8mb4", $DB_USER, $DB_PASS, [

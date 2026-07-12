@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/auth_middleware.php';
 
 function ensure_class_subjects_table(PDO $pdo): void {
     $pdo->exec(
@@ -258,6 +259,7 @@ ensure_class_schedules_table($pdo);
 $method = $_SERVER['REQUEST_METHOD'];
 
 if ($method === 'GET') {
+    require_auth($pdo);
     if (isset($_GET['yearLevel']) || isset($_GET['semester'])) {
         $yearLevel = normalize_value($_GET['yearLevel'] ?? '');
         $semester = normalize_value($_GET['semester'] ?? '');
@@ -283,6 +285,7 @@ if (!is_array($input)) {
 }
 
 if ($method === 'POST') {
+    require_auth($pdo, 'admin');
     $validationError = validate_schedule_payload($input);
     if ($validationError) {
         http_response_code(400);
@@ -377,6 +380,7 @@ if ($method === 'POST') {
 }
 
 if ($method === 'PUT') {
+    require_auth($pdo, 'admin');
     $originalSection = normalize_section($input['originalSection'] ?? '');
     $originalYearLevel = normalize_value($input['originalYearLevel'] ?? '');
     $originalSemester = normalize_value($input['originalSemester'] ?? '');
@@ -494,6 +498,7 @@ if ($method === 'PUT') {
 }
 
 if ($method === 'DELETE') {
+    require_auth($pdo, 'admin');
     $section = normalize_section($_GET['section'] ?? '');
     $yearLevel = normalize_value($_GET['yearLevel'] ?? '');
     $semester = normalize_value($_GET['semester'] ?? '');

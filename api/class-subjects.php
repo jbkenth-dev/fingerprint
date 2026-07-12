@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/auth_middleware.php';
 
 function ensure_class_subjects_table(PDO $pdo): void {
     $pdo->exec(
@@ -105,6 +106,7 @@ ensure_class_schedules_table($pdo);
 $method = $_SERVER['REQUEST_METHOD'];
 
 if ($method === 'GET') {
+    require_auth($pdo);
     $stmt = $pdo->query('SELECT id, subjectCode, subjectName, yearLevel, semester, createdAt, updatedAt FROM class_subjects ORDER BY subjectCode ASC, id ASC');
     echo json_encode($stmt->fetchAll());
     exit;
@@ -116,6 +118,7 @@ if (!is_array($input)) {
 }
 
 if ($method === 'POST') {
+    require_auth($pdo, 'admin');
     $validationError = validate_subject_payload($input);
     if ($validationError) {
         http_response_code(400);
@@ -149,6 +152,7 @@ if ($method === 'POST') {
 }
 
 if ($method === 'PUT') {
+    require_auth($pdo, 'admin');
     $id = isset($input['id']) ? (int) $input['id'] : 0;
     if ($id <= 0) {
         http_response_code(400);
@@ -190,6 +194,7 @@ if ($method === 'PUT') {
 }
 
 if ($method === 'DELETE') {
+    require_auth($pdo, 'admin');
     $id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
     if ($id <= 0) {
         http_response_code(400);

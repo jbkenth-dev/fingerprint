@@ -1,6 +1,4 @@
 -- Create database and users table for Francis Key demo
-CREATE DATABASE IF NOT EXISTS francis_key CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE francis_key;
 
 CREATE TABLE IF NOT EXISTS users (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -52,6 +50,16 @@ CREATE TABLE IF NOT EXISTS class_schedules (
   updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY unique_schedule_subject (sectionName, yearLevel, semester, subjectId),
   CONSTRAINT fk_class_schedules_subject FOREIGN KEY (subjectId) REFERENCES class_subjects(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  token VARCHAR(128) NOT NULL UNIQUE,
+  role VARCHAR(32) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS attendance_logs (

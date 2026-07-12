@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/auth_middleware.php';
 
 function column_exists(PDO $pdo, string $table, string $column): bool {
     $stmt = $pdo->prepare("SHOW COLUMNS FROM `$table` LIKE ?");
@@ -63,7 +64,11 @@ if ($method === 'GET') {
 $input = json_decode(file_get_contents('php://input'), true);
 
 if ($method === 'POST') {
+    require_auth($pdo, 'admin');
     // create new user
+    if (isset($input['password']) && $input['password'] !== '') {
+        $input['password'] = password_hash($input['password'], PASSWORD_BCRYPT);
+    }
     if (find_duplicate_field($pdo, 'idNumber', $input['idNumber'] ?? null)) {
         http_response_code(409);
         echo json_encode(["error" => "ID number already exists."]);
@@ -103,9 +108,13 @@ if ($method === 'POST') {
 }
 
 if ($method === 'PUT') {
+    require_auth($pdo, 'admin');
     // update user (requires id)
     $id = $input['id'] ?? null;
     if (!$id) { http_response_code(400); echo json_encode(["error"=>"An ID is required."]); exit; }
+    if (isset($input['password']) && $input['password'] !== '') {
+        $input['password'] = password_hash($input['password'], PASSWORD_BCRYPT);
+    }
     if (find_duplicate_field($pdo, 'idNumber', $input['idNumber'] ?? null, (int) $id)) {
         http_response_code(409);
         echo json_encode(["error" => "ID number already exists."]);
@@ -147,6 +156,7 @@ if ($method === 'PUT') {
 }
 
 if ($method === 'DELETE') {
+    require_auth($pdo, 'admin');
     // delete user by id parameter
     $id = $_GET['id'] ?? null;
     if (!$id) { http_response_code(400); echo json_encode(["error"=>"An ID is required."]); exit; }

@@ -1,11 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { initialUsers } from "../data/mockData";
+import { apiFetch } from "../api";
 
 const AuthContext = createContext(null);
 
 const STORAGE_KEY = "francis-key-auth";
-
-const API_BASE = "/api"; // Assumes PHP files are served from /api
 
 export function AuthProvider({ children }) {
   const [users, setUsers] = useState(initialUsers);
@@ -18,10 +17,19 @@ export function AuthProvider({ children }) {
     }
   });
 
+  // Listen for auth:expired event (emitted by apiFetch on 401)
+  useEffect(() => {
+    const handleExpired = () => {
+      setSession(null);
+    };
+    window.addEventListener("auth:expired", handleExpired);
+    return () => window.removeEventListener("auth:expired", handleExpired);
+  }, []);
+
   // Load users from API (fallback to bundled initialUsers)
   useEffect(() => {
     let mounted = true;
-    fetch(`${API_BASE}/users.php`)
+    apiFetch("/users.php")
       .then((r) => r.json())
       .then((data) => {
         if (mounted && Array.isArray(data)) setUsers(data);
@@ -48,7 +56,7 @@ export function AuthProvider({ children }) {
   );
 
   const login = async ({ identifier, password, role }) => {
-    const res = await fetch(`${API_BASE}/auth.php`, {
+    const res = await apiFetch("/auth.php", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ identifier, password, role }),
@@ -59,8 +67,8 @@ export function AuthProvider({ children }) {
       throw new Error(err.error || "Login failed");
     }
 
-    const { user } = await res.json();
-    setSession({ userId: user.id, role: user.role });
+    const { user, token } = await res.json();
+    setSession({ userId: user.id, role: user.role, token });
     // refresh user list from server
     setUsers((prev) => {
       const exists = prev.some((u) => u.id === user.id);
@@ -78,7 +86,7 @@ export function AuthProvider({ children }) {
   };
 
   const addUser = async (payload) => {
-    const res = await fetch(`${API_BASE}/users.php`, {
+    const res = await apiFetch("/users.php", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -90,7 +98,7 @@ export function AuthProvider({ children }) {
   };
 
   const updateUser = async (id, payload) => {
-    const res = await fetch(`${API_BASE}/users.php`, {
+    const res = await apiFetch("/users.php", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, ...payload }),
@@ -102,7 +110,7 @@ export function AuthProvider({ children }) {
   };
 
   const deleteUser = async (id) => {
-    const res = await fetch(`${API_BASE}/users.php?id=${encodeURIComponent(id)}`, {
+    const res = await apiFetch(`/users.php?id=${encodeURIComponent(id)}`, {
       method: "DELETE",
     });
     if (!res.ok) throw new Error("Failed to delete user");

@@ -7,6 +7,7 @@ import { panelContent, roleLabels, roles, routeConfig, sampleAttendance } from "
 import { useMockLoading } from "./hooks/useMockLoading";
 import { useManilaClock } from "./hooks/useManilaClock";
 import { useAuth } from "./state/AuthContext";
+import { apiFetch } from "./api";
 
 const ThemeContext = React.createContext(null);
 
@@ -21,7 +22,6 @@ const navIcons = {
   Account: UserCog,
 };
 
-const API_BASE = "/api";
 const emptyClassSubjectForm = {
   subjectCode: "",
   subjectName: "",
@@ -382,7 +382,7 @@ function RolePanel({ pageKey, role }) {
       const params = new URLSearchParams({ limit: String(pageSize), offset: String(offset) });
       if (date) params.set("date", date);
 
-      const response = await fetch(`${API_BASE}/attendance.php?${params.toString()}`);
+      const response = await apiFetch(`/attendance.php?${params.toString()}`);
       if (!response.ok) {
         const errorBody = await response.text();
         let errorMessage = `Server returned ${response.status}`;
@@ -680,7 +680,7 @@ function ClassSubjectPage() {
     try {
       setLoading(true);
       setPageError("");
-      const response = await fetch(`${API_BASE}/class-subjects.php`);
+      const response = await apiFetch(`/class-subjects.php`);
       const data = await response.json().catch(() => []);
 
       if (!response.ok) {
@@ -751,7 +751,7 @@ function ClassSubjectPage() {
 
     try {
       setSaving(true);
-      const response = await fetch(`${API_BASE}/class-subjects.php`, {
+      const response = await apiFetch(`/class-subjects.php`, {
         method: editingId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editingId ? { id: editingId, ...payload } : payload),
@@ -797,7 +797,7 @@ function ClassSubjectPage() {
     if (!deletingSubject) return;
 
     try {
-      const response = await fetch(`${API_BASE}/class-subjects.php?id=${encodeURIComponent(deletingSubject.id)}`, {
+      const response = await apiFetch(`/class-subjects.php?id=${encodeURIComponent(deletingSubject.id)}`, {
         method: "DELETE",
       });
       const data = await response.json().catch(() => ({}));
@@ -1090,7 +1090,7 @@ function ClassSchedulingPage() {
     try {
       setLoadingRows(true);
       setPageError("");
-      const response = await fetch(`${API_BASE}/class-schedules.php`);
+      const response = await apiFetch(`/class-schedules.php`);
       const data = await response.json().catch(() => []);
 
       if (!response.ok) {
@@ -1125,7 +1125,7 @@ function ClassSchedulingPage() {
           yearLevel: form.yearLevel,
           semester: form.semester,
         });
-        const response = await fetch(`${API_BASE}/class-schedules.php?${params.toString()}`);
+        const response = await apiFetch(`/class-schedules.php?${params.toString()}`);
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
@@ -1326,7 +1326,7 @@ function ClassSchedulingPage() {
         yearLevel: deletingSchedule.yearLevel,
         semester: deletingSchedule.semester,
       });
-      const response = await fetch(`${API_BASE}/class-schedules.php?${params.toString()}`, {
+      const response = await apiFetch(`/class-schedules.php?${params.toString()}`, {
         method: "DELETE",
       });
       const data = await response.json().catch(() => ({}));
@@ -1362,7 +1362,7 @@ function ClassSchedulingPage() {
 
     try {
       setSaving(true);
-      const response = await fetch(`${API_BASE}/class-schedules.php`, {
+      const response = await apiFetch(`/class-schedules.php`, {
         method: editingSchedule ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
