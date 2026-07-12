@@ -382,18 +382,7 @@ function RolePanel({ pageKey, role }) {
       const params = new URLSearchParams({ limit: String(pageSize), offset: String(offset) });
       if (date) params.set("date", date);
 
-      const response = await apiFetch(`/attendance.php?${params.toString()}`);
-      if (!response.ok) {
-        const errorBody = await response.text();
-        let errorMessage = `Server returned ${response.status}`;
-        try {
-          const parsed = JSON.parse(errorBody);
-          errorMessage = parsed.error || errorMessage;
-        } catch {}
-        throw new Error(errorMessage);
-      }
-
-      const result = await response.json();
+      const result = await apiFetch(`/attendance.php?${params.toString()}`);
       setAttendanceLogs(Array.isArray(result.records) ? result.records : []);
       setAttendanceTotal(result.total ?? 0);
     } catch (err) {

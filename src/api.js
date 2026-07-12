@@ -6,10 +6,28 @@
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 const STORAGE_KEY = 'francis-key-auth';
 
+// In-memory token cache so apiFetch never races with localStorage effects.
+let _authToken = null;
+
 /**
- * Get the auth token from localStorage.
+ * Set the in-memory auth token (call immediately on login, before any navigation).
+ */
+export function setAuthToken(token) {
+  _authToken = token;
+}
+
+/**
+ * Clear the in-memory auth token (call on logout).
+ */
+export function clearAuthToken() {
+  _authToken = null;
+}
+
+/**
+ * Get the auth token — prefer the in-memory cache, fall back to localStorage.
  */
 function getAuthToken() {
+  if (_authToken) return _authToken;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -26,6 +44,7 @@ function getAuthToken() {
  * Clear the stored session (used on 401 responses).
  */
 function clearSession() {
+  _authToken = null;
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch {

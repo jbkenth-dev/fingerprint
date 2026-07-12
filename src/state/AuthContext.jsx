@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { initialUsers } from "../data/mockData";
-import { apiFetch } from "../api";
+import { apiFetch, setAuthToken, clearAuthToken } from "../api";
 
 const AuthContext = createContext(null);
 
@@ -61,7 +61,17 @@ export function AuthProvider({ children }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ identifier, password, role }),
     });
-    setSession({ userId: user.id, role: user.role, token });
+    const sessionData = { userId: user.id, role: user.role, token };
+
+    // Persist to localStorage synchronously so concurrent apiFetch calls
+    // (e.g. dashboard data fetches) can find the token before the useEffect runs.
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionData));
+    } catch {}
+    // Also set the in-memory cache so apiFetch never races with localStorage.
+    setAuthToken(token);
+
+    setSession(sessionData);
     // refresh user list from server
     setUsers((prev) => {
       const exists = prev.some((u) => u.id === user.id);
@@ -70,7 +80,11 @@ export function AuthProvider({ children }) {
     return user;
   };
 
-  const logout = () => setSession(null);
+  const logout = () => {
+    clearAuthToken();
+    try { localStorage.removeItem(STORAGE_KEY); } catch {}
+    setSession(null);
+  };
 
   const updateOwnAccount = async (payload) => {
     if (!currentUser) return;
