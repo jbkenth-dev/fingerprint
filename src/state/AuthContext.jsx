@@ -11,10 +11,17 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : null;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // Sync in-memory token cache on restore so the very first API call
+        // (e.g. dashboard attendance fetch) can send the Authorization header.
+        if (parsed?.token) setAuthToken(parsed.token);
+        return parsed;
+      }
     } catch {
-      return null;
+      // ignore
     }
+    return null;
   });
 
   // Listen for auth:expired event (emitted by apiFetch on 401)
