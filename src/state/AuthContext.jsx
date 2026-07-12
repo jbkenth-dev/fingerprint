@@ -56,18 +56,11 @@ export function AuthProvider({ children }) {
   );
 
   const login = async ({ identifier, password, role }) => {
-    const res = await apiFetch("/auth.php", {
+    const { user, token } = await apiFetch("/auth.php", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ identifier, password, role }),
     });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || "Login failed");
-    }
-
-    const { user, token } = await res.json();
     setSession({ userId: user.id, role: user.role, token });
     // refresh user list from server
     setUsers((prev) => {

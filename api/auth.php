@@ -33,7 +33,29 @@ try {
     $stmt->execute([$identifier, $identifier, $role]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$user || !password_verify($password, $user['password'] ?? '')) {
+    if (!$user) {
+        http_response_code(401);
+        echo json_encode(["error" => "Invalid credentials or inactive account"]);
+        exit;
+    }
+
+    $storedPassword = $user['password'] ?? '';
+    $passwordValid = password_verify($password, $storedPassword);
+
+    // If password_verify failed and the stored value is not a bcrypt hash,
+    // the password may have been inserted as plaintext (e.g. from seed data).
+    // Try a direct comparison and, if it matches, upgrade to bcrypt on the fly.
+    if (!$passwordValid && $storedPassword !== '' && !str_starts_with($storedPassword, '$2')) {
+        if (hash_equals($storedPassword, $password)) {
+            $passwordValid = true;
+            $newHash = password_hash($password, PASSWORD_BCRYPT);
+            $stmt = $pdo->prepare('UPDATE users SET password = ? WHERE id = ?');
+            $stmt->execute([$newHash, $user['id']]);
+            $user['password'] = $newHash;
+        }
+    }
+
+    if (!$passwordValid) {
         http_response_code(401);
         echo json_encode(["error" => "Invalid credentials or inactive account"]);
         exit;
