@@ -2,14 +2,12 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import clsx from "clsx";
-import { Activity, Asterisk, BadgeCheck, BookOpenText, BookUser, CalendarRange, ChevronDown, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, LayoutDashboard, LockKeyhole, LogOut, Moon, ScanLine, ShieldUser, Sun, UserCog, UserRound, Users } from "lucide-react";
+import { Activity, Asterisk, BadgeCheck, BookOpenText, BookUser, CalendarRange, ChevronDown, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, LayoutDashboard, LockKeyhole, LogOut, Menu, ScanLine, ShieldUser, UserCog, UserRound, Users, X } from "lucide-react";
 import { panelContent, roleLabels, roles, routeConfig, sampleAttendance } from "./data/mockData";
 import { useMockLoading } from "./hooks/useMockLoading";
 import { useManilaClock } from "./hooks/useManilaClock";
 import { useAuth } from "./state/AuthContext";
 import { apiFetch } from "./api";
-
-const ThemeContext = React.createContext(null);
 
 const navIcons = {
   "Dashboard & Monitoring": LayoutDashboard,
@@ -52,52 +50,8 @@ const sectionOptions = ["A", "B", "C", "D", "E"];
 const yearLevelOptions = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
 const semesterOptions = ["1st Sem", "2nd Sem"];
 const scheduleDayOptions = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const THEME_STORAGE_KEY = "francis-key-theme";
-
-function ThemeProvider({ children }) {
-  const [theme, setTheme] = React.useState(() => {
-    if (typeof window === "undefined") return "dark";
-
-    try {
-      return localStorage.getItem(THEME_STORAGE_KEY) === "light" ? "light" : "dark";
-    } catch {
-      return "dark";
-    }
-  });
-
-  React.useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.style.colorScheme = theme;
-
-    try {
-      localStorage.setItem(THEME_STORAGE_KEY, theme);
-    } catch {}
-  }, [theme]);
-
-  const value = React.useMemo(
-    () => ({
-      theme,
-      toggleTheme: () => setTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark")),
-    }),
-    [theme],
-  );
-
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
-}
-
-function useTheme() {
-  const context = React.useContext(ThemeContext);
-
-  if (!context) {
-    throw new Error("useTheme must be used within ThemeProvider");
-  }
-
-  return context;
-}
-
 export default function App() {
   return (
-    <ThemeProvider>
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/signin" element={<SignInPage />} />
@@ -129,24 +83,16 @@ export default function App() {
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </ThemeProvider>
   );
 }
 
 function HomePage() {
-  const { theme, toggleTheme } = useTheme();
   const { time, date } = useManilaClock();
 
   return (
-    <main className="theme-shell min-h-dvh">
-      <ThemeBackdrop />
+    <main className="app-shell min-h-dvh">
       <div className="relative flex min-h-dvh items-center justify-center px-4 py-6 sm:px-6 lg:px-8">
-        <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
-          <ThemeToggleButton theme={theme} onToggle={toggleTheme} />
-        </div>
-        <section className="animate-fade-up home-reference-card relative w-full max-w-6xl overflow-visible px-5 pb-8 pt-12 text-center sm:px-8 sm:pb-10 sm:pt-14 lg:px-12 lg:pb-12 lg:pt-16">
-          <div className="home-reference-glow" />
-
+        <section className="animate-fade-up home-reference-card relative w-full max-w-5xl overflow-visible px-5 pb-8 pt-12 text-center sm:px-8 sm:pb-10 sm:pt-14 lg:px-12 lg:pb-12 lg:pt-16">
           <div className="home-reference-logo">
             <img
               src="/sfcg-logo.jpeg"
@@ -167,7 +113,7 @@ function HomePage() {
               to="/signin"
               className="home-reference-button mt-5 inline-flex items-center justify-center px-7 py-2 text-sm font-medium sm:mt-6"
             >
-              Signin
+              Sign In
             </NavLink>
           </div>
         </section>
@@ -178,7 +124,6 @@ function HomePage() {
 
 function SignInPage() {
   const { login, session } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [form, setForm] = React.useState({ identifier: "", password: "", role: "admin" });
   const [feedback, setFeedback] = React.useState({ message: "", tone: "error" });
@@ -212,13 +157,9 @@ function SignInPage() {
   };
 
   return (
-    <main className="theme-shell min-h-dvh">
-      <ThemeBackdrop />
-      <div className="signin-screen relative flex min-h-dvh items-center justify-center px-4 py-6 sm:px-6">
-        <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
-          <ThemeToggleButton theme={theme} onToggle={toggleTheme} />
-        </div>
-        <section className="signin-card animate-fade-up w-full max-w-[34rem] rounded-[1.7rem] px-6 pb-7 pt-8 sm:px-8 sm:pb-8 sm:pt-10">
+    <main className="app-shell min-h-dvh">
+      <div className="relative flex min-h-dvh items-center justify-center px-4 py-6 sm:px-6">
+        <section className="signin-card animate-fade-up w-full max-w-[34rem] px-6 pb-7 pt-8 sm:px-8 sm:pb-8 sm:pt-10">
           <div className="flex justify-center">
             <img
               src="/sfcg-logo.jpeg"
@@ -227,7 +168,7 @@ function SignInPage() {
             />
           </div>
 
-          <h1 className="mt-6 text-center text-[2.15rem] font-semibold text-white sm:text-[2.35rem]">Account Sign In</h1>
+          <h1 className="mt-6 text-center text-2xl font-semibold text-gray-800 sm:text-[1.75rem]">Account Sign In</h1>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-5">
             <Field
@@ -257,8 +198,8 @@ function SignInPage() {
               icon={ShieldUser}
               variant="signin"
             />
-            <button type="submit" className="signin-submit w-full rounded-full px-5 py-3.5 text-lg font-medium transition" disabled={submitting}>
-              {submitting ? "Signing In..." : "Signin"}
+            <button type="submit" className="signin-submit" disabled={submitting}>
+              {submitting ? "Signing In..." : "Sign In"}
             </button>
           </form>
         </section>
@@ -274,57 +215,145 @@ function SignInPage() {
 
 function ProtectedLayout({ allowedRole }) {
   const { session, currentUser, logout } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+
+  // Close mobile menu on navigation
+  React.useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
 
   if (!session) return <Navigate to="/signin" replace />;
   if (session.role !== allowedRole) return <Navigate to={`/${session.role}`} replace />;
 
   return (
-    <div className="theme-shell min-h-dvh">
-      <ThemeBackdrop />
-      <div className="relative grid min-h-dvh gap-0 lg:h-dvh lg:grid-cols-[320px_minmax(0,1fr)] lg:overflow-hidden">
-        <aside className="theme-panel overflow-hidden lg:sticky lg:top-0 lg:h-dvh">
-          <div className="hero-card flex h-full flex-col overflow-y-auto p-5 sm:p-6">
-            <div className="flex items-start justify-between gap-3">
+    <div className="app-shell min-h-dvh">
+      {/* Mobile header */}
+      <div className="lg:hidden sticky top-0 z-40 flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
+        <div className="flex items-center gap-3">
+          <BrandMark compact />
+          <span className="text-sm font-semibold text-gray-800">Francis Key</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setMobileMenuOpen(true)}
+          className="btn btn-ghost p-2"
+          aria-label="Open menu"
+        >
+          <Menu size={20} />
+        </button>
+      </div>
+
+      {/* Mobile menu overlay */}
+      {mobileMenuOpen ? (
+        <div className="lg:hidden">
+          <div className="sidebar-mobile-overlay" onClick={() => setMobileMenuOpen(false)} />
+          <div className="sidebar-mobile animate-fade-up">
+            <div className="flex items-start justify-between p-5">
               <BrandLockup />
-              <ThemeToggleButton theme={theme} onToggle={toggleTheme} compact />
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                className="mt-1 rounded-lg p-1 text-white/60 hover:text-white"
+                aria-label="Close menu"
+              >
+                <X size={20} />
+              </button>
             </div>
 
-            <div className="mt-6 rounded-[1.6rem] border border-white/8 bg-[rgba(255,255,255,0.03)] p-4">
-              <div className="text-xs uppercase tracking-[0.26em] text-[var(--muted)]">Signed in as</div>
-              <div className="mt-3 text-lg font-semibold text-white">
+            <div className="mx-5 mb-4 rounded-xl border border-white/10 bg-white/5 p-4">
+              <div className="text-xs uppercase tracking-wider text-white/50">Signed in as</div>
+              <div className="mt-2 text-base font-semibold text-white">
                 {[currentUser?.firstName, currentUser?.middleName, currentUser?.lastName].filter(Boolean).join(" ")}
               </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <InfoPill label="Role" value={roleLabels[allowedRole]} />
+              <div className="mt-3 flex flex-wrap gap-2">
+                <InfoPill label="Role" value={roleLabels[allowedRole]} variant="sidebar" />
                 <InfoPill
                   label="Username"
                   value={currentUser?.username ?? currentUser?.email?.split("@")[0] ?? "N/A"}
+                  variant="sidebar"
                 />
               </div>
             </div>
 
-            <nav className="mt-6 space-y-2">
+            <nav className="space-y-1 px-5">
               {routeConfig[allowedRole].map((item) => {
                 const Icon = navIcons[item.label];
-
                 return (
                   <NavLink
                     key={item.path}
                     to={item.path}
                     className={({ isActive }) =>
                       clsx(
-                        "flex items-center gap-3 rounded-[1.2rem] border px-4 py-3 text-sm transition",
-                        isActive || location.pathname === item.path
-                          ? "border-[rgba(102,252,241,0.36)] bg-[rgba(102,252,241,0.12)] text-white"
-                          : "border-transparent bg-transparent text-[var(--muted)] hover:border-white/8 hover:bg-white/5 hover:text-[var(--text)]",
+                        "sidebar-nav-item",
+                        (isActive || location.pathname === item.path) && "active",
                       )
                     }
                   >
-                    <span className="theme-icon-ring !size-10 rounded-[0.95rem]">
-                      <Icon size={17} />
+                    <span className="sidebar-nav-icon">
+                      <Icon size={16} />
+                    </span>
+                    <span>{item.label}</span>
+                  </NavLink>
+                );
+              })}
+            </nav>
+
+            <div className="px-5 pt-6 pb-5">
+              <button
+                type="button"
+                onClick={() => {
+                  logout();
+                  navigate("/signin", { replace: true });
+                }}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white/80 transition hover:bg-white/10 hover:text-white"
+              >
+                <LogOut size={16} />
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="relative grid min-h-dvh gap-0 lg:h-dvh lg:grid-cols-[280px_minmax(0,1fr)] lg:overflow-hidden">
+        {/* Desktop sidebar */}
+        <aside className="sidebar overflow-hidden lg:sticky lg:top-0 lg:h-dvh">
+          <div className="flex h-full flex-col overflow-y-auto p-5">
+            <BrandLockup />
+
+            <div className="mt-6 rounded-xl border border-white/10 bg-white/5 p-4">
+              <div className="text-xs uppercase tracking-wider text-white/50">Signed in as</div>
+              <div className="mt-2 text-base font-semibold text-white">
+                {[currentUser?.firstName, currentUser?.middleName, currentUser?.lastName].filter(Boolean).join(" ")}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <InfoPill label="Role" value={roleLabels[allowedRole]} variant="sidebar" />
+                <InfoPill
+                  label="Username"
+                  value={currentUser?.username ?? currentUser?.email?.split("@")[0] ?? "N/A"}
+                  variant="sidebar"
+                />
+              </div>
+            </div>
+
+            <nav className="mt-6 space-y-1">
+              {routeConfig[allowedRole].map((item) => {
+                const Icon = navIcons[item.label];
+                return (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    className={({ isActive }) =>
+                      clsx(
+                        "sidebar-nav-item",
+                        (isActive || location.pathname === item.path) && "active",
+                      )
+                    }
+                  >
+                    <span className="sidebar-nav-icon">
+                      <Icon size={16} />
                     </span>
                     <span>{item.label}</span>
                   </NavLink>
@@ -339,7 +368,7 @@ function ProtectedLayout({ allowedRole }) {
                   logout();
                   navigate("/signin", { replace: true });
                 }}
-                className="theme-button-secondary flex w-full items-center justify-center gap-2 rounded-[1.2rem] px-4 py-3 text-sm font-semibold"
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white/80 transition hover:bg-white/10 hover:text-white"
               >
                 <LogOut size={16} />
                 Sign Out
@@ -348,7 +377,7 @@ function ProtectedLayout({ allowedRole }) {
           </div>
         </aside>
 
-        <main className="space-y-4 px-3 py-3 sm:px-4 sm:py-4 lg:min-h-0 lg:overflow-y-auto">
+        <main className="space-y-4 px-3 py-4 sm:px-5 sm:py-5 lg:min-h-0 lg:overflow-y-auto">
           <Outlet />
         </main>
       </div>
@@ -466,94 +495,94 @@ function RolePanel({ pageKey, role }) {
 
   return (
     <div className="animate-fade-up space-y-4">
-      <section className="hero-card overflow-hidden rounded-[1.9rem] p-6 sm:p-7">
+      <section className="hero-card overflow-hidden p-6 sm:p-7">
         <div>
-          <div className="theme-badge inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs uppercase tracking-[0.24em]">
+          <div className="badge badge-white inline-flex items-center gap-2 text-xs uppercase tracking-wider">
             <BadgeCheck size={14} />
             {roleLabels[role]}
           </div>
-          <h1 className="mt-5 text-3xl font-semibold tracking-[-0.04em] text-white sm:text-4xl">{data.title}</h1>
-          <p className="mt-4 max-w-3xl text-sm leading-8 text-[var(--muted)] sm:text-base">{data.description}</p>
+          <h1 className="mt-5 text-2xl font-semibold text-white sm:text-3xl">{data.title}</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/70 sm:text-base">{data.description}</p>
         </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {dashboardMetrics.map((metric) => (
-          <article key={metric.label} className="theme-panel rounded-[1.6rem] p-5">
-            <div className="text-[0.72rem] uppercase tracking-[0.24em] text-[var(--muted)]">{metric.label}</div>
-            <div className="mt-3 text-3xl font-semibold text-white">{metric.value}</div>
-            <div className="mt-3 text-sm text-[var(--muted)]">{metric.hint}</div>
+          <article key={metric.label} className="card-elevated p-5">
+            <div className="text-xs font-medium uppercase tracking-wider text-gray-500">{metric.label}</div>
+            <div className="mt-3 text-2xl font-semibold text-gray-800">{metric.value}</div>
+            <div className="mt-2 text-sm text-gray-500">{metric.hint}</div>
           </article>
         ))}
       </section>
 
       {isDashboard ? (
         <section>
-          <article className="theme-panel rounded-[1.8rem] p-5">
+          <article className="card-elevated p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <h2 className="text-xl font-semibold text-white">Attendance Logs</h2>
-                <span className="theme-badge rounded-full px-3 py-2 text-[0.65rem] uppercase tracking-[0.24em]">Real-Time</span>
+                <h2 className="text-lg font-semibold text-gray-800">Attendance Logs</h2>
+                <span className="badge badge-green text-[0.65rem] uppercase tracking-wider">Real-Time</span>
               </div>
               <div className="flex items-center gap-2">
                 <input
                   type="date"
                   value={attendanceFilterDate}
                   onChange={(e) => setAttendanceFilterDate(e.target.value)}
-                  className="theme-input rounded-2xl px-3 py-2 text-sm"
+                  className="form-input rounded-lg px-3 py-2 text-sm"
                 />
               </div>
             </div>
 
             {attendanceError ? (
-              <div className="mt-5 rounded-[1.4rem] border border-[rgba(255,107,107,0.22)] bg-[rgba(255,107,107,0.08)] p-6 text-center">
-                <p className="text-sm font-semibold text-[var(--danger)]">Failed to load attendance logs</p>
-                <p className="mt-2 text-xs text-[var(--muted)]">{attendanceError}</p>
+              <div className="mt-5 alert alert-error text-center">
+                <p className="text-sm font-semibold">Failed to load attendance logs</p>
+                <p className="mt-2 text-xs text-gray-500">{attendanceError}</p>
                 <button
                   type="button"
                   onClick={() => fetchAttendanceLogs(attendanceFilterDate, attendancePage)}
-                  className="theme-button-secondary mt-4 inline-flex items-center rounded-xl px-4 py-2 text-xs font-semibold"
+                  className="btn btn-secondary mt-4 inline-flex items-center px-4 py-2 text-xs font-semibold"
                 >
                   Retry
                 </button>
               </div>
             ) : attendanceLoading ? (
-              <div className="mt-5 rounded-[1.4rem] border border-[var(--line)] bg-[var(--panel-soft)] p-6 text-center text-sm text-[var(--muted)]">
+              <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
                 Loading attendance logs...
               </div>
             ) : (
               <>
-                <div className="mt-4 overflow-hidden rounded-[1.4rem] border border-[var(--line)]">
-                  <table className="min-w-full text-left text-sm">
-                    <thead className="theme-table-head">
+                <div className="mt-4 table-container">
+                  <table className="table">
+                    <thead>
                       <tr>
-                        <th className="px-4 py-3">ID Number</th>
-                        <th className="px-4 py-3">Name</th>
-                        <th className="px-4 py-3">Time-IN</th>
-                        <th className="px-4 py-3">Time-out</th>
+                        <th>ID Number</th>
+                        <th>Name</th>
+                        <th>Time-IN</th>
+                        <th>Time-out</th>
                       </tr>
                     </thead>
                     <tbody>
                       {groupedLogs.length ? (
                         groupedLogs.map((row, idx) => (
-                          <tr key={row.idNumber || idx} className="theme-table-row">
-                            <td className="px-4 py-3">{row.idNumber ?? "N/A"}</td>
-                            <td className="px-4 py-3 font-medium text-white">{row.name}</td>
-                            <td className="px-4 py-3">
-                              <span className="rounded-full border border-[rgba(102,252,241,0.32)] bg-[rgba(102,252,241,0.12)] px-3 py-1 text-xs font-medium text-[var(--brand)]">
+                          <tr key={row.idNumber || idx}>
+                            <td>{row.idNumber ?? "N/A"}</td>
+                            <td className="font-medium text-gray-800">{row.name}</td>
+                            <td>
+                              <span className="time-in-badge">
                                 {formatAttendanceTime(row.timeIn)}
                               </span>
                             </td>
-                            <td className="px-4 py-3">
-                              <span className="rounded-full border border-[rgba(255,179,71,0.32)] bg-[rgba(255,179,71,0.12)] px-3 py-1 text-xs font-medium text-[#ffb347]">
+                            <td>
+                              <span className="time-out-badge">
                                 {formatAttendanceTime(row.timeOut)}
                               </span>
                             </td>
                           </tr>
                         ))
                       ) : (
-                        <tr className="theme-table-row">
-                          <td colSpan="4" className="px-4 py-6 text-center text-[var(--muted)]">
+                        <tr>
+                          <td colSpan="4" className="px-4 py-6 text-center text-gray-500">
                             No attendance records found{attendanceFilterDate ? ` for ${attendanceFilterDate}` : ""}.
                           </td>
                         </tr>
@@ -563,12 +592,12 @@ function RolePanel({ pageKey, role }) {
                 </div>
 
                 <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-sm text-[var(--muted)]">
-                    Showing <span className="text-[var(--text)]">{groupedLogs.length}</span> entries
+                  <div className="text-sm text-gray-500">
+                    Showing <span className="font-medium text-gray-700">{groupedLogs.length}</span> entries
                     {attendanceFilterDate ? (
                       <>
                         {" "}on{" "}
-                        <span className="text-[var(--text)]">{attendanceFilterDate}</span>
+                        <span className="font-medium text-gray-700">{attendanceFilterDate}</span>
                       </>
                     ) : null}
                   </div>
@@ -577,7 +606,7 @@ function RolePanel({ pageKey, role }) {
                       type="button"
                       onClick={() => setAttendancePage((p) => Math.max(1, p - 1))}
                       disabled={attendancePage === 1}
-                      className="theme-button-secondary rounded-xl px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                      className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Previous
                     </button>
@@ -585,7 +614,7 @@ function RolePanel({ pageKey, role }) {
                       type="button"
                       onClick={() => setAttendancePage((p) => Math.min(totalAttendancePages, p + 1))}
                       disabled={attendancePage === totalAttendancePages}
-                      className="theme-button-secondary rounded-xl px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                      className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Next
                     </button>
@@ -598,33 +627,33 @@ function RolePanel({ pageKey, role }) {
         </section>
       ) : (
         <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-          <article className="theme-panel rounded-[1.8rem] p-5">
+          <article className="card-elevated p-5">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xl font-semibold text-white">Recent Attendance Feed</h2>
-              <span className="theme-badge rounded-full px-3 py-2 text-[0.65rem] uppercase tracking-[0.24em]">Real-Time</span>
+              <h2 className="text-lg font-semibold text-gray-800">Recent Attendance Feed</h2>
+              <span className="badge badge-green text-[0.65rem] uppercase tracking-wider">Real-Time</span>
             </div>
 
-            <div className="mt-5 overflow-hidden rounded-[1.4rem] border border-[var(--line)]">
-              <table className="min-w-full text-left text-sm">
-                <thead className="theme-table-head">
+            <div className="mt-5 table-container">
+              <table className="table">
+                <thead>
                   <tr>
-                    <th className="px-4 py-3">Name</th>
-                    <th className="px-4 py-3">Role</th>
-                    <th className="px-4 py-3">Method</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Time</th>
+                    <th>Name</th>
+                    <th>Role</th>
+                    <th>Method</th>
+                    <th>Status</th>
+                    <th>Time</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sampleAttendance.map((row) => (
-                    <tr key={row.name} className="theme-table-row">
-                      <td className="px-4 py-3 font-medium text-white">{row.name}</td>
-                      <td className="px-4 py-3">{row.role}</td>
-                      <td className="px-4 py-3">{row.method}</td>
-                      <td className="px-4 py-3">
-                        <span className="rounded-full border border-white/8 bg-white/4 px-3 py-1 text-xs">{row.status}</span>
+                    <tr key={row.name}>
+                      <td className="font-medium text-gray-800">{row.name}</td>
+                      <td>{row.role}</td>
+                      <td>{row.method}</td>
+                      <td>
+                        <span className="rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">{row.status}</span>
                       </td>
-                      <td className="px-4 py-3">{row.timestamp}</td>
+                      <td>{row.timestamp}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -632,8 +661,8 @@ function RolePanel({ pageKey, role }) {
             </div>
           </article>
 
-          <article className="theme-panel rounded-[1.8rem] p-5">
-            <h2 className="text-xl font-semibold text-white">Operational Notes</h2>
+          <article className="card-elevated p-5">
+            <h2 className="text-lg font-semibold text-gray-800">Operational Notes</h2>
             <div className="mt-5 space-y-3">
               {[
                 "The new visual system uses one shared palette so the whole project feels like a single product.",
@@ -641,7 +670,7 @@ function RolePanel({ pageKey, role }) {
                 "Dashboard panels and forms now share matching surfaces, borders, and icon styling.",
                 "Your routing and data behavior stay intact, so the redesign is mostly visual and UX-oriented.",
               ].map((item) => (
-                <div key={item} className="rounded-[1.4rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4 text-sm leading-7 text-[var(--muted)]">
+                <div key={item} className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm leading-relaxed text-gray-600">
                   {item}
                 </div>
               ))}
@@ -874,7 +903,7 @@ function ClassSubjectPage() {
                 setForm(emptyClassSubjectForm);
                 setIsSubjectModalOpen(true);
               }}
-              className="theme-button-secondary inline-flex min-h-[3.5rem] items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold whitespace-nowrap"
+              className="btn btn-secondary whitespace-nowrap"
             >
               Add Subject
             </button>
@@ -893,14 +922,14 @@ function ClassSubjectPage() {
           title="Subject Records"
         >
           {pageError ? (
-            <div className="rounded-[1.4rem] border border-[rgba(255,107,107,0.22)] bg-[rgba(255,107,107,0.08)] p-4 text-sm text-[var(--danger)]">
+            <div className="alert alert-error">
               {pageError}
             </div>
           ) : null}
 
-          <div className="overflow-hidden rounded-[1.4rem] border border-[var(--line)]">
+          <div className="table-container">
             <table className="min-w-full text-left text-sm">
-              <thead className="theme-table-head">
+              <thead className="">
                 <tr>
                   <th className="px-4 py-3">Code</th>
                   <th className="px-4 py-3">Name</th>
@@ -909,36 +938,36 @@ function ClassSubjectPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr className="theme-table-row">
-                    <td colSpan="3" className="px-4 py-6 text-center text-[var(--muted)]">
+                  <tr>
+                    <td colSpan="3" className="px-4 py-6 text-center text-gray-500">
                       Loading class subjects...
                     </td>
                   </tr>
                 ) : sectionedSubjects.length ? (
                   sectionedSubjects.map((section) => (
                     <React.Fragment key={section.key}>
-                      <tr className="bg-[rgba(102,252,241,0.16)] text-white">
+                      <tr className="table-section-row">
                         <td colSpan="3" className="px-4 py-2 text-center font-semibold">
                           {section.label}
                         </td>
                       </tr>
                       {section.items.map((subject) => (
-                        <tr key={subject.id} className="theme-table-row">
-                          <td className="px-4 py-3 font-semibold text-white">{subject.subjectCode}</td>
+                        <tr key={subject.id}>
+                          <td className="px-4 py-3 font-semibold text-gray-800">{subject.subjectCode}</td>
                           <td className="px-4 py-3">{subject.subjectName}</td>
                           <td className="w-[1%] px-4 py-3 whitespace-nowrap">
                             <div className="inline-flex items-center gap-2 whitespace-nowrap">
                               <button
                                 type="button"
                                 onClick={() => handleEdit(subject)}
-                                className="inline-flex items-center justify-center rounded-xl border border-[rgba(102,252,241,0.2)] bg-[rgba(102,252,241,0.08)] px-3 py-2 text-xs font-semibold text-[var(--brand)]"
+                                className="btn btn-secondary text-xs text-green-700 border-green-200 bg-green-50"
                               >
                                 Edit
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setDeletingSubject(subject)}
-                                className="inline-flex items-center justify-center rounded-xl border border-[rgba(255,107,107,0.22)] bg-[rgba(255,107,107,0.08)] px-3 py-2 text-xs font-semibold text-[var(--danger)]"
+                                className="btn btn-danger text-xs"
                               >
                                 Delete
                               </button>
@@ -949,8 +978,8 @@ function ClassSubjectPage() {
                     </React.Fragment>
                   ))
                 ) : (
-                  <tr className="theme-table-row">
-                    <td colSpan="3" className="px-4 py-6 text-center text-[var(--muted)]">
+                  <tr>
+                    <td colSpan="3" className="px-4 py-6 text-center text-gray-500">
                       {search.trim() ? "No matching class subjects found." : "No class subjects found yet."}
                     </td>
                   </tr>
@@ -962,7 +991,7 @@ function ClassSubjectPage() {
       </div>
 
       {isSubjectModalOpen ? (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+        <div className="modal-overlay">
           <div className="w-full max-w-2xl">
             <FormCard
               title={editingId ? "Edit Class Subject" : "Add Class Subject"}
@@ -1008,13 +1037,13 @@ function ClassSubjectPage() {
                 />
 
                 <div className="flex flex-wrap gap-3 md:col-span-2">
-                  <button type="submit" disabled={saving} className="theme-button rounded-2xl px-5 py-3 font-semibold">
+                  <button type="submit" disabled={saving} className="btn btn-primary">
                     {saving ? (editingId ? "Updating..." : "Saving...") : editingId ? "Update Subject" : "Add Subject"}
                   </button>
                   <button
                     type="button"
                     onClick={resetForm}
-                    className="theme-button-secondary rounded-2xl px-5 py-3 font-semibold"
+                    className="btn btn-secondary"
                   >
                     {editingId ? "Cancel Edit" : "Close"}
                   </button>
@@ -1026,7 +1055,7 @@ function ClassSubjectPage() {
       ) : null}
 
       {deletingSubject ? (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+        <div className="modal-overlay">
           <div className="w-full max-w-md">
             <FormCard
               title="Delete Class Subject"
@@ -1036,14 +1065,14 @@ function ClassSubjectPage() {
                 <button
                   type="button"
                   onClick={handleDelete}
-                  className="rounded-2xl border border-[rgba(255,107,107,0.24)] bg-[rgba(255,107,107,0.1)] px-5 py-3 font-semibold text-[var(--danger)]"
+                  className="btn btn-danger"
                 >
                   Confirm Delete
                 </button>
                 <button
                   type="button"
                   onClick={() => setDeletingSubject(null)}
-                  className="theme-button-secondary rounded-2xl px-5 py-3 font-semibold"
+                  className="btn btn-secondary"
                 >
                   Cancel
                 </button>
@@ -1410,7 +1439,7 @@ function ClassSchedulingPage() {
               setOverlapSubjectIds([]);
               setIsScheduleModalOpen(true);
             }}
-            className="theme-button-secondary inline-flex min-h-[3.5rem] items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold whitespace-nowrap"
+            className="btn btn-secondary whitespace-nowrap"
           >
             Add Schedule
           </button>
@@ -1426,14 +1455,14 @@ function ClassSchedulingPage() {
       <div className="grid gap-4">
         <FormCard title="Schedule Records">
           {pageError ? (
-            <div className="rounded-[1.4rem] border border-[rgba(255,107,107,0.22)] bg-[rgba(255,107,107,0.08)] p-4 text-sm text-[var(--danger)]">
+            <div className="alert alert-error">
               {pageError}
             </div>
           ) : null}
 
-          <div className="overflow-hidden rounded-[1.4rem] border border-[var(--line)]">
+          <div className="table-container">
             <table className="min-w-full text-left text-sm">
-              <thead className="theme-table-head">
+              <thead className="">
                 <tr>
                   <th className="px-4 py-3">Code</th>
                   <th className="px-4 py-3">Name</th>
@@ -1444,15 +1473,15 @@ function ClassSchedulingPage() {
               </thead>
               <tbody>
                 {loadingRows ? (
-                  <tr className="theme-table-row">
-                    <td colSpan="5" className="px-4 py-6 text-center text-[var(--muted)]">
+                  <tr>
+                    <td colSpan="5" className="px-4 py-6 text-center text-gray-500">
                       Loading class schedules...
                     </td>
                   </tr>
                 ) : groupedScheduleRows.length ? (
                   groupedScheduleRows.map((group) => (
                     <React.Fragment key={group.key}>
-                      <tr className="bg-[rgba(102,252,241,0.16)] text-white">
+                      <tr className="table-section-row">
                         <td colSpan="5" className="px-4 py-2">
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <div className="text-center font-semibold sm:text-left">{group.label}</div>
@@ -1460,14 +1489,14 @@ function ClassSchedulingPage() {
                               <button
                                 type="button"
                                 onClick={() => handleEditSchedule(group)}
-                                className="inline-flex items-center justify-center rounded-xl border border-[rgba(102,252,241,0.2)] bg-[rgba(102,252,241,0.08)] px-3 py-2 text-xs font-semibold text-[var(--brand)]"
+                                className="btn btn-secondary text-xs text-green-700 border-green-200 bg-green-50"
                               >
                                 Edit
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setDeletingSchedule(group)}
-                                className="inline-flex items-center justify-center rounded-xl border border-[rgba(255,107,107,0.22)] bg-[rgba(255,107,107,0.08)] px-3 py-2 text-xs font-semibold text-[var(--danger)]"
+                                className="btn btn-danger text-xs"
                               >
                                 Delete
                               </button>
@@ -1476,8 +1505,8 @@ function ClassSchedulingPage() {
                         </td>
                       </tr>
                       {group.items.map((row) => (
-                        <tr key={row.id} className="theme-table-row">
-                          <td className="px-4 py-3 font-semibold text-white">{row.subjectCode}</td>
+                        <tr key={row.id}>
+                          <td className="px-4 py-3 font-semibold text-gray-800">{row.subjectCode}</td>
                           <td className="px-4 py-3">{row.subjectName}</td>
                           <td className="px-4 py-3">{formatScheduleDays(row.days)}</td>
                           <td className="px-4 py-3">{formatTimeRange(row.startTime, row.endTime)}</td>
@@ -1487,8 +1516,8 @@ function ClassSchedulingPage() {
                     </React.Fragment>
                   ))
                 ) : (
-                  <tr className="theme-table-row">
-                    <td colSpan="5" className="px-4 py-6 text-center text-[var(--muted)]">
+                  <tr>
+                    <td colSpan="5" className="px-4 py-6 text-center text-gray-500">
                       No class schedules found yet.
                     </td>
                   </tr>
@@ -1500,7 +1529,7 @@ function ClassSchedulingPage() {
       </div>
 
       {isScheduleModalOpen ? (
-        <div className="fixed inset-0 z-[110] overflow-y-auto bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+        <div className="modal-overlay">
           <div className="flex min-h-full items-start justify-center">
             <div className="w-full max-w-2xl py-4">
               <FormCard title={editingSchedule ? "Edit Schedule" : "Add Schedule"}>
@@ -1543,11 +1572,11 @@ function ClassSchedulingPage() {
                     required
                   />
 
-                  <div className="rounded-[1.4rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
-                    <div className="text-sm font-semibold text-white">Subject Schedule List</div>
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <div className="text-sm font-semibold text-gray-800">Subject Schedule List</div>
                     <div className="mt-4 space-y-4">
                     {loadingSubjects ? (
-                      <div className="text-sm text-[var(--muted)]">Loading subjects...</div>
+                      <div className="text-sm text-gray-500">Loading subjects...</div>
                     ) : subjectEntries.length ? (
                         subjectEntries.map((entry) => {
                           const hasOverlap = overlapSubjectIds.includes(entry.subjectId);
@@ -1556,16 +1585,16 @@ function ClassSchedulingPage() {
                           <div
                             key={entry.subjectId}
                             className={clsx(
-                              "rounded-[1.2rem] border bg-[rgba(255,255,255,0.02)] p-4 transition",
+                              "rounded-xl border bg-gray-50 p-4 transition",
                               hasOverlap
-                                ? "border-[rgba(255,107,107,0.55)] bg-[rgba(255,107,107,0.08)] shadow-[0_0_0_1px_rgba(255,107,107,0.2)]"
-                                : "border-[var(--line)]",
+                                ? "border-red-300 bg-red-50 shadow-[0_0_0_1px_rgba(220,38,38,0.2)]"
+                                : "border-gray-200",
                             )}
                           >
-                            <div className="text-sm font-semibold text-white">{entry.subjectCode}</div>
-                            <div className="mt-1 text-sm text-[var(--muted)]">{entry.subjectName}</div>
+                            <div className="text-sm font-semibold text-gray-800">{entry.subjectCode}</div>
+                            <div className="mt-1 text-sm text-gray-500">{entry.subjectName}</div>
                             {hasOverlap ? (
-                              <div className="mt-3 text-xs font-medium text-[var(--danger)]">
+                              <div className="mt-3 text-xs font-medium text-red-600">
                                 This schedule overlaps with another subject time.
                               </div>
                             ) : null}
@@ -1591,9 +1620,9 @@ function ClassSchedulingPage() {
                           );
                         })
                       ) : form.yearLevel && form.semester ? (
-                        <div className="text-sm text-[var(--muted)]">No subject found.</div>
+                        <div className="text-sm text-gray-500">No subject found.</div>
                       ) : (
-                        <div className="text-sm text-[var(--muted)]">
+                        <div className="text-sm text-gray-500">
                           Select a year level and semester to display the available subjects automatically.
                         </div>
                       )}
@@ -1601,7 +1630,7 @@ function ClassSchedulingPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-3">
-                    <button type="submit" disabled={saving} className="theme-button rounded-2xl px-5 py-3 font-semibold">
+                    <button type="submit" disabled={saving} className="btn btn-primary">
                       {saving ? (editingSchedule ? "Updating..." : "Saving...") : editingSchedule ? "Update Schedule" : "Save Schedule"}
                     </button>
                     <button
@@ -1609,7 +1638,7 @@ function ClassSchedulingPage() {
                       onClick={() => {
                         resetScheduleForm();
                       }}
-                      className="theme-button-secondary rounded-2xl px-5 py-3 font-semibold"
+                      className="btn btn-secondary"
                     >
                       Cancel
                     </button>
@@ -1622,7 +1651,7 @@ function ClassSchedulingPage() {
       ) : null}
 
       {deletingSchedule ? (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+        <div className="modal-overlay">
           <div className="w-full max-w-2xl">
             <FormCard
               title="Delete Class Schedule"
@@ -1632,14 +1661,14 @@ function ClassSchedulingPage() {
                 <button
                   type="button"
                   onClick={handleDeleteSchedule}
-                  className="rounded-2xl border border-[rgba(255,107,107,0.24)] bg-[rgba(255,107,107,0.1)] px-5 py-3 font-semibold text-[var(--danger)]"
+                  className="btn btn-danger"
                 >
                   Confirm Delete
                 </button>
                 <button
                   type="button"
                   onClick={() => setDeletingSchedule(null)}
-                  className="theme-button-secondary rounded-2xl px-5 py-3 font-semibold"
+                  className="btn btn-secondary"
                 >
                   Cancel
                 </button>
@@ -1939,7 +1968,7 @@ function AdminAccountPage() {
                 small
               />
             </div>
-            <button type="button" onClick={() => setIsAddUserModalOpen(true)} className="theme-button-secondary inline-flex min-h-[3.5rem] items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold whitespace-nowrap">
+            <button type="button" onClick={() => setIsAddUserModalOpen(true)} className="btn btn-secondary whitespace-nowrap">
               Add User Account
             </button>
           </div>
@@ -1967,11 +1996,11 @@ function AdminAccountPage() {
           {selectedAccountView === "faculty" ? (
             <div className="space-y-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-sm text-[var(--muted)]">
-                  Showing <span className="text-[var(--text)]">{paginatedFaculty.length}</span> of <span className="text-[var(--text)]">{filteredFaculty.length}</span> faculty accounts
+                <div className="text-sm text-gray-500">
+                  Showing <span className="text-gray-700">{paginatedFaculty.length}</span> of <span className="text-gray-700">{filteredFaculty.length}</span> faculty accounts
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-[var(--muted)]">Rows per page</span>
+                  <span className="text-sm text-gray-500">Rows per page</span>
                   <div className="w-24">
                     <SelectField
                       label="Rows per page"
@@ -1992,7 +2021,7 @@ function AdminAccountPage() {
               <div className="overflow-x-auto">
               <table className="min-w-full border-separate border-spacing-y-3">
                 <thead>
-                  <tr className="text-left text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
+                  <tr className="text-left text-xs uppercase tracking-[0.18em] text-gray-500">
                     <th className="px-4 py-2">ID Number</th>
                     <th className="px-4 py-2">Full Name</th>
                     <th className="px-4 py-2">Username/Email</th>
@@ -2003,7 +2032,7 @@ function AdminAccountPage() {
                 <tbody>
                   {paginatedFaculty.length ? (
                     paginatedFaculty.map((faculty) => (
-                      <tr key={faculty.id} className="rounded-[1.3rem] border border-[var(--line)] bg-[var(--panel-soft)] text-sm text-[var(--text)]">
+                      <tr key={faculty.id} className="account-table-row text-sm text-gray-700">
                         <td className="rounded-l-[1.3rem] px-4 py-4 align-top">{faculty.idNumber ?? "N/A"}</td>
                         <td className="px-4 py-4 align-top">
                           <div className="account-name-cell">
@@ -2013,7 +2042,7 @@ function AdminAccountPage() {
                         </td>
                         <td className="px-4 py-4 align-top">
                           <div>{faculty.username ?? "N/A"}</div>
-                          <div className="mt-1 text-xs text-[var(--muted)]">{faculty.email ?? "N/A"}</div>
+                          <div className="mt-1 text-xs text-gray-500">{faculty.email ?? "N/A"}</div>
                         </td>
                         <td className="px-4 py-4 align-top">{faculty.password ?? "N/A"}</td>
                         <td className="rounded-r-[1.3rem] px-4 py-4 align-top">
@@ -2033,7 +2062,7 @@ function AdminAccountPage() {
                                       },
                                 );
                               }}
-                              className="theme-button-secondary inline-flex min-w-[9.5rem] items-center justify-between gap-3 rounded-xl px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.16em]"
+                              className="btn btn-secondary min-w-[9.5rem] justify-between text-xs uppercase tracking-wider"
                             >
                               <span className="inline-flex items-center gap-2">
                                 <EllipsisVertical size={15} />
@@ -2053,7 +2082,7 @@ function AdminAccountPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={5} className="rounded-[1.3rem] border border-[var(--line)] bg-[var(--panel-soft)] px-4 py-6 text-center text-sm text-[var(--muted)]">
+                      <td colSpan={5} className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
                         No faculty accounts match your search.
                       </td>
                     </tr>
@@ -2062,16 +2091,16 @@ function AdminAccountPage() {
               </table>
               </div>
 
-              <div className="flex flex-col gap-3 border-t border-[var(--line)] pt-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-sm text-[var(--muted)]">
-                  Page <span className="text-[var(--text)]">{facultyPage}</span> of <span className="text-[var(--text)]">{totalFacultyPages}</span>
+              <div className="flex flex-col gap-3 border-t border-gray-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm text-gray-500">
+                  Page <span className="text-gray-700">{facultyPage}</span> of <span className="text-gray-700">{totalFacultyPages}</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => setFacultyPage((prev) => Math.max(1, prev - 1))}
                     disabled={facultyPage === 1}
-                    className="theme-button-secondary rounded-xl px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                    className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Previous
                   </button>
@@ -2079,7 +2108,7 @@ function AdminAccountPage() {
                     type="button"
                     onClick={() => setFacultyPage((prev) => Math.min(totalFacultyPages, prev + 1))}
                     disabled={facultyPage === totalFacultyPages}
-                    className="theme-button-secondary rounded-xl px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                    className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Next
                   </button>
@@ -2089,11 +2118,11 @@ function AdminAccountPage() {
           ) : selectedAccountView === "student" ? (
             <div className="space-y-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-sm text-[var(--muted)]">
-                  Showing <span className="text-[var(--text)]">{paginatedStudents.length}</span> of <span className="text-[var(--text)]">{filteredStudents.length}</span> student accounts
+                <div className="text-sm text-gray-500">
+                  Showing <span className="text-gray-700">{paginatedStudents.length}</span> of <span className="text-gray-700">{filteredStudents.length}</span> student accounts
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-[var(--muted)]">Rows per page</span>
+                  <span className="text-sm text-gray-500">Rows per page</span>
                   <div className="w-24">
                     <SelectField
                       label="Rows per page"
@@ -2114,7 +2143,7 @@ function AdminAccountPage() {
               <div className="overflow-x-auto">
               <table className="min-w-full border-separate border-spacing-y-3">
                 <thead>
-                  <tr className="text-left text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
+                  <tr className="text-left text-xs uppercase tracking-[0.18em] text-gray-500">
                     <th className="px-4 py-2">ID Number</th>
                     <th className="px-4 py-2">Full Name</th>
                     <th className="px-4 py-2">Username/Email</th>
@@ -2125,7 +2154,7 @@ function AdminAccountPage() {
                 <tbody>
                   {paginatedStudents.length ? (
                     paginatedStudents.map((student) => (
-                      <tr key={student.id} className="rounded-[1.3rem] border border-[var(--line)] bg-[var(--panel-soft)] text-sm text-[var(--text)]">
+                      <tr key={student.id} className="account-table-row text-sm text-gray-700">
                         <td className="rounded-l-[1.3rem] px-4 py-4 align-top">{student.idNumber ?? "N/A"}</td>
                         <td className="px-4 py-4 align-top">
                           <div className="account-name-cell">
@@ -2135,7 +2164,7 @@ function AdminAccountPage() {
                         </td>
                         <td className="px-4 py-4 align-top">
                           <div>{student.username ?? "N/A"}</div>
-                          <div className="mt-1 text-xs text-[var(--muted)]">{student.email ?? "N/A"}</div>
+                          <div className="mt-1 text-xs text-gray-500">{student.email ?? "N/A"}</div>
                         </td>
                         <td className="px-4 py-4 align-top">{student.password ?? "N/A"}</td>
                         <td className="rounded-r-[1.3rem] px-4 py-4 align-top">
@@ -2155,7 +2184,7 @@ function AdminAccountPage() {
                                       },
                                 );
                               }}
-                              className="theme-button-secondary inline-flex min-w-[9.5rem] items-center justify-between gap-3 rounded-xl px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.16em]"
+                              className="btn btn-secondary min-w-[9.5rem] justify-between text-xs uppercase tracking-wider"
                             >
                               <span className="inline-flex items-center gap-2">
                                 <EllipsisVertical size={15} />
@@ -2175,7 +2204,7 @@ function AdminAccountPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={5} className="rounded-[1.3rem] border border-[var(--line)] bg-[var(--panel-soft)] px-4 py-6 text-center text-sm text-[var(--muted)]">
+                      <td colSpan={5} className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
                         No student accounts match your search.
                       </td>
                     </tr>
@@ -2184,16 +2213,16 @@ function AdminAccountPage() {
               </table>
               </div>
 
-              <div className="flex flex-col gap-3 border-t border-[var(--line)] pt-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-sm text-[var(--muted)]">
-                  Page <span className="text-[var(--text)]">{studentPage}</span> of <span className="text-[var(--text)]">{totalStudentPages}</span>
+              <div className="flex flex-col gap-3 border-t border-gray-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm text-gray-500">
+                  Page <span className="text-gray-700">{studentPage}</span> of <span className="text-gray-700">{totalStudentPages}</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => setStudentPage((prev) => Math.max(1, prev - 1))}
                     disabled={studentPage === 1}
-                    className="theme-button-secondary rounded-xl px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                    className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Previous
                   </button>
@@ -2201,7 +2230,7 @@ function AdminAccountPage() {
                     type="button"
                     onClick={() => setStudentPage((prev) => Math.min(totalStudentPages, prev + 1))}
                     disabled={studentPage === totalStudentPages}
-                    className="theme-button-secondary rounded-xl px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                    className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Next
                   </button>
@@ -2217,12 +2246,12 @@ function AdminAccountPage() {
                   <Field label="Middle Name" value={form.middleName} onChange={(value) => setForm((prev) => ({ ...prev, middleName: value }))} />
                   <Field label="Last Name" value={form.lastName} onChange={(value) => setForm((prev) => ({ ...prev, lastName: value }))} />
                   <Field label="Email" type="email" value={form.email} onChange={(value) => setForm((prev) => ({ ...prev, email: value }))} />
-                  <button type="submit" className="theme-button md:col-span-2 justify-self-start rounded-2xl px-5 py-4 font-semibold">
+                  <button type="submit" className="btn btn-primary md:col-span-2 justify-self-start">
                     Save Profile
                   </button>
                 </form>
 
-                <div className="border-t border-[var(--line)] pt-4">
+                <div className="border-t border-gray-200 pt-4">
                   <FormCard
                     title="Change Password"
                     subtitle=""
@@ -2233,7 +2262,7 @@ function AdminAccountPage() {
                       <div className="md:col-span-2">
                         <Field label="Confirm New Password" type="password" allowVisibilityToggle value={passwordForm.confirmNewPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, confirmNewPassword: value }))} />
                       </div>
-                      <button type="submit" className="theme-button md:col-span-2 justify-self-start rounded-2xl px-5 py-4 font-semibold">
+                      <button type="submit" className="btn btn-primary md:col-span-2 justify-self-start">
                         Change Password
                       </button>
                     </form>
@@ -2251,11 +2280,11 @@ function AdminAccountPage() {
                   <StatChip label="Role" value={roleLabels[selectedAccount.role] ?? selectedAccount.role} />
                   <StatChip label="Status" value={selectedAccount.status ?? "Unknown"} />
                 </div>
-                <p className="md:col-span-2 text-sm text-[var(--muted)]">This view is read-only so you can quickly inspect accurate faculty or student account information.</p>
+                <p className="md:col-span-2 text-sm text-gray-500">This view is read-only so you can quickly inspect accurate faculty or student account information.</p>
               </form>
             )
           ) : (
-            <div className="rounded-[1.4rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4 text-sm text-[var(--muted)]">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
               No account data is available for the selected view.
             </div>
           )}
@@ -2265,7 +2294,7 @@ function AdminAccountPage() {
 
       {isAddUserModalOpen
         ? createPortal(
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+            <div className="modal-overlay">
               <div className="w-full max-w-3xl max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-h-[calc(100dvh-3rem)]">
                 <FormCard title="Add User Account">
                   <form onSubmit={submitNewUser} className="grid gap-4 md:grid-cols-2">
@@ -2290,10 +2319,10 @@ function AdminAccountPage() {
                     <Field required label="Password" type="password" allowVisibilityToggle value={newUser.password} onChange={(value) => setNewUser((prev) => ({ ...prev, password: value }))} />
                     <Field required label="Confirm Password" type="password" allowVisibilityToggle value={newUser.confirmPassword} onChange={(value) => setNewUser((prev) => ({ ...prev, confirmPassword: value }))} />
                     <div className="md:col-span-2 flex flex-col gap-3 sm:flex-row sm:justify-end">
-                      <button type="button" onClick={() => setIsAddUserModalOpen(false)} className="rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] px-5 py-4 text-sm font-semibold text-[var(--text)] transition hover:border-[rgba(108,240,255,0.24)]">
+                      <button type="button" onClick={() => setIsAddUserModalOpen(false)} className="btn btn-secondary">
                         Cancel
                       </button>
-                      <button type="submit" className="theme-button-secondary rounded-2xl px-5 py-4 font-semibold">
+                      <button type="submit" className="btn btn-secondary">
                         Add Account
                       </button>
                     </div>
@@ -2309,7 +2338,7 @@ function AdminAccountPage() {
         ? createPortal(
             <div
               data-faculty-actions-menu
-              className="fixed z-[115] w-52 origin-top-right rounded-[1.2rem] border border-[var(--line)] bg-[rgba(11,18,27,0.98)] p-2 shadow-[0_20px_50px_rgba(0,0,0,0.32)] animate-fade-up"
+              className="fixed z-[115] w-52 origin-top-right rounded-xl border border-gray-200 bg-white p-2 shadow-xl animate-fade-up"
               style={{
                 top: `${Math.max(16, openFacultyActionsMenu.top)}px`,
                 left: `${Math.max(16, openFacultyActionsMenu.left)}px`,
@@ -2327,7 +2356,7 @@ function AdminAccountPage() {
                         setViewedFaculty(activeFaculty);
                         setOpenFacultyActionsMenu(null);
                       }}
-                      className="flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-[var(--text)] transition hover:bg-white/5"
+                      className="flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-gray-700 transition hover:bg-gray-50"
                     >
                       View/Edit
                     </button>
@@ -2340,7 +2369,7 @@ function AdminAccountPage() {
                         });
                         setOpenFacultyActionsMenu(null);
                       }}
-                      className="mt-1 flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-[var(--text)] transition hover:bg-white/5"
+                      className="mt-1 flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-gray-700 transition hover:bg-gray-50"
                     >
                       {activeFaculty.status === "Active" ? "Deactivate" : "Activate"}
                     </button>
@@ -2353,7 +2382,7 @@ function AdminAccountPage() {
                         });
                         setOpenFacultyActionsMenu(null);
                       }}
-                      className="mt-1 flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-[var(--danger)] transition hover:bg-[rgba(255,107,107,0.08)]"
+                      className="mt-1 flex w-full items-center rounded-lg px-3 py-2.5 text-left text-sm text-red-600 transition hover:bg-red-50"
                     >
                       Delete
                     </button>
@@ -2369,7 +2398,7 @@ function AdminAccountPage() {
         ? createPortal(
             <div
               data-student-actions-menu
-              className="fixed z-[115] w-52 origin-top-right rounded-[1.2rem] border border-[var(--line)] bg-[rgba(11,18,27,0.98)] p-2 shadow-[0_20px_50px_rgba(0,0,0,0.32)] animate-fade-up"
+              className="fixed z-[115] w-52 origin-top-right rounded-xl border border-gray-200 bg-white p-2 shadow-xl animate-fade-up"
               style={{
                 top: `${Math.max(16, openStudentActionsMenu.top)}px`,
                 left: `${Math.max(16, openStudentActionsMenu.left)}px`,
@@ -2387,7 +2416,7 @@ function AdminAccountPage() {
                         setViewedStudent(activeStudent);
                         setOpenStudentActionsMenu(null);
                       }}
-                      className="flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-[var(--text)] transition hover:bg-white/5"
+                      className="flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-gray-700 transition hover:bg-gray-50"
                     >
                       View/Edit
                     </button>
@@ -2400,7 +2429,7 @@ function AdminAccountPage() {
                         });
                         setOpenStudentActionsMenu(null);
                       }}
-                      className="mt-1 flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-[var(--text)] transition hover:bg-white/5"
+                      className="mt-1 flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-gray-700 transition hover:bg-gray-50"
                     >
                       {activeStudent.status === "Active" ? "Deactivate" : "Activate"}
                     </button>
@@ -2413,7 +2442,7 @@ function AdminAccountPage() {
                         });
                         setOpenStudentActionsMenu(null);
                       }}
-                      className="mt-1 flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-[var(--danger)] transition hover:bg-[rgba(255,107,107,0.08)]"
+                      className="mt-1 flex w-full items-center rounded-lg px-3 py-2.5 text-left text-sm text-red-600 transition hover:bg-red-50"
                     >
                       Delete
                     </button>
@@ -2427,7 +2456,7 @@ function AdminAccountPage() {
 
       {pendingFacultyAction
         ? createPortal(
-            <div className="fixed inset-0 z-[118] flex items-center justify-center bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+            <div className="modal-overlay">
               <div className="w-full max-w-md">
                 <FormCard
                   title={`${pendingFacultyAction.type === "delete" ? "Delete" : pendingFacultyAction.type === "deactivate" ? "Deactivate" : "Activate"} Faculty Account`}
@@ -2443,7 +2472,7 @@ function AdminAccountPage() {
                     <button
                       type="button"
                       onClick={() => setPendingFacultyAction(null)}
-                      className="rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] px-5 py-3.5 text-sm font-semibold text-[var(--text)] transition hover:border-[rgba(108,240,255,0.24)]"
+                      className="btn btn-secondary"
                     >
                       Cancel
                     </button>
@@ -2477,8 +2506,8 @@ function AdminAccountPage() {
                       className={clsx(
                         "rounded-2xl px-5 py-3.5 text-sm font-semibold",
                         pendingFacultyAction.type === "delete"
-                          ? "border border-[rgba(255,107,107,0.22)] bg-[rgba(255,107,107,0.08)] text-[var(--danger)]"
-                          : "theme-button-secondary",
+                          ? "btn btn-danger"
+                          : "btn btn-secondary",
                       )}
                     >
                       Confirm
@@ -2493,7 +2522,7 @@ function AdminAccountPage() {
 
       {pendingStudentAction
         ? createPortal(
-            <div className="fixed inset-0 z-[118] flex items-center justify-center bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+            <div className="modal-overlay">
               <div className="w-full max-w-md">
                 <FormCard
                   title={`${pendingStudentAction.type === "delete" ? "Delete" : pendingStudentAction.type === "deactivate" ? "Deactivate" : "Activate"} Student Account`}
@@ -2509,7 +2538,7 @@ function AdminAccountPage() {
                     <button
                       type="button"
                       onClick={() => setPendingStudentAction(null)}
-                      className="rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] px-5 py-3.5 text-sm font-semibold text-[var(--text)] transition hover:border-[rgba(108,240,255,0.24)]"
+                      className="btn btn-secondary"
                     >
                       Cancel
                     </button>
@@ -2537,8 +2566,8 @@ function AdminAccountPage() {
                       className={clsx(
                         "rounded-2xl px-5 py-3.5 text-sm font-semibold",
                         pendingStudentAction.type === "delete"
-                          ? "border border-[rgba(255,107,107,0.22)] bg-[rgba(255,107,107,0.08)] text-[var(--danger)]"
-                          : "theme-button-secondary",
+                          ? "btn btn-danger"
+                          : "btn btn-secondary",
                       )}
                     >
                       Confirm
@@ -2553,7 +2582,7 @@ function AdminAccountPage() {
 
       {viewedFaculty
         ? createPortal(
-            <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+            <div className="modal-overlay">
               <div className="w-full max-w-2xl">
                 <FormCard title="Faculty Account Details">
                   {facultyEditForm ? (
@@ -2602,11 +2631,11 @@ function AdminAccountPage() {
                         <button
                           type="button"
                           onClick={() => setViewedFaculty(null)}
-                          className="rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] px-5 py-3.5 text-sm font-semibold text-[var(--text)] transition hover:border-[rgba(108,240,255,0.24)]"
+                          className="btn btn-secondary"
                         >
                           Cancel
                         </button>
-                        <button type="submit" className="theme-button rounded-2xl px-5 py-3.5 font-semibold">
+                        <button type="submit" className="btn btn-primary">
                           Save Changes
                         </button>
                       </div>
@@ -2621,7 +2650,7 @@ function AdminAccountPage() {
 
       {viewedStudent
         ? createPortal(
-            <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
+            <div className="modal-overlay">
               <div className="w-full max-w-2xl">
                 <FormCard title="Student Account Details">
                   {studentEditForm ? (
@@ -2670,11 +2699,11 @@ function AdminAccountPage() {
                         <button
                           type="button"
                           onClick={() => setViewedStudent(null)}
-                          className="rounded-2xl border border-[var(--line)] bg-[var(--panel-soft)] px-5 py-3.5 text-sm font-semibold text-[var(--text)] transition hover:border-[rgba(108,240,255,0.24)]"
+                          className="btn btn-secondary"
                         >
                           Cancel
                         </button>
-                        <button type="submit" className="theme-button rounded-2xl px-5 py-3.5 font-semibold">
+                        <button type="submit" className="btn btn-primary">
                           Save Changes
                         </button>
                       </div>
@@ -2783,7 +2812,7 @@ function SelfAccountPage({ role }) {
           <div className="md:col-span-2">
             <Field label="Department / Section" value={form.department} onChange={(value) => setForm((prev) => ({ ...prev, department: value }))} />
           </div>
-          <button type="submit" className="theme-button md:col-span-2 justify-self-start rounded-2xl px-5 py-4 font-semibold">
+          <button type="submit" className="btn btn-primary md:col-span-2 justify-self-start">
             Update Account
           </button>
         </form>
@@ -2797,7 +2826,7 @@ function SelfAccountPage({ role }) {
             <div className="md:col-span-2">
               <Field label="Confirm New Password" type="password" allowVisibilityToggle value={passwordForm.confirmNewPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, confirmNewPassword: value }))} />
             </div>
-            <button type="submit" className="theme-button md:col-span-2 justify-self-start rounded-2xl px-5 py-4 font-semibold">
+            <button type="submit" className="btn btn-primary md:col-span-2 justify-self-start">
               Change Password
             </button>
           </form>
@@ -2813,27 +2842,27 @@ function EditableUserCard({ user, onSave, onToggleStatus, onDelete }) {
   React.useEffect(() => setDraft(user), [user]);
 
   return (
-    <article className="rounded-[1.6rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
+    <article className="card p-4">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="theme-icon-ring">
+          <span className="inline-flex items-center justify-center size-9 rounded-lg bg-gray-100 text-green-700">
             <Users size={18} />
           </span>
           <div>
-            <div className="font-semibold text-white">
+            <div className="font-semibold text-gray-800">
               {[user.firstName, user.middleName, user.lastName].filter(Boolean).join(" ")}
             </div>
-            <div className="text-xs text-[var(--muted)]">
+            <div className="text-xs text-gray-500">
               {roleLabels[user.role]} | {user.status}
             </div>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={onToggleStatus} className="theme-button-secondary rounded-xl px-3 py-2 text-xs font-semibold">
+          <button type="button" onClick={onToggleStatus} className="btn btn-secondary text-xs">
             {user.status === "Active" ? "Deactivate" : "Activate"}
           </button>
-          <button type="button" onClick={onDelete} className="rounded-xl border border-[rgba(255,107,107,0.22)] bg-[rgba(255,107,107,0.08)] px-3 py-2 text-xs font-semibold text-[var(--danger)]">
+          <button type="button" onClick={onDelete} className="btn btn-danger text-xs">
             Delete
           </button>
         </div>
@@ -2860,7 +2889,7 @@ function EditableUserCard({ user, onSave, onToggleStatus, onDelete }) {
         />
       </div>
 
-      <button type="button" onClick={() => onSave(draft)} className="theme-button mt-4 rounded-xl px-4 py-3 text-sm font-semibold">
+      <button type="button" onClick={() => onSave(draft)} className="btn btn-primary mt-4">
         Update User
       </button>
     </article>
@@ -2915,19 +2944,18 @@ function formatScheduleDays(days) {
 
 function HeroClockCard({ time, date, timezone }) {
   return (
-    <div className="theme-panel rounded-[1.8rem] p-5 sm:p-6">
+    <div className="card-elevated p-5 sm:p-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.28em] text-[var(--muted)]">Live Manila Time</p>
-          <p className="mt-2 text-sm text-[var(--muted)]">{timezone}</p>
+          <p className="text-xs font-medium uppercase tracking-wider text-gray-500">Live Manila Time</p>
+          <p className="mt-2 text-sm text-gray-500">{timezone}</p>
         </div>
-        <div className="animate-pulse-soft flex items-center gap-2 rounded-full border border-[rgba(102,252,241,0.24)] bg-[rgba(102,252,241,0.08)] px-3 py-2 text-xs text-[var(--brand)]">
-          <span className="size-2 rounded-full bg-[var(--brand)]" />
+        <div className="online-dot">
           Online
         </div>
       </div>
-      <div className="mt-8 text-4xl font-semibold tracking-[-0.04em] text-white sm:text-5xl">{time}</div>
-      <div className="mt-3 text-base text-[var(--muted)]">{date}</div>
+      <div className="mt-8 text-4xl font-semibold text-gray-800 sm:text-5xl">{time}</div>
+      <div className="mt-3 text-base text-gray-500">{date}</div>
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <StatChip label="Mode" value="Dual Verification" />
         <StatChip label="Status" value="Monitoring Active" />
@@ -2938,13 +2966,13 @@ function HeroClockCard({ time, date, timezone }) {
 
 function HeroClockSkeleton() {
   return (
-    <div className="theme-panel rounded-[1.8rem] p-5 sm:p-6">
-      <div className="skeleton h-5 w-32 rounded-full" />
-      <div className="skeleton mt-6 h-16 w-full rounded-2xl" />
-      <div className="skeleton mt-4 h-6 w-2/3 rounded-full" />
+    <div className="card-elevated p-5 sm:p-6">
+      <div className="skeleton h-5 w-32" />
+      <div className="skeleton mt-6 h-16 w-full" />
+      <div className="skeleton mt-4 h-6 w-2/3" />
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
-        <div className="skeleton h-22 rounded-3xl" />
-        <div className="skeleton h-22 rounded-3xl" />
+        <div className="skeleton h-22" />
+        <div className="skeleton h-22" />
       </div>
     </div>
   );
@@ -2953,59 +2981,25 @@ function HeroClockSkeleton() {
 function DashboardSkeleton() {
   return (
     <div className="space-y-4">
-      <div className="hero-card rounded-[1.9rem] p-6">
-        <div className="skeleton h-4 w-28 rounded-full" />
-        <div className="skeleton mt-5 h-10 w-2/3 rounded-2xl" />
-        <div className="skeleton mt-3 h-18 w-full rounded-2xl" />
+      <div className="hero-card p-6">
+        <div className="skeleton h-4 w-28" />
+        <div className="skeleton mt-5 h-10 w-2/3" />
+        <div className="skeleton mt-3 h-18 w-full" />
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="theme-panel rounded-[1.7rem] p-5">
-            <div className="skeleton h-4 w-28 rounded-full" />
-            <div className="skeleton mt-4 h-10 w-24 rounded-2xl" />
-            <div className="skeleton mt-4 h-4 w-36 rounded-full" />
+          <div key={index} className="card-elevated p-5">
+            <div className="skeleton h-4 w-28" />
+            <div className="skeleton mt-4 h-10 w-24" />
+            <div className="skeleton mt-4 h-4 w-36" />
           </div>
         ))}
       </div>
       <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <div className="theme-panel h-80 rounded-[1.8rem] skeleton" />
-        <div className="theme-panel h-80 rounded-[1.8rem] skeleton" />
+        <div className="card-elevated h-80 skeleton" />
+        <div className="card-elevated h-80 skeleton" />
       </div>
     </div>
-  );
-}
-
-function ThemeBackdrop() {
-  return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
-      <div className="theme-backdrop-base absolute inset-0" />
-      <div className="texture-overlay absolute inset-0 opacity-60" />
-      <div className="theme-backdrop-sheen absolute inset-0" />
-      <div className="theme-backdrop-orb theme-backdrop-orb-left absolute -left-20 top-8 h-80 w-80 rounded-full blur-3xl" />
-      <div className="theme-backdrop-orb theme-backdrop-orb-right absolute right-[-6rem] top-16 h-[28rem] w-[28rem] rounded-full blur-3xl" />
-      <div className="theme-backdrop-orb theme-backdrop-orb-bottom absolute bottom-[-8rem] left-1/3 h-80 w-80 rounded-full blur-3xl" />
-    </div>
-  );
-}
-
-function ThemeToggleButton({ theme, onToggle, compact = false }) {
-  const isLight = theme === "light";
-  const Icon = isLight ? Moon : Sun;
-
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className={clsx(
-        "theme-toggle group inline-flex items-center justify-center gap-2 rounded-full transition",
-        compact ? "h-11 min-w-11 px-3" : "h-11 min-w-11 px-4",
-      )}
-      aria-label={isLight ? "Switch to dark mode" : "Switch to light mode"}
-      title={isLight ? "Dark mode" : "Light mode"}
-    >
-      <Icon size={18} />
-      {!compact ? <span className="text-sm font-medium">{isLight ? "Dark" : "Light"}</span> : null}
-    </button>
   );
 }
 
@@ -3014,8 +3008,8 @@ function BrandLockup({ caption }) {
     <div className="flex items-center gap-3">
       <BrandMark />
       <div>
-        <div className="font-display text-2xl leading-none text-white">FRANCIS KEY</div>
-        {caption ? <div className="mt-1 text-[0.68rem] uppercase tracking-[0.28em] text-[var(--muted)]">{caption}</div> : null}
+        <div className="font-display text-lg font-bold leading-none text-white tracking-tight">FRANCIS KEY</div>
+        {caption ? <div className="mt-1 text-[0.65rem] uppercase tracking-wider text-white/50">{caption}</div> : null}
       </div>
     </div>
   );
@@ -3025,32 +3019,30 @@ function BrandMark({ compact = false }) {
   return (
     <span
       className={clsx(
-        "relative inline-flex items-center justify-center overflow-hidden rounded-[1.4rem] border border-[rgba(102,252,241,0.35)] bg-[linear-gradient(145deg,rgba(102,252,241,0.22),rgba(69,162,158,0.08)_52%,rgba(11,12,16,0.42)_100%)] shadow-[0_20px_40px_rgba(0,0,0,0.28)]",
-        compact ? "size-12 rounded-[1rem]" : "size-14",
+        "relative inline-flex items-center justify-center overflow-hidden rounded-xl border border-white/15 bg-white/10 shadow-lg",
+        compact ? "size-10 rounded-lg" : "size-11",
       )}
     >
-      <span className="absolute inset-[3px] rounded-[1.2rem] border border-white/8" />
       <img
         src="/sfcg-logo.jpeg"
         alt="Saint Francis College logo"
-        className={clsx("relative z-10 rounded-[1rem] object-cover", compact ? "h-8 w-8" : "h-10 w-10")}
+        className={clsx("relative z-10 rounded-lg object-cover", compact ? "h-7 w-7" : "h-8 w-8")}
       />
-      <span className="absolute right-2 top-2 size-1.5 rounded-full bg-[var(--brand)] shadow-[0_0_12px_var(--brand)]" />
     </span>
   );
 }
 
 function HeaderBlock({ title, description, rightContent = null, badgeLabel = "Account Management" }) {
   return (
-    <section className="hero-card rounded-[1.9rem] p-6 sm:p-7">
+    <section className="hero-card p-6 sm:p-7">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <div className="theme-badge inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs uppercase tracking-[0.22em]">
+          <div className="badge badge-white inline-flex items-center gap-2 text-xs uppercase tracking-wider">
             <BookUser size={14} />
             {badgeLabel}
           </div>
-          {title ? <h1 className="mt-4 text-2xl font-semibold text-white sm:text-[2rem]">{title}</h1> : null}
-          {description ? <p className="mt-2 max-w-3xl text-sm leading-7 text-[var(--muted)]">{description}</p> : null}
+          {title ? <h1 className="mt-4 text-2xl font-semibold text-white sm:text-[1.75rem]">{title}</h1> : null}
+          {description ? <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/70">{description}</p> : null}
         </div>
         {rightContent ? <div className="w-full lg:w-auto">{rightContent}</div> : null}
       </div>
@@ -3060,9 +3052,9 @@ function HeaderBlock({ title, description, rightContent = null, badgeLabel = "Ac
 
 function FormCard({ title, subtitle, children }) {
   return (
-    <section className="theme-panel rounded-[1.8rem] p-5">
-      <h2 className="text-xl font-semibold text-white">{title}</h2>
-      {subtitle ? <p className="mt-2 text-sm text-[var(--muted)]">{subtitle}</p> : null}
+    <section className="card-elevated p-5">
+      <h2 className="text-lg font-semibold text-gray-800">{title}</h2>
+      {subtitle ? <p className="mt-2 text-sm text-gray-500">{subtitle}</p> : null}
       <div className="mt-5">{children}</div>
     </section>
   );
@@ -3077,14 +3069,14 @@ function Field({ label, value, onChange, placeholder, type = "text", hideLabel =
   return (
     <label className="block">
       {!hideLabel ? (
-        <span className={clsx("mb-2 flex items-center gap-2 font-medium text-[var(--text)]", small ? "text-xs" : "text-sm")}>
+        <span className={clsx("mb-2 flex items-center gap-2 font-medium text-gray-700", small ? "text-xs" : "text-sm")}>
           <span>{label}</span>
-          {required ? <Asterisk size={12} className="text-[var(--brand)]" /> : null}
+          {required ? <Asterisk size={12} className="text-green-600" /> : null}
         </span>
       ) : null}
       <span className="relative block">
         {Icon ? (
-          <span className={clsx("pointer-events-none absolute top-1/2 -translate-y-1/2", isSignin ? "left-3 text-[rgba(187,211,214,0.6)]" : "left-4 text-[var(--muted)]")}>
+          <span className={clsx("pointer-events-none absolute top-1/2 -translate-y-1/2", isSignin ? "left-3 text-gray-400" : "left-4 text-gray-400")}>
             <Icon size={isSignin ? 18 : 17} />
           </span>
         ) : null}
@@ -3095,24 +3087,24 @@ function Field({ label, value, onChange, placeholder, type = "text", hideLabel =
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
           className={clsx(
-            "theme-input w-full outline-none transition",
+            "w-full outline-none transition",
             isSignin
               ? "signin-input rounded-none px-0 pb-0 pt-0 text-base"
               : small
-                ? "rounded-2xl px-3 py-3 text-sm"
-                : "rounded-2xl px-4 py-4 text-sm",
+                ? "form-input rounded-lg px-3 py-2.5 text-sm"
+                : "form-input rounded-lg px-4 py-3 text-sm",
             Icon && isSignin ? "pl-11 pr-3" : "",
             Icon && !isSignin ? "pl-12" : "",
             allowVisibilityToggle ? "pr-12" : "",
-            invalid ? "border-[rgba(255,107,107,0.55)] bg-[rgba(255,107,107,0.08)] text-white focus:border-[rgba(255,107,107,0.7)] focus:shadow-[0_0_0_1px_rgba(255,107,107,0.24)]" : "",
-            disabled ? "cursor-not-allowed opacity-70" : "",
+            invalid ? "error" : "",
+            disabled ? "cursor-not-allowed opacity-60 bg-gray-100" : "",
           )}
         />
         {allowVisibilityToggle ? (
           <button
             type="button"
             onClick={() => setShowValue((prev) => !prev)}
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--muted)] transition hover:text-[var(--text)]"
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-gray-600"
           >
             {showValue ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
@@ -3128,14 +3120,14 @@ function SelectField({ label, value, onChange, options, small = false, icon: Ico
   return (
     <label className="block">
       {!hideLabel ? (
-        <span className={clsx("mb-2 flex items-center gap-2 font-medium text-[var(--text)]", small ? "text-xs" : "text-sm")}>
+        <span className={clsx("mb-2 flex items-center gap-2 font-medium text-gray-700", small ? "text-xs" : "text-sm")}>
           <span>{label}</span>
-          {required ? <Asterisk size={12} className="text-[var(--brand)]" /> : null}
+          {required ? <Asterisk size={12} className="text-green-600" /> : null}
         </span>
       ) : null}
       <span className="relative block">
         {Icon ? (
-          <span className={clsx("pointer-events-none absolute top-1/2 -translate-y-1/2", isSignin ? "left-3 text-[rgba(187,211,214,0.6)]" : "left-4 text-[var(--muted)]")}>
+          <span className={clsx("pointer-events-none absolute top-1/2 -translate-y-1/2", isSignin ? "left-3 text-gray-400" : "left-4 text-gray-400")}>
             <Icon size={isSignin ? 18 : 17} />
           </span>
         ) : null}
@@ -3143,12 +3135,12 @@ function SelectField({ label, value, onChange, options, small = false, icon: Ico
           value={value}
           onChange={(event) => onChange(event.target.value)}
           className={clsx(
-            "theme-input w-full appearance-none outline-none",
+            "w-full appearance-none outline-none transition",
             isSignin
               ? "signin-input rounded-none px-0 pb-0 pt-0 text-base"
               : small
-                ? "rounded-2xl px-3 py-3 text-sm"
-                : "rounded-2xl px-4 py-4 text-sm",
+                ? "form-input rounded-lg px-3 py-2.5 text-sm"
+                : "form-input rounded-lg px-4 py-3 text-sm",
             Icon && isSignin ? "pl-11" : "",
             Icon && !isSignin ? "pl-12 pr-10" : "",
             !Icon && !isSignin ? "pr-10" : "",
@@ -3161,7 +3153,7 @@ function SelectField({ label, value, onChange, options, small = false, icon: Ico
             </option>
           ))}
         </select>
-        <span className={clsx("pointer-events-none absolute top-1/2 -translate-y-1/2", isSignin ? "right-3 text-[rgba(206,224,226,0.8)]" : "right-4 text-[var(--muted)]")}>
+        <span className={clsx("pointer-events-none absolute top-1/2 -translate-y-1/2", isSignin ? "right-3 text-gray-400" : "right-4 text-gray-400")}>
           <ChevronDown size={16} />
         </span>
       </span>
@@ -3174,9 +3166,9 @@ function CheckboxGroup({ label, options, values, onChange, required = false }) {
 
   return (
     <div>
-      <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[var(--text)]">
+      <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-700">
         <span>{label}</span>
-        {required ? <Asterisk size={12} className="text-[var(--brand)]" /> : null}
+        {required ? <Asterisk size={12} className="text-green-600" /> : null}
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         {options.map((option) => {
@@ -3186,10 +3178,8 @@ function CheckboxGroup({ label, options, values, onChange, required = false }) {
             <label
               key={option}
               className={clsx(
-                "flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 text-sm transition",
-                checked
-                  ? "border-[rgba(102,252,241,0.34)] bg-[rgba(102,252,241,0.08)] text-white"
-                  : "border-[var(--line)] bg-[var(--panel-soft)] text-[var(--muted)]",
+                "checkbox-group-item",
+                checked && "checked",
               )}
             >
               <input
@@ -3200,7 +3190,7 @@ function CheckboxGroup({ label, options, values, onChange, required = false }) {
                     checked ? selectedValues.filter((value) => value !== option) : [...selectedValues, option],
                   )
                 }
-                className="h-4 w-4 rounded border-[var(--line)] bg-transparent accent-[var(--brand)]"
+                className="h-4 w-4 rounded border-gray-300 bg-transparent accent-green-600"
               />
               <span>{option}</span>
             </label>
@@ -3213,9 +3203,9 @@ function CheckboxGroup({ label, options, values, onChange, required = false }) {
 
 function StatChip({ label, value }) {
   return (
-    <div className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--panel-soft)] p-4">
-      <div className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">{label}</div>
-      <div className="mt-2 text-lg font-semibold text-white">{value}</div>
+    <div className="stat-chip">
+      <div className="text-xs font-medium uppercase tracking-wider text-gray-500">{label}</div>
+      <div className="mt-2 text-lg font-semibold text-gray-800">{value}</div>
     </div>
   );
 }
@@ -3224,17 +3214,24 @@ function AccountStatusBadge({ status = "Inactive" }) {
   const isActive = String(status).toLowerCase() === "active";
 
   return (
-    <span className={clsx("account-status-badge", isActive ? "is-active" : "is-inactive")}>
-      <span className="account-status-dot" aria-hidden />
+    <span className={clsx("status-badge", isActive ? "status-active" : "status-inactive")}>
+      <span className="status-dot" aria-hidden />
       <span>{isActive ? "Active" : "Inactive"}</span>
     </span>
   );
 }
 
-function InfoPill({ label, value }) {
+function InfoPill({ label, value, variant = "default" }) {
+  if (variant === "sidebar") {
+    return (
+      <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/60">
+        {label}: <span className="text-white/90">{value}</span>
+      </div>
+    );
+  }
   return (
-    <div className="rounded-full border border-[var(--line)] bg-[var(--panel-soft)] px-3 py-2 text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
-      {label}: <span className="text-[var(--text)]">{value}</span>
+    <div className="info-pill">
+      {label}: <span className="font-semibold text-gray-700">{value}</span>
     </div>
   );
 }
@@ -3245,21 +3242,21 @@ function FeedbackModal({ message, tone = "success", onClose }) {
   const isError = tone === "error";
 
   return createPortal(
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[rgba(5,10,18,0.76)] p-4 backdrop-blur-sm sm:p-6">
-      <div className="theme-panel w-full max-w-md rounded-[1.8rem] p-6 text-center shadow-[0_24px_80px_rgba(0,0,0,0.38)]">
+    <div className="modal-overlay">
+      <div className="card-elevated w-full max-w-md p-6 text-center">
         <div
           className={clsx(
             "mx-auto flex size-14 items-center justify-center rounded-full border",
             isError
-              ? "border-[rgba(255,107,107,0.35)] bg-[rgba(255,107,107,0.12)] text-[var(--danger)]"
-              : "border-[rgba(102,252,241,0.28)] bg-[rgba(102,252,241,0.12)] text-[var(--brand)]",
+              ? "border-red-200 bg-red-50 text-red-600"
+              : "border-green-200 bg-green-50 text-green-600",
           )}
         >
           {isError ? <LockKeyhole size={22} /> : <BadgeCheck size={24} />}
         </div>
-        <h2 className="mt-5 text-xl font-semibold text-white">{isError ? "Error" : "Success"}</h2>
-        <p className="mt-3 text-sm leading-7 text-[var(--muted)]">{message}</p>
-        <button type="button" onClick={onClose} className="theme-button mt-6 w-full rounded-2xl px-5 py-3.5 font-semibold">
+        <h2 className="mt-5 text-xl font-semibold text-gray-800">{isError ? "Error" : "Success"}</h2>
+        <p className="mt-3 text-sm leading-relaxed text-gray-500">{message}</p>
+        <button type="button" onClick={onClose} className="btn btn-primary mt-6 w-full px-5 py-3">
           OK
         </button>
       </div>
