@@ -353,7 +353,7 @@ void loadSettings() {
       if (savedUrl.startsWith("http://")) {
         savedUrl = savedUrl.substring(7);
       }
-      int suffixPos = savedUrl.indexOf("/fingerprint/api/device.php");
+      int suffixPos = savedUrl.indexOf("/api/device.php");
       if (suffixPos > 0) {
         apiHost = savedUrl.substring(0, suffixPos);
       }
@@ -362,7 +362,7 @@ void loadSettings() {
       apiHost = String(DEFAULT_API_HOST);
     }
   }
-  apiUrl = String("http://") + apiHost + "/fingerprint/api/device.php";
+  apiUrl = String("http://") + apiHost + "/api/device.php";
   defaultApiHost = prefs.getString("defApiHost", apiHost);
 }
 
@@ -956,7 +956,7 @@ function wifiView(){const ws=state.wifiStatus||{};const st=ws.status;const conne
 function rulesView(){const d=state.device||{}, r=d.rules||{};return `<div class="card"><h2>Attendance Rules</h2><div class="field"><label>Student IN Time</label><input type="time" id="inTime" value="${r.inTime||"10:00"}"></div><div class="field"><label>Student OUT Allowed After</label><select id="outDelay">${[1,5,10,15,30,60].map(v=>`<option value="${v}" ${Number(r.outDelay)===v?"selected":""}>${v} minute${v>1?"s":""}</option>`).join("")}</select></div><button class="btn" onclick="saveRules()">Save Rules</button></div>`}
 function logsView(){if(state.loading.logs)return `<div class="card"><div class="loader"></div></div>`;const l=state.logs||{};return `<div class="grid"><div class="card"><div class="row"><h2 style="margin-right:auto">Device Logs</h2><button class="btn secondary" onclick="loadLogs()">Refresh</button></div><pre>${l.events||"No device log."}</pre></div><div class="card"><h2>Offline Sync Queue</h2><pre>${l.unsent||"No pending records."}</pre></div></div>`}
 function backupView(){return `<div class="grid"><div class="card"><h2>Backup</h2><p class="muted">Download SD files and settings. Fingerprint templates remain inside the fingerprint sensor.</p><div class="row"><button class="btn" onclick="download('/api/backup/settings','francis-key-settings.json')">Settings</button><button class="btn secondary" onclick="download('/api/backup/file?name=attendance','attendance.csv')">Attendance</button><button class="btn secondary" onclick="download('/api/backup/file?name=users','users.psv')">Users</button><button class="btn secondary" onclick="download('/api/backup/file?name=queue','unsent.psv')">Queue</button><button class="btn secondary" onclick="download('/api/backup/file?name=logs','device.log')">Logs</button></div></div><div class="card"><h2>Restore Settings</h2><div class="field"><label>Settings JSON</label><textarea id="restoreSettings"></textarea></div><button class="btn danger" onclick="restoreSettings()">Restore Settings</button></div><div class="card"><h2>Restore SD File</h2><div class="field"><label>File</label><select id="restoreFile"><option value="attendance">Attendance CSV</option><option value="users">Users cache</option><option value="queue">Unsent queue</option><option value="logs">Device log</option></select></div><div class="field"><label>Content</label><textarea id="restoreContent"></textarea></div><button class="btn danger" onclick="restoreFile()">Restore File</button></div><div class="card"><h2>Clear All Cache</h2><p class="muted">⚠ Deletes all stored fingerprint templates from the sensor, user cache, attendance records, unsent queue, and device logs. This cannot be undone.</p><button class="btn danger" onclick="clearCache()">Clear All Cache</button></div></div>`}
-function apiSettingsView(){return '<div class="card"><h2>API Settings</h2><form onsubmit="return false"><div class="field"><label>API URL</label><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="white-space:nowrap;color:var(--muted)">http://</span><input id="apiHost" value="'+(state.apiSettings?state.apiSettings.host:'')+'" style="flex:1;min-width:120px"><span style="white-space:nowrap;color:var(--muted)">/fingerprint/api/device.php</span></div></div><div style="padding:12px;background:var(--panel2);border-radius:8px;border:1px solid var(--line);margin:12px 0"><div style="font-size:13px;color:var(--muted)">Current API:</div><b style="word-break:break-all">'+(state.apiSettings?state.apiSettings.currentUrl:'')+'</b></div><div style="padding:12px;background:var(--panel2);border-radius:8px;border:1px solid var(--line);margin:12px 0"><div style="font-size:13px;color:var(--muted)">Default API:</div><b style="word-break:break-all">'+(state.apiSettings?state.apiSettings.defaultUrl:'')+'</b></div><div class="row"><button class="btn" onclick="saveApiHost()">Save</button><button class="btn secondary" onclick="makeApiDefault()">Make As Default</button><button class="btn secondary" onclick="resetApiHost()">Reset</button></div></form></div>'}
+function apiSettingsView(){return '<div class="card"><h2>API Settings</h2><form onsubmit="return false"><div class="field"><label>API URL</label><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="white-space:nowrap;color:var(--muted)">http://</span><input id="apiHost" value="'+(state.apiSettings?state.apiSettings.host:'')+'" style="flex:1;min-width:120px"><span style="white-space:nowrap;color:var(--muted)">/api/device.php</span></div></div><div style="padding:12px;background:var(--panel2);border-radius:8px;border:1px solid var(--line);margin:12px 0"><div style="font-size:13px;color:var(--muted)">Current API:</div><b style="word-break:break-all">'+(state.apiSettings?state.apiSettings.currentUrl:'')+'</b></div><div style="padding:12px;background:var(--panel2);border-radius:8px;border:1px solid var(--line);margin:12px 0"><div style="font-size:13px;color:var(--muted)">Default API:</div><b style="word-break:break-all">'+(state.apiSettings?state.apiSettings.defaultUrl:'')+'</b></div><div class="row"><button class="btn" onclick="saveApiHost()">Save</button><button class="btn secondary" onclick="makeApiDefault()">Make As Default</button><button class="btn secondary" onclick="resetApiHost()">Reset</button></div></form></div>'}
 async function loadApiSettings(){try{state.apiSettings=await api("/api/settings/api")}catch(e){}}
 async function saveApiHost(){const h=$("apiHost").value.trim();if(!h){toast("Please enter an IP address or domain");return}try{await api("/api/settings/api",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"save",host:h})});toast("API host saved.");loadApiSettings()}catch(e){toast(e.message)}}
 async function makeApiDefault(){try{await api("/api/settings/api",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"default"})});toast("Default API host saved.");loadApiSettings()}catch(e){toast(e.message)}}
@@ -1463,7 +1463,7 @@ void handleApiSettingsApi() {
         sendJson(400, "{\"ok\":false,\"error\":\"Host cannot be empty.\"}");
         return;
       }
-      apiUrl = String("http://") + apiHost + "/fingerprint/api/device.php";
+      apiUrl = String("http://") + apiHost + "/api/device.php";
       prefs.putString("apiHost", apiHost);
       prefs.putString("apiUrl", apiUrl);
       logEvent("API", "API host set to " + apiHost);
@@ -1474,7 +1474,7 @@ void handleApiSettingsApi() {
       sendJson(200, "{\"ok\":true}");
     } else if (action == "reset") {
       apiHost = defaultApiHost;
-      apiUrl = String("http://") + apiHost + "/fingerprint/api/device.php";
+      apiUrl = String("http://") + apiHost + "/api/device.php";
       prefs.putString("apiHost", apiHost);
       prefs.putString("apiUrl", apiUrl);
       logEvent("API", "API host reset to default " + defaultApiHost);
@@ -1491,8 +1491,8 @@ void handleApiSettingsApi() {
   payload += F("{\"ok\":true");
   payload += F(",\"host\":\""); payload += jsonEscape(apiHost); payload += F("\"");
   payload += F(",\"defaultHost\":\""); payload += jsonEscape(defaultApiHost); payload += F("\"");
-  payload += F(",\"currentUrl\":\"http://"); payload += jsonEscape(apiHost); payload += F("/fingerprint/api/device.php\"");
-  payload += F(",\"defaultUrl\":\"http://"); payload += jsonEscape(defaultApiHost); payload += F("/fingerprint/api/device.php\"");
+  payload += F(",\"currentUrl\":\"http://"); payload += jsonEscape(apiHost); payload += F("/api/device.php\"");
+  payload += F(",\"defaultUrl\":\"http://"); payload += jsonEscape(defaultApiHost); payload += F("/api/device.php\"");
   payload += F("}");
   sendJson(200, payload);
 }

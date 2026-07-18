@@ -8,8 +8,8 @@ static const uint8_t AP_IP_OCTET_3 = 4;
 static const uint8_t AP_IP_OCTET_4 = 1;
 
 // From the ESP32, use your computer's LAN IP, not localhost.
-// Example: http://192.168.1.100/fingerprint/api/device.php
-static const char DEFAULT_API_URL[] = "http://192.168.1.100/fingerprint/api/device.php";
+// Example: http://192.168.1.100/api/device.php
+static const char DEFAULT_API_URL[] = "http://franciskey.atwebpages.com/api/device.php";
 static const char DEFAULT_API_KEY[] = "FRANCIS_KEY_DEVICE_KEY";
 static const char DEFAULT_DEVICE_ID[] = "ESP32-FRANCIS-KEY-01";
 
@@ -37,4 +37,3 @@ static const uint32_t API_CHECK_INTERVAL_MS = 60000;
 static const uint32_t OFFLINE_SYNC_INTERVAL_MS = 90000;
 static const uint16_t HTTP_TIMEOUT_MS = 12000;
 static const uint16_t SD_FILE_PREVIEW_BYTES = 12000;
-
