@@ -697,13 +697,7 @@ function ClassSubjectPage() {
     try {
       setLoading(true);
       setPageError("");
-      const response = await apiFetch(`/class-subjects.php`);
-      const data = await response.json().catch(() => []);
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to load class subjects.");
-      }
-
+      const data = await apiFetch(`/class-subjects.php`);
       setSubjects(Array.isArray(data) ? data : []);
     } catch (error) {
       setPageError(error.message || "Failed to load class subjects.");
@@ -768,16 +762,11 @@ function ClassSubjectPage() {
 
     try {
       setSaving(true);
-      const response = await apiFetch(`/class-subjects.php`, {
+      const data = await apiFetch(`/class-subjects.php`, {
         method: editingId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editingId ? { id: editingId, ...payload } : payload),
       });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.error || `Failed to ${editingId ? "update" : "add"} subject.`);
-      }
 
       setSubjects((prev) => {
         if (editingId) {
@@ -814,14 +803,9 @@ function ClassSubjectPage() {
     if (!deletingSubject) return;
 
     try {
-      const response = await apiFetch(`/class-subjects.php?id=${encodeURIComponent(deletingSubject.id)}`, {
+      await apiFetch(`/class-subjects.php?id=${encodeURIComponent(deletingSubject.id)}`, {
         method: "DELETE",
       });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to delete class subject.");
-      }
 
       setSubjects((prev) => prev.filter((subject) => subject.id !== deletingSubject.id));
       if (editingId === deletingSubject.id) resetForm();
