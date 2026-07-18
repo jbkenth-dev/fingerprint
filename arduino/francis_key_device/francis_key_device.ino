@@ -2506,15 +2506,13 @@ bool enrollFingerprint(uint16_t templateId, String &errorMsg) {
     uint8_t srchResult = finger.fingerFastSearch();
     if (srchResult == FINGERPRINT_OK) {
       // Physical fingerprint already exists in sensor DB
-      errorMsg = "Fingerprint Already Registered";
-      signalError();
+      errorMsg = "Already Registered";
       waitForFingerRelease(5000);
       return false;
     }
     // Also check whether the template ID is already assigned in LittleFS
     if (isFingerprintInLFS(pendingFingerprintTemplateId)) {
-      errorMsg = "Fingerprint Already Registered";
-      signalError();
+      errorMsg = "Already Registered";
       waitForFingerRelease(5000);
       return false;
     }
