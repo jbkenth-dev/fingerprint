@@ -172,6 +172,7 @@ void drawHomeNetworkLine(bool force = false);
 void drawStatusFooter();
 void drawCentered(int y, const String &text, uint16_t color, uint8_t size);
 void printNetworkInfo(const String &context);
+void processAttendanceQueue();
 void signalFingerprint();
 void signalRfid();
 void signalSuccess();
@@ -773,7 +774,7 @@ void drawCentered(int y, const String &text, uint16_t color, uint8_t size) {
 }
 
 void printNetworkInfo(const String &context) {
-  Serial.println();dcsx
+  Serial.println();
   Serial.println(context);
   Serial.print(F("SSID: "));
   Serial.println(WiFi.SSID());
