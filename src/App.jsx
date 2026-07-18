@@ -1091,13 +1091,7 @@ function ClassSchedulingPage() {
     try {
       setLoadingRows(true);
       setPageError("");
-      const response = await apiFetch(`/class-schedules.php`);
-      const data = await response.json().catch(() => []);
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to load class schedules.");
-      }
-
+      const data = await apiFetch(`/class-schedules.php`);
       setScheduleRows(Array.isArray(data) ? data : []);
     } catch (error) {
       setPageError(error.message || "Failed to load class schedules.");
@@ -1126,13 +1120,7 @@ function ClassSchedulingPage() {
           yearLevel: form.yearLevel,
           semester: form.semester,
         });
-        const response = await apiFetch(`/class-schedules.php?${params.toString()}`);
-        const data = await response.json().catch(() => ({}));
-
-        if (!response.ok) {
-          throw new Error(data.error || "Failed to load subjects for scheduling.");
-        }
-
+        const data = await apiFetch(`/class-schedules.php?${params.toString()}`);
         if (!isMounted) return;
 
         const nextEntries = Array.isArray(data.subjects)
@@ -1327,14 +1315,9 @@ function ClassSchedulingPage() {
         yearLevel: deletingSchedule.yearLevel,
         semester: deletingSchedule.semester,
       });
-      const response = await apiFetch(`/class-schedules.php?${params.toString()}`, {
+      const data = await apiFetch(`/class-schedules.php?${params.toString()}`, {
         method: "DELETE",
       });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to delete the class schedule.");
-      }
 
       setScheduleRows(Array.isArray(data.rows) ? data.rows : []);
       setFeedback({ message: data.message || "Class schedule deleted successfully.", tone: "success" });
@@ -1363,7 +1346,7 @@ function ClassSchedulingPage() {
 
     try {
       setSaving(true);
-      const response = await apiFetch(`/class-schedules.php`, {
+      const data = await apiFetch(`/class-schedules.php`, {
         method: editingSchedule ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1385,11 +1368,6 @@ function ClassSchedulingPage() {
           })),
         }),
       });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to save the class schedule.");
-      }
 
       setScheduleRows(Array.isArray(data.rows) ? data.rows : []);
       setFeedback({
