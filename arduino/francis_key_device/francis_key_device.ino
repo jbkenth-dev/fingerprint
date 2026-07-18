@@ -2751,10 +2751,6 @@ void completeAttendanceAttempt() {
     logEvent("ATTENDANCE", "IN for " + matched.idNumber + " " + matched.fullName + " (LFS)");
     drawScreen("Attendance Success", "ID: " + matched.idNumber, matched.fullName, "Status: IN", ILI9341_GREEN);
     signalSuccess();
-    // Attempt to sync pending records to API (best-effort)
-    if (wifiReady) {
-      syncUnsentAttendance();
-    }
     return;
   }
 
