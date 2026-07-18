@@ -788,7 +788,7 @@ void signalSuccess() {
   digitalWrite(GREEN_LED_PIN, HIGH);
   buzz(100, 80);
   buzz(120);
-  delay(100);
+  delay(700);
   digitalWrite(GREEN_LED_PIN, LOW);
 }
 
@@ -797,7 +797,7 @@ void signalError() {
   digitalWrite(YELLOW_LED_PIN, LOW);
   digitalWrite(RED_LED_PIN, HIGH);
   buzz(900);
-  delay(350);
+  delay(100);
   digitalWrite(RED_LED_PIN, LOW);
 }
 
@@ -2476,7 +2476,6 @@ void runRegistrationWorkflow() {
     }
 
     signalSuccess();
-    delay(2500);
 
     pendingRegistrationUserId = 0;
     pendingRegistrationIdNumber = "";
@@ -2627,7 +2626,6 @@ bool enrollRfid(String &uid) {
       if (isRfidUuidInLFS(firstUid)) {
         drawScreen("RFID Registration", "ID Card Already Registered", firstUid, "", ILI9341_RED);
         signalError();
-        delay(2500);
         return false;
       }
       // ======================================
@@ -2753,7 +2751,6 @@ void completeAttendanceAttempt() {
     logEvent("ATTENDANCE", "IN for " + matched.idNumber + " " + matched.fullName + " (LFS)");
     drawScreen("Attendance Success", "ID: " + matched.idNumber, matched.fullName, "Status: IN", ILI9341_GREEN);
     signalSuccess();
-    delay(600);
     // Attempt to sync pending records to API (best-effort)
     if (wifiReady) {
       syncUnsentAttendance();
@@ -2769,7 +2766,6 @@ void completeAttendanceAttempt() {
     logEvent("ATTENDANCE", status + " for " + result.idNumber + " " + result.fullName + " (API)");
     drawScreen("Attendance Success", "ID: " + result.idNumber, result.fullName, "Status: " + status, ILI9341_GREEN);
     signalSuccess();
-    delay(600);
     return;
   }
 
@@ -2777,7 +2773,6 @@ void completeAttendanceAttempt() {
   drawScreen("Attendance Failed", "Cannot Be Recognized", "", "", ILI9341_RED);
   logEvent("ATTENDANCE", "Failed FP " + attendanceFingerprintId + " RFID " + attendanceRfidUid + ": not in LFS or API");
   signalError();
-  delay(2500);
 }
 
 // SD removed
