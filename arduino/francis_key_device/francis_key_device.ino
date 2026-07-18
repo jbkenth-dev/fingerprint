@@ -2854,6 +2854,20 @@ void completeAttendanceAttempt() {
     displayId = matched.idNumber;
     displayName = matched.fullName;
   } else {
+    // Check if fingerprint matched a user locally but RFID didn't → MISMATCH
+    LocalUser fpOnly = findStudentByFpInLFS(attendanceFingerprintId.toInt());
+    if (fpOnly.found) {
+      // Fingerprint is valid but RFID card doesn't belong to this user
+      drawScreen("Attendance Error", "RFID Mismatch", "ID: " + fpOnly.idNumber, fpOnly.fullName, ILI9341_RED);
+      logEvent("ATTENDANCE", "RFID Mismatch for " + fpOnly.idNumber + " " + fpOnly.fullName);
+      signalError();
+      delay(2000);
+      attendanceFingerprintId = "";
+      attendanceRfidUid = "";
+      mode = MODE_HOME;
+      return;
+    }
+
     // Try online API if local lookup failed (unrecognized user in local cache)
     String localRecordId = makeLocalRecordId();
     AttendanceResult result = postAttendance(attendanceFingerprintId, attendanceRfidUid, occurredAt, localRecordId);
@@ -2864,8 +2878,11 @@ void completeAttendanceAttempt() {
       displayId = result.idNumber;
       displayName = result.fullName;
     } else {
-      logEvent("ATTENDANCE", "Failed FP " + attendanceFingerprintId + " RFID " + attendanceRfidUid);
+      // Unknown user — fingerprint and RFID both unrecognized
+      drawScreen("Attendance Error", "Unknown User", "FP: " + attendanceFingerprintId, "RFID: " + attendanceRfidUid, ILI9341_RED);
+      logEvent("ATTENDANCE", "Unknown user FP " + attendanceFingerprintId + " RFID " + attendanceRfidUid);
       signalError();
+      delay(2000);
       attendanceFingerprintId = "";
       attendanceRfidUid = "";
       mode = MODE_HOME;
