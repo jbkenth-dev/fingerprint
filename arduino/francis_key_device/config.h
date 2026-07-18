@@ -25,7 +25,6 @@ static const char NTP_SERVER_2[] = "time.google.com";
 static const char SESSION_COOKIE_NAME[] = "fk_session";
 static const uint32_t SESSION_TIMEOUT_MS = 21600000UL; // 6 hours
 
-static const uint16_t DEFAULT_STUDENT_IN_MINUTES = 600; // 10:00 AM
 static const uint16_t DEFAULT_OUT_DELAY_MINUTES = 1;
 
 static const uint8_t FINGERPRINT_REGISTER_SCANS = 3;

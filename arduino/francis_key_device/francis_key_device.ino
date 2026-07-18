@@ -139,7 +139,6 @@ uint32_t pendingAttendanceFirstSavedAt = 0;
 WifiState wifiState = WIFI_STATE_DISCONNECTED;
 
 UiState uiState;
-uint16_t studentInMinutes = DEFAULT_STUDENT_IN_MINUTES;
 uint16_t outDelayMinutes = DEFAULT_OUT_DELAY_MINUTES;
 String apiHost;
 String defaultApiHost;
@@ -161,8 +160,6 @@ String formatDate(const DateTime &dt);
 String formatTime12(const DateTime &dt);
 String formatDay(const DateTime &dt);
 String isoNow();
-String minutesToTimeInput(uint16_t minutes);
-uint16_t timeInputToMinutes(String value, uint16_t fallback);
 void drawScreen(const String &title, const String &line1, const String &line2, const String &line3, uint16_t accent);
 void setUiState(const String &type, const String &title, const String &line1, const String &line2, const String &line3, uint16_t accent);
 void drawInstallScreen();
@@ -360,7 +357,6 @@ void loadSettings() {
   deviceId = prefs.getString("devId", DEFAULT_DEVICE_ID);
   adminUser = prefs.getString("adminUser", DEFAULT_ADMIN_USER);
   adminPassword = prefs.getString("adminPass", DEFAULT_ADMIN_PASSWORD);
-  studentInMinutes = prefs.getUShort("inMin", DEFAULT_STUDENT_IN_MINUTES);
   outDelayMinutes = prefs.getUShort("outDelay", DEFAULT_OUT_DELAY_MINUTES);
   if (!(outDelayMinutes == 1 || outDelayMinutes == 5 || outDelayMinutes == 10 ||
         outDelayMinutes == 15 || outDelayMinutes == 30 || outDelayMinutes == 60)) {
@@ -403,7 +399,6 @@ void saveDefaultHost() {
 }
 
 void saveRules() {
-  prefs.putUShort("inMin", studentInMinutes);
   prefs.putUShort("outDelay", outDelayMinutes);
 }
 
@@ -631,26 +626,6 @@ String isoTimeTo12h(const String &iso) {
   char buf[10];
   snprintf(buf, sizeof(buf), "%02d:%02d %s", h12, m, isPm ? "PM" : "AM");
   return String(buf);
-}
-
-String minutesToTimeInput(uint16_t minutes) {
-  char buffer[6];
-  snprintf(buffer, sizeof(buffer), "%02u:%02u", minutes / 60, minutes % 60);
-  return String(buffer);
-}
-
-uint16_t timeInputToMinutes(String value, uint16_t fallback) {
-  value.trim();
-  int colon = value.indexOf(':');
-  if (colon <= 0) {
-    return fallback;
-  }
-  int hour = value.substring(0, colon).toInt();
-  int minute = value.substring(colon + 1).toInt();
-  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-    return fallback;
-  }
-  return (uint16_t) (hour * 60 + minute);
 }
 
 void setUiState(const String &type, const String &title, const String &line1, const String &line2, const String &line3, uint16_t accent) {
@@ -1002,7 +977,7 @@ function attendance(){if(state.loading.attendance)return `<div class="card"><div
 function registerView(){const d=state.device||{};if(!d.wifiReady||!d.databaseReady)return `<div class="card"><h2>Register User</h2><div class="empty">Registration unavailable.<br>Please connect to WiFi.</div></div>`;const q=state.search.toLowerCase();const filtered=state.students.filter(s=>(`${s.idNumber} ${s.fullName}`.toLowerCase()).includes(q));const list=filtered.map(s=>`<button class="item" onclick="openRegister(${s.id})"><b>${s.idNumber||s.id}</b> ${s.fullName}<div class="muted">${s.department||"Student"}</div></button>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Select Student</h2><button class="btn secondary" onclick="loadStudents()">Refresh</button></div><div class="field"><label>Realtime Search</label><input placeholder="Student ID, first name, last name, full name" value="${state.search}" oninput="state.search=this.value;render()"></div>${state.loading.students?'<div class="loader"></div>':`<div class="list">${list||'<div class="empty">No matching students.</div>'}</div>`}</div>`}
 function usersView(){if(state.loading.users)return '<div class="card"><div class="loader"></div></div>';const rows=state.users.map(u=>{const active=u.status!=="inactive";const stBadge=active?'<span class="pill ok">Active</span>':'<span class="pill bad">Inactive</span>';let opts='';if(active)opts+='<option value="deactivate">Deactivate</option>';if(!active)opts+='<option value="activate">Activate</option>';if(u.fingerprintId||u.smartCardId)opts+='<option value="delete">Delete Credentials</option>';const safeName=(u.fullName||'').replace(/'/g,"\\\\'");return '<tr><td>'+(u.idNumber||u.userId)+'</td><td>'+u.fullName+'</td><td>'+(u.fingerprintId||"--")+'</td><td>'+(u.smartCardId||"--")+'</td><td>'+stBadge+'</td><td>'+(opts?'<select onchange="userActionModal('+u.userId+',this.value,\''+safeName+'\','+active+');this.value=\'\'"><option value="">-- Action --</option>'+opts+'</select>':"")+'</tr>'}).join("");return '<div class="card"><div class="row"><h2 style="margin-right:auto">Registered Students</h2><button class="btn secondary" onclick="loadUsers()">Refresh</button></div><div class="tablewrap"><table><thead><tr><th>ID</th><th>Name</th><th>Fingerprint</th><th>RFID</th><th>Status</th><th>Action</th></tr></thead><tbody>'+(rows||'<tr><td colspan="6">No cached users.</td></tr>')+'</tbody></table></div></div>'}
 function wifiView(){const ws=state.wifiStatus||{};const st=ws.status;const connected=st==="Connected";const authenticating=st==="Authenticating";const on=connected||authenticating;const connSsid=on?(ws.ssid||""):"Not Connected";const connBlock=`<div style="margin-bottom:12px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:13px;color:var(--muted);font-weight:800">WiFi Connected:</span><span style="width:10px;height:10px;border-radius:50%;background:${on?"#16a34a":"#9ca3af"};display:inline-block"></span><b>${connSsid}</b></div>`;if(connected||authenticating){const clr=connected?"#16a34a":"#ca8a04";const lbl=connected?"Connected":"Authenticated";return `<div class="card"><div class="row"><h2 style="margin-right:auto">WiFi Settings</h2></div>${connBlock}<div style="padding:16px;border:1px solid ${connected?"#bbf7bb":"#fef08a"};border-radius:8px;background:${connected?"#f0faf0":"#fefce8"};margin-bottom:12px"><div class="field"><label>SSID</label><div class="item"><b>${ws.ssid||""}</b></div></div><div class="field"><label>Status</label><div style="display:flex;align-items:center;gap:8px"><span style="width:12px;height:12px;border-radius:50%;background:${clr};display:inline-block"></span><b style="color:${clr}">${lbl}</b></div></div>${authenticating?'<div class="field"><label style="color:#dc2626">Please reset WiFi</label></div>':''}</div><button class="btn danger" onclick="resetWifi()">Reset WiFi</button></div>`}const nets=state.networks.map(n=>`<option value="${n.ssid}">${n.ssid}</option>`).join("");const scanMsg=state.loading.scan?'Scanning WiFi...':state.scanStatus;const statusColor=st==="Connecting"||st==="Authenticating"?"#2563eb":st==="Scanning"||st==="Reconnecting"?"#ca8a04":"#dc2626";const statusDot=st&&st!=="Disconnected"&&st!=="Connection Failed"?`<div style="padding:12px;border:1px solid ${statusColor};border-radius:8px;background:white;margin-bottom:8px;display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${statusColor};display:inline-block"></span><span>${st}</span></div>`:"";return `<div class="card"><div class="row"><h2 style="margin-right:auto">WiFi Settings</h2><button class="btn secondary" onclick="scanWifi()">Scan Networks</button></div>${connBlock}${statusDot}${scanMsg?'<p style="margin:8px 0;color:var(--muted)">'+scanMsg+'</p>':""}<div class="field"><label>Network</label><select id="wifiSsid">${nets}</select></div><div class="field"><label>Password</label><input id="wifiPass" type="password" placeholder="WiFi password"></div><button class="btn" onclick="saveWifi()">Save and Connect</button><button class="btn danger" onclick="resetWifi()" style="margin-top:12px">Reset WiFi</button></div>`}
-function rulesView(){const d=state.device||{}, r=d.rules||{};return `<div class="card"><h2>Attendance Rules</h2><div class="field"><label>Student IN Time</label><input type="time" id="inTime" value="${r.inTime||"10:00"}"></div><div class="field"><label>Student OUT Allowed After</label><select id="outDelay">${[1,5,10,15,30,60].map(v=>`<option value="${v}" ${Number(r.outDelay)===v?"selected":""}>${v} minute${v>1?"s":""}</option>`).join("")}</select></div><button class="btn" onclick="saveRules()">Save Rules</button></div>`}
+function rulesView(){const d=state.device||{}, r=d.rules||{};return `<div class="card"><h2>Attendance Rules</h2><div class="field"><label>Student OUT Allowed After</label><select id="outDelay">${[1,5,10,15,30,60].map(v=>`<option value="${v}" ${Number(r.outDelay)===v?"selected":""}>${v} minute${v>1?"s":""}</option>`).join("")}</select></div><button class="btn" onclick="saveRules()">Save Rules</button></div>`}
 function logsView(){if(state.loading.logs)return `<div class="card"><div class="loader"></div></div>`;const l=state.logs||{};return `<div class="grid"><div class="card"><div class="row"><h2 style="margin-right:auto">Device Logs</h2><button class="btn secondary" onclick="loadLogs()">Refresh</button></div><pre>${l.events||"No device log."}</pre></div><div class="card"><h2>Offline Sync Queue</h2><pre>${l.unsent||"No pending records."}</pre></div></div>`}
 function backupView(){return `<div class="grid"><div class="card"><h2>Backup</h2><p class="muted">Download SD files and settings. Fingerprint templates remain inside the fingerprint sensor.</p><div class="row"><button class="btn" onclick="download('/api/backup/settings','francis-key-settings.json')">Settings</button><button class="btn secondary" onclick="download('/api/backup/file?name=attendance','attendance.csv')">Attendance</button><button class="btn secondary" onclick="download('/api/backup/file?name=users','users.psv')">Users</button><button class="btn secondary" onclick="download('/api/backup/file?name=queue','unsent.psv')">Queue</button><button class="btn secondary" onclick="download('/api/backup/file?name=logs','device.log')">Logs</button></div></div><div class="card"><h2>Restore Settings</h2><div class="field"><label>Settings JSON</label><textarea id="restoreSettings"></textarea></div><button class="btn danger" onclick="restoreSettings()">Restore Settings</button></div><div class="card"><h2>Restore SD File</h2><div class="field"><label>File</label><select id="restoreFile"><option value="attendance">Attendance CSV</option><option value="users">Users cache</option><option value="queue">Unsent queue</option><option value="logs">Device log</option></select></div><div class="field"><label>Content</label><textarea id="restoreContent"></textarea></div><button class="btn danger" onclick="restoreFile()">Restore File</button></div><div class="card"><h2>Clear All Cache</h2><p class="muted">⚠ Erases all fingerprint templates from the sensor and removes all RFID cache, student data, attendance records, and unsent queue from LFS. This cannot be undone.</p><button class="btn danger" onclick="clearCache()">Clear All Cache</button></div></div>`}
 function dateTimeView(){const d=state.device||{};const h24=d.rtcHour24!==undefined?d.rtcHour24:12;const h12=h24%12||12;const ampm=h24>=12?'PM':'AM';const m=d.rtcMonth||1;const dd=d.rtcDay||1;const y=d.rtcYear||2026;const min=d.rtcMinute||0;const mn=["January","February","March","April","May","June","July","August","September","October","November","December"];let ms='';for(let i=1;i<=12;i++)ms+='<option value="'+i+'"'+(i===m?' selected':'')+'>'+mn[i-1]+'</option>';let hs='';for(let i=1;i<=12;i++){const s=i<10?'0'+i:''+i;hs+='<option value="'+i+'"'+(i===h12?' selected':'')+'>'+s+'</option>'}let mins='';for(let i=0;i<60;i++){const s=i<10?'0'+i:''+i;mins+='<option value="'+s+'"'+(i===min?' selected':'')+'>'+s+'</option>'}return '<div class="card"><h2>Set Date & Time (Offline)</h2><p class="muted">Manually set the RTC date and time when the device is offline. All times are in 12-hour format.</p><div class="grid" style="grid-template-columns:1fr 1fr"><div class="field"><label>Year</label><input type="number" id="dtYear" min="2000" max="2099" value="'+y+'"></div><div class="field"><label>Month</label><select id="dtMonth">'+ms+'</select></div><div class="field"><label>Day</label><input type="number" id="dtDay" min="1" max="31" value="'+dd+'"></div><div class="field"><label>Hour</label><select id="dtHour">'+hs+'</select></div><div class="field"><label>Minute</label><select id="dtMinute">'+mins+'</select></div><div class="field"><label>AM/PM</label><select id="dtAmPm"><option value="AM"'+(ampm==='AM'?' selected':'')+'>AM</option><option value="PM"'+(ampm==='PM'?' selected':'')+'>PM</option></select></div></div><button class="btn" onclick="saveDateTime()">Set Date & Time</button><div style="margin-top:12px;padding:12px;background:#fbfdfe;border-radius:8px;border:1px solid var(--line)"><div class="muted">Current device time</div><b>'+d.date+' '+d.time+'</b></div></div>'}
@@ -1022,7 +997,7 @@ function closeModal(){$("modalBg").classList.remove("show");api("/api/register/c
 async function startRegister(){const s=state.modalStudent;showLoading("Starting registration...");try{await api("/api/register/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:s.id})});toast("Registration started. Follow the device screen.");showRegisterModal()}catch(e){toast(e.message)}finally{hideLoading()}}
 async function saveWifi(){if(!confirm("Save WiFi settings and connect now?"))return;const ssid=$("wifiSsid").value;if(!ssid){toast("Please select a WiFi network");return}showLoading("Connecting to WiFi...");try{await api("/api/wifi/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ssid:ssid,password:$("wifiPass").value})});toast("WiFi settings saved.");loadState()}catch(e){toast(e.message)}finally{hideLoading()}}
 async function resetWifi(){if(!confirm("Reset WiFi? This will clear saved credentials and return to AP mode."))return;showLoading("Resetting WiFi...");try{await api("/api/wifi/reset",{method:"POST"});toast("WiFi credentials cleared. Scanning networks...");state.networks=[];state.scanStatus="";scanWifi()}catch(e){toast(e.message)}finally{hideLoading()}}
-async function saveRules(){showLoading("Saving rules...");try{await api("/api/rules",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({inTime:$("inTime").value,outDelay:Number($("outDelay").value)})});toast("Attendance rules saved.");loadState()}catch(e){toast(e.message)}finally{hideLoading()}}
+async function saveRules(){showLoading("Saving rules...");try{await api("/api/rules",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({outDelay:Number($("outDelay").value)})});toast("Attendance rules saved.");loadState()}catch(e){toast(e.message)}finally{hideLoading()}}
 function download(url,name){const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function restoreSettings(){if(!confirm("Restore settings from this JSON?"))return;showLoading("Restoring settings...");try{await api("/api/restore/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:$("restoreSettings").value});toast("Settings restored.");loadState()}catch(e){toast(e.message)}finally{hideLoading()}}
 async function restoreFile(){if(!confirm("Replace the selected SD file?"))return;showLoading("Restoring file...");try{await api(`/api/restore/file?name=${encodeURIComponent($("restoreFile").value)}`,{method:"POST",headers:{"Content-Type":"text/plain"},body:$("restoreContent").value});toast("File restored.")}catch(e){toast(e.message)}finally{hideLoading()}}
@@ -1093,8 +1068,7 @@ void handleApiState() {
   payload += F(",\"nfcReady\":"); payload += nfcReady ? F("true") : F("false");
   payload += F(",\"fingerprintReady\":"); payload += fingerprintReady ? F("true") : F("false");
   payload += F(",\"tftReady\":"); payload += tftReady ? F("true") : F("false");
-  payload += F(",\"rules\":{\"inTime\":\""); payload += minutesToTimeInput(studentInMinutes);
-  payload += F("\",\"outDelay\":"); payload += String(outDelayMinutes); payload += F("}");
+  payload += F(",\"rules\":{\"outDelay\":"); payload += String(outDelayMinutes); payload += F("}");
   payload += F(",\"ui\":{\"seq\":"); payload += String(uiState.seq);
   payload += F(",\"type\":\""); payload += jsonEscape(uiState.type);
   payload += F("\",\"title\":\""); payload += jsonEscape(uiState.title);
@@ -1614,7 +1588,7 @@ void handleApiRules() {
     return;
   }
   if (server.method() == HTTP_GET) {
-    String payload = String("{\"ok\":true,\"inTime\":\"") + minutesToTimeInput(studentInMinutes) + "\",\"outDelay\":" + String(outDelayMinutes) + "}";
+    String payload = String("{\"ok\":true,\"outDelay\":") + String(outDelayMinutes) + "}";
     sendJson(200, payload);
     return;
   }
@@ -1624,7 +1598,6 @@ void handleApiRules() {
     sendJson(400, "{\"ok\":false,\"error\":\"Invalid JSON payload.\"}");
     return;
   }
-  studentInMinutes = timeInputToMinutes(String((const char *) (request["inTime"] | "10:00")), DEFAULT_STUDENT_IN_MINUTES);
   uint16_t requestedDelay = request["outDelay"] | DEFAULT_OUT_DELAY_MINUTES;
   if (requestedDelay == 1 || requestedDelay == 5 || requestedDelay == 10 || requestedDelay == 15 || requestedDelay == 30 || requestedDelay == 60) {
     outDelayMinutes = requestedDelay;
@@ -1632,7 +1605,7 @@ void handleApiRules() {
     outDelayMinutes = DEFAULT_OUT_DELAY_MINUTES;
   }
   saveRules();
-  logEvent("RULES", "Updated IN " + minutesToTimeInput(studentInMinutes) + " OUT delay " + String(outDelayMinutes) + " minutes");
+  logEvent("RULES", "Updated OUT delay " + String(outDelayMinutes) + " minutes");
   sendJson(200, "{\"ok\":true}");
 }
 
@@ -1676,8 +1649,7 @@ void handleApiBackupSettings() {
   payload += F("\",\"adminPassword\":\""); payload += jsonEscape(adminPassword);
   payload += F("\",\"wifiSsid\":\""); payload += jsonEscape(wifiSsid);
   payload += F("\",\"wifiPassword\":\""); payload += jsonEscape(wifiPassword);
-  payload += F("\",\"rules\":{\"inTime\":\""); payload += minutesToTimeInput(studentInMinutes);
-  payload += F("\",\"outDelay\":"); payload += String(outDelayMinutes);
+  payload += F("\",\"rules\":{\"outDelay\":"); payload += String(outDelayMinutes);
   payload += F("},\"note\":\"Fingerprint templates are stored in the fingerprint sensor and are not part of this backup.\"}");
   server.sendHeader("Content-Disposition", "attachment; filename=francis-key-settings.json");
   sendJson(200, payload);
@@ -1703,7 +1675,6 @@ void handleApiRestoreSettings() {
   wifiPassword = String((const char *) (request["wifiPassword"] | wifiPassword.c_str()));
   if (request["rules"].is<JsonObject>()) {
     JsonObject rules = request["rules"];
-    studentInMinutes = timeInputToMinutes(String((const char *) (rules["inTime"] | minutesToTimeInput(studentInMinutes).c_str())), studentInMinutes);
     uint16_t restoredDelay = rules["outDelay"] | outDelayMinutes;
     if (restoredDelay == 1 || restoredDelay == 5 || restoredDelay == 10 || restoredDelay == 15 || restoredDelay == 30 || restoredDelay == 60) {
       outDelayMinutes = restoredDelay;
@@ -2803,6 +2774,58 @@ void removeAttendanceFromLFS(const String &timestamp) {
   }
 }
 
+// Returns the last attendance type ("IN" or "OUT") for a student, scanning from most recent.
+// Also returns the timestamp of that last record via outTimestamp.
+String getLastAttendanceType(const String &idNumber, String &outTimestamp) {
+  outTimestamp = "";
+  if (!lfsReady) return "";
+  if (!LittleFS.exists("/attendance.json")) return "";
+  File file = LittleFS.open("/attendance.json", "r");
+  if (!file) return "";
+  DynamicJsonDocument doc(16384);
+  DeserializationError err = deserializeJson(doc, file);
+  file.close();
+  if (err) return "";
+  JsonArray records = doc.as<JsonArray>();
+  for (int i = records.size() - 1; i >= 0; i--) {
+    String rid = String((const char *)(records[i]["id_number"] | ""));
+    if (rid == idNumber) {
+      outTimestamp = String((const char *)(records[i]["timestamp"] | ""));
+      return String((const char *)(records[i]["type"] | ""));
+    }
+  }
+  return "";
+}
+
+// Compute difference in seconds between two ISO timestamps (YYYY-MM-DDTHH:MM:SS).
+// Returns positive if iso2 is later than iso1.
+long isoTimeDiffSeconds(const String &iso1, const String &iso2) {
+  if (iso1.length() < 19 || iso2.length() < 19) return 999999;
+  int y1 = iso1.substring(0, 4).toInt();
+  int mo1 = iso1.substring(5, 7).toInt();
+  int d1 = iso1.substring(8, 10).toInt();
+  int h1 = iso1.substring(11, 13).toInt();
+  int mi1 = iso1.substring(14, 16).toInt();
+  int s1 = iso1.substring(17, 19).toInt();
+  int y2 = iso2.substring(0, 4).toInt();
+  int mo2 = iso2.substring(5, 7).toInt();
+  int d2 = iso2.substring(8, 10).toInt();
+  int h2 = iso2.substring(11, 13).toInt();
+  int mi2 = iso2.substring(14, 16).toInt();
+  int s2 = iso2.substring(17, 19).toInt();
+  auto toDays = [](int y, int m, int d) -> long {
+    int a = (14 - m) / 12;
+    int yy = y + 4800 - a;
+    int mo = m + 12 * a - 3;
+    return d + (153 * mo + 2) / 5 + 365 * yy + yy / 4 - yy / 100 + yy / 400 - 32045;
+  };
+  long days1 = toDays(y1, mo1, d1);
+  long days2 = toDays(y2, mo2, d2);
+  long secs1 = h1 * 3600L + mi1 * 60L + s1;
+  long secs2 = h2 * 3600L + mi2 * 60L + s2;
+  return (days2 - days1) * 86400L + (secs2 - secs1);
+}
+
 // Queue for posting attendance to online database after 5-second delay
 // (keeps TFT on home screen — no display changes during online post)
 #define ATTENDANCE_ONLINE_DELAY_MS   5000
@@ -2845,19 +2868,51 @@ void completeAttendanceAttempt() {
   String occurredAt = isoNow();
   String displayId = "";
   String displayName = "Verified";
+  String statusType = "IN";  // default first attendance is IN
 
-  // ===== Always save locally first =====
+  // ===== Find student locally first =====
   LocalUser matched = findStudentInLFS(attendanceFingerprintId, attendanceRfidUid);
   if (matched.found) {
-    addAttendanceToLFS(matched.idNumber, matched.fullName, occurredAt, "IN");
-    logEvent("ATTENDANCE", "IN for " + matched.idNumber + " " + matched.fullName + " (local)");
+    // Determine IN or OUT based on last attendance record for this student
+    String lastTimestamp = "";
+    String lastType = getLastAttendanceType(matched.idNumber, lastTimestamp);
+
+    if (lastType == "IN" && lastTimestamp.length() > 0) {
+      // Last record was IN — check if enough time has passed for OUT
+      long elapsed = isoTimeDiffSeconds(lastTimestamp, occurredAt);
+      long delaySeconds = (long)outDelayMinutes * 60L;
+
+      if (elapsed < delaySeconds) {
+        // Too soon — show error with remaining time
+        long remaining = delaySeconds - elapsed;
+        long remainMin = remaining / 60;
+        long remainSec = remaining % 60;
+        String timeMsg = "Try Again in ";
+        if (remainMin > 0) timeMsg += String(remainMin) + "m ";
+        timeMsg += String(remainSec) + "s";
+
+        drawScreen("Attendance Error", timeMsg, "ID: " + matched.idNumber, matched.fullName, ILI9341_RED);
+        logEvent("ATTENDANCE", "Too soon for " + matched.idNumber + " (elapsed " + String(elapsed) + "s, need " + String(delaySeconds) + "s)");
+        signalError();
+        delay(2000);
+        attendanceFingerprintId = "";
+        attendanceRfidUid = "";
+        mode = MODE_HOME;
+        return;
+      }
+      statusType = "OUT";
+    } else {
+      statusType = "IN";
+    }
+
+    addAttendanceToLFS(matched.idNumber, matched.fullName, occurredAt, statusType);
+    logEvent("ATTENDANCE", statusType + " for " + matched.idNumber + " " + matched.fullName + " (local)");
     displayId = matched.idNumber;
     displayName = matched.fullName;
   } else {
     // Check if fingerprint matched a user locally but RFID didn't → MISMATCH
     LocalUser fpOnly = findStudentByFpInLFS(attendanceFingerprintId.toInt());
     if (fpOnly.found) {
-      // Fingerprint is valid but RFID card doesn't belong to this user
       drawScreen("Attendance Error", "RFID Mismatch", "ID: " + fpOnly.idNumber, fpOnly.fullName, ILI9341_RED);
       logEvent("ATTENDANCE", "RFID Mismatch for " + fpOnly.idNumber + " " + fpOnly.fullName);
       signalError();
@@ -2872,13 +2927,12 @@ void completeAttendanceAttempt() {
     String localRecordId = makeLocalRecordId();
     AttendanceResult result = postAttendance(attendanceFingerprintId, attendanceRfidUid, occurredAt, localRecordId);
     if (result.ok) {
-      String status = result.status.length() ? result.status : "IN";
-      addAttendanceToLFS(result.idNumber, result.fullName, occurredAt, status);
-      logEvent("ATTENDANCE", status + " for " + result.idNumber + " " + result.fullName + " (API)");
+      statusType = result.status.length() ? result.status : "IN";
+      addAttendanceToLFS(result.idNumber, result.fullName, occurredAt, statusType);
+      logEvent("ATTENDANCE", statusType + " for " + result.idNumber + " " + result.fullName + " (API)");
       displayId = result.idNumber;
       displayName = result.fullName;
     } else {
-      // Unknown user — fingerprint and RFID both unrecognized
       drawScreen("Attendance Error", "Unknown User", "FP: " + attendanceFingerprintId, "RFID: " + attendanceRfidUid, ILI9341_RED);
       logEvent("ATTENDANCE", "Unknown user FP " + attendanceFingerprintId + " RFID " + attendanceRfidUid);
       signalError();
@@ -2892,9 +2946,7 @@ void completeAttendanceAttempt() {
 
   // Signal success, show briefly, then return to home screen
   signalSuccess();
-
-  // Show attendance success screen for a short moment
-  drawScreen("Attendance Success", "ID: " + displayId, displayName, "Status: IN", ILI9341_GREEN);
+  drawScreen("Attendance Success", "ID: " + displayId, displayName, "Status: " + statusType, ILI9341_GREEN);
   delay(1200);
 
   // Queue for silent online post after 5 seconds (TFT stays on home after this)
