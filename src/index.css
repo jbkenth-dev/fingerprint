@@ -577,7 +577,7 @@ body,
 
 /* ─── Account Table (border-spacing) ─── */
 .account-table {
-  border-separate;
+  border-collapse: separate;
   border-spacing: 0 0.5rem;
 }
 
