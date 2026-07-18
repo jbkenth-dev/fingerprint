@@ -509,7 +509,7 @@ void connectToSavedWifi() {
   if (wifiReady) {
     printNetworkInfo("WiFi connected");
     drawScreen("WiFi Connected", "IP Address", WiFi.localIP().toString(), "FRANCIS KEY", ILI9341_GREEN);
-    delay(1800);
+    delay(1000);
   }
 }
 
@@ -713,20 +713,20 @@ void updateHomeClock(bool force) {
   String dayText = formatDay(now);
 
   if (force || dateText != lastHomeDateText) {
-    tft.fillRect(0, 40, 320, 26, ILI9341_BLACK);
-    drawCentered(46, dateText, ILI9341_WHITE, 2);
+    tft.fillRect(0, 54, 320, 26, ILI9341_BLACK);
+    drawCentered(60, dateText, ILI9341_WHITE, 2);
     lastHomeDateText = dateText;
   }
 
   if (force || timeText != lastHomeTimeText) {
-    tft.fillRect(0, 72, 320, 44, ILI9341_BLACK);
-    drawCentered(78, timeText, ILI9341_CYAN, 5);
+    tft.fillRect(0, 86, 320, 44, ILI9341_BLACK);
+    drawCentered(92, timeText, ILI9341_CYAN, 5);
     lastHomeTimeText = timeText;
   }
 
   if (force || dayText != lastHomeDayText) {
-    tft.fillRect(0, 124, 320, 26, ILI9341_BLACK);
-    drawCentered(130, dayText, ILI9341_LIGHTGREY, 2);
+    tft.fillRect(0, 138, 320, 26, ILI9341_BLACK);
+    drawCentered(144, dayText, ILI9341_LIGHTGREY, 2);
     lastHomeDayText = dayText;
   }
 }
@@ -976,18 +976,19 @@ function deviceCards(){const d=state.device||{};return `<div class="grid cards">
 function liveScreen(){const u=(state.device&&state.device.ui)||{};return `<div class="screen"><div class="kind">${u.type||"state"}</div><div class="big">${u.title||"FRANCIS KEY"}</div><div class="line">${u.line1||""}</div><div class="line">${u.line2||""}</div><div class="line">${u.line3||""}</div></div>`}
 function dashboard(){return `${deviceCards()}`}
 function attendance(){if(state.loading.attendance)return `<div class="card"><div class="loader"></div></div>`;const rows=state.attendance.map(r=>`<tr><td>${r.date}</td><td>${r.time}</td><td>${r.id}</td><td>${r.name}</td><td>${r.status}</td></tr>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Recent Attendance</h2><button class="btn secondary" onclick="loadAttendance()">Refresh</button></div><div class="tablewrap"><table><thead><tr><th>Date</th><th>Time</th><th>ID</th><th>Name</th><th>Status</th></tr></thead><tbody>${rows||"<tr><td colspan=5>No local attendance records.</td></tr>"}</tbody></table></div></div>`}
-function registerView(){const d=state.device||{};if(!d.wifiReady||!d.databaseReady)return `<div class="card"><h2>Register User</h2><div class="empty">Registration unavailable.<br>Please connect to WiFi.</div></div>`;const q=state.search.toLowerCase();const filtered=state.students.filter(s=>(`${s.idNumber} ${s.fullName}`.toLowerCase()).includes(q));const list=filtered.map(s=>`<button class="item" onclick="openRegister(${s.id})"><b>${s.idNumber||s.id}</b> ${s.fullName}<div class="muted">${s.department||"Student"}</div></button>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Select Student</h2><button class="btn secondary" onclick="loadStudents()">Refresh</button></div><div class="field"><label>Realtime Search</label><input placeholder="Student ID, first name, last name, full name" value="${state.search}" oninput="state.search=this.value;render()"></div>${state.loading.students?'<div class="loader"></div>':`<div class="list">${list||'<div class="empty">No matching students.</div>'}</div>`}</div>`}
+function registerView(){const d=state.device||{};if(!d.wifiReady||!d.databaseReady)return `<div class="card"><h2>Register User</h2><div class="empty">Registration unavailable.<br>Please connect to WiFi.</div></div>`;const q=state.search.toLowerCase();const filtered=state.students.filter(s=>(`${s.idNumber} ${s.fullName}`.toLowerCase()).includes(q));const list=filtered.map(s=>`<button class="item" onclick="openRegister(${s.id})"><b>${s.idNumber||s.id}</b> ${s.fullName}<div class="muted">${s.department||"Student"}</div></button>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Select Student</h2><button class="btn secondary" onclick="loadStudents()">Refresh</button></div><div class="field"><label>Search Student</label><div style="display:flex;gap:8px"><input id="searchInput" placeholder="Student ID, first name, last name, full name" value="${state.search}" oninput="state.search=this.value" onkeydown="if(event.key==='Enter'){event.preventDefault();searchStudents()}"><button class="btn" onclick="searchStudents()" style="height:44px;min-width:90px">Search</button></div></div>${state.loading.students?'<div class="loader"></div>':`<div class="list">${list||'<div class="empty">No matching students.</div>'}</div>`}</div>`}
 function usersView(){if(state.loading.users)return '<div class="card"><div class="loader"></div></div>';const students=state.users.filter(u=>(u.role||'').toLowerCase()==='student');const rows=students.map(u=>{const active=u.status!=="inactive";const stBadge=active?'<span class="pill ok">Active</span>':'<span class="pill bad">Inactive</span>';let opts='';if(active)opts+='<option value="deactivate">Deactivate</option>';if(!active)opts+='<option value="activate">Activate</option>';if(u.fingerprintId||u.smartCardId)opts+='<option value="delete">Delete Credentials</option>';const safeName=(u.fullName||'').replace(/'/g,"\\\\'");return '<tr><td>'+(u.idNumber||u.userId)+'</td><td>'+u.fullName+'</td><td>'+(u.fingerprintId||"--")+'</td><td>'+(u.smartCardId||"--")+'</td><td>'+stBadge+'</td><td>'+(opts?'<select onchange="userActionModal('+u.userId+',this.value,\''+safeName+'\','+active+');this.value=\'\'"><option value="">-- Action --</option>'+opts+'</select>':"")+'</tr>'}).join("");return '<div class="card"><div class="row"><h2 style="margin-right:auto">Registered Students</h2><button class="btn secondary" onclick="loadUsers()">Refresh</button></div><div class="tablewrap"><table><thead><tr><th>ID</th><th>Name</th><th>Fingerprint</th><th>RFID</th><th>Status</th><th>Action</th></tr></thead><tbody>'+(rows||'<tr><td colspan="6">No students found.</td></tr>')+'</tbody></table></div></div>'}
 function wifiView(){const ws=state.wifiStatus||{};const st=ws.status;const connected=st==="Connected";const authenticating=st==="Authenticating";const on=connected||authenticating;const connSsid=on?(ws.ssid||""):"Not Connected";const connBlock=`<div style="margin-bottom:12px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:13px;color:var(--muted);font-weight:800">WiFi Connected:</span><span style="width:10px;height:10px;border-radius:50%;background:${on?"#16a34a":"#9ca3af"};display:inline-block"></span><b>${connSsid}</b></div>`;if(connected||authenticating){const clr=connected?"#16a34a":"#ca8a04";const lbl=connected?"Connected":"Authenticated";return `<div class="card"><div class="row"><h2 style="margin-right:auto">WiFi Settings</h2></div>${connBlock}<div style="padding:16px;border:1px solid ${connected?"#bbf7bb":"#fef08a"};border-radius:8px;background:${connected?"#f0faf0":"#fefce8"};margin-bottom:12px"><div class="field"><label>SSID</label><div class="item"><b>${ws.ssid||""}</b></div></div><div class="field"><label>Status</label><div style="display:flex;align-items:center;gap:8px"><span style="width:12px;height:12px;border-radius:50%;background:${clr};display:inline-block"></span><b style="color:${clr}">${lbl}</b></div></div>${authenticating?'<div class="field"><label style="color:#dc2626">Please reset WiFi</label></div>':''}</div><button class="btn danger" onclick="resetWifi()">Reset WiFi</button></div>`}const nets=state.networks.map(n=>`<option value="${n.ssid}">${n.ssid}</option>`).join("");const scanMsg=state.loading.scan?'Scanning WiFi...':state.scanStatus;const statusColor=st==="Connecting"||st==="Authenticating"?"#2563eb":st==="Scanning"||st==="Reconnecting"?"#ca8a04":"#dc2626";const statusDot=st&&st!=="Disconnected"&&st!=="Connection Failed"?`<div style="padding:12px;border:1px solid ${statusColor};border-radius:8px;background:white;margin-bottom:8px;display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${statusColor};display:inline-block"></span><span>${st}</span></div>`:"";return `<div class="card"><div class="row"><h2 style="margin-right:auto">WiFi Settings</h2><button class="btn secondary" onclick="scanWifi()">Scan Networks</button></div>${connBlock}${statusDot}${scanMsg?'<p style="margin:8px 0;color:var(--muted)">'+scanMsg+'</p>':""}<div class="field"><label>Network</label><select id="wifiSsid">${nets}</select></div><div class="field"><label>Password</label><input id="wifiPass" type="password" placeholder="WiFi password"></div><button class="btn" onclick="saveWifi()">Save and Connect</button><button class="btn danger" onclick="resetWifi()" style="margin-top:12px">Reset WiFi</button></div>`}
 function rulesView(){const d=state.device||{}, r=d.rules||{};return `<div class="card"><h2>Attendance Rules</h2><div class="field"><label>Student OUT Allowed After</label><select id="outDelay">${[1,5,10,15,30,60].map(v=>`<option value="${v}" ${Number(r.outDelay)===v?"selected":""}>${v} minute${v>1?"s":""}</option>`).join("")}</select></div><button class="btn" onclick="saveRules()">Save Rules</button></div>`}
 function logsView(){if(state.loading.logs)return `<div class="card"><div class="loader"></div></div>`;const l=state.logs||{};return `<div class="grid"><div class="card"><div class="row"><h2 style="margin-right:auto">Device Logs</h2><button class="btn secondary" onclick="loadLogs()">Refresh</button></div><pre>${l.events||"No device log."}</pre></div><div class="card"><h2>Offline Sync Queue</h2><pre>${l.unsent||"No pending records."}</pre></div></div>`}
 function backupView(){return `<div class="grid"><div class="card"><h2>Backup</h2><p class="muted">Download SD files and settings. Fingerprint templates remain inside the fingerprint sensor.</p><div class="row"><button class="btn" onclick="download('/api/backup/settings','francis-key-settings.json')">Settings</button><button class="btn secondary" onclick="download('/api/backup/file?name=attendance','attendance.csv')">Attendance</button><button class="btn secondary" onclick="download('/api/backup/file?name=users','users.psv')">Users</button><button class="btn secondary" onclick="download('/api/backup/file?name=queue','unsent.psv')">Queue</button><button class="btn secondary" onclick="download('/api/backup/file?name=logs','device.log')">Logs</button></div></div><div class="card"><h2>Restore Settings</h2><div class="field"><label>Settings JSON</label><textarea id="restoreSettings"></textarea></div><button class="btn danger" onclick="restoreSettings()">Restore Settings</button></div><div class="card"><h2>Restore SD File</h2><div class="field"><label>File</label><select id="restoreFile"><option value="attendance">Attendance CSV</option><option value="users">Users cache</option><option value="queue">Unsent queue</option><option value="logs">Device log</option></select></div><div class="field"><label>Content</label><textarea id="restoreContent"></textarea></div><button class="btn danger" onclick="restoreFile()">Restore File</button></div><div class="card"><h2>Clear All Cache</h2><p class="muted">⚠ Erases all fingerprint templates from the sensor and removes all RFID cache, student data, attendance records, and unsent queue from LFS. This cannot be undone.</p><button class="btn danger" onclick="clearCache()">Clear All Cache</button></div></div>`}
-function dateTimeView(){const d=state.device||{};const h24=d.rtcHour24!==undefined?d.rtcHour24:12;const h12=h24%12||12;const ampm=h24>=12?'PM':'AM';const m=d.rtcMonth||1;const dd=d.rtcDay||1;const y=d.rtcYear||2026;const min=d.rtcMinute||0;const mn=["January","February","March","April","May","June","July","August","September","October","November","December"];let ms='';for(let i=1;i<=12;i++)ms+='<option value="'+i+'"'+(i===m?' selected':'')+'>'+mn[i-1]+'</option>';let hs='';for(let i=1;i<=12;i++){const s=i<10?'0'+i:''+i;hs+='<option value="'+i+'"'+(i===h12?' selected':'')+'>'+s+'</option>'}let mins='';for(let i=0;i<60;i++){const s=i<10?'0'+i:''+i;mins+='<option value="'+s+'"'+(i===min?' selected':'')+'>'+s+'</option>'}return '<div class="card"><h2>Set Date & Time (Offline)</h2><p class="muted">Manually set the RTC date and time when the device is offline. All times are in 12-hour format.</p><div class="grid" style="grid-template-columns:1fr 1fr"><div class="field"><label>Year</label><input type="number" id="dtYear" min="2000" max="2099" value="'+y+'"></div><div class="field"><label>Month</label><select id="dtMonth">'+ms+'</select></div><div class="field"><label>Day</label><input type="number" id="dtDay" min="1" max="31" value="'+dd+'"></div><div class="field"><label>Hour</label><select id="dtHour">'+hs+'</select></div><div class="field"><label>Minute</label><select id="dtMinute">'+mins+'</select></div><div class="field"><label>AM/PM</label><select id="dtAmPm"><option value="AM"'+(ampm==='AM'?' selected':'')+'>AM</option><option value="PM"'+(ampm==='PM'?' selected':'')+'>PM</option></select></div></div><button class="btn" onclick="saveDateTime()">Set Date & Time</button><div style="margin-top:12px;padding:12px;background:#fbfdfe;border-radius:8px;border:1px solid var(--line)"><div class="muted">Current device time</div><b>'+d.date+' '+d.time+'</b></div></div>'}
-async function saveDateTime(){const y=parseInt($("dtYear").value);const mo=parseInt($("dtMonth").value);const d=parseInt($("dtDay").value);const h12=parseInt($("dtHour").value);const mi=parseInt($("dtMinute").value);const pm=$("dtAmPm").value==="PM";if(!y||!mo||!d||!h12||mi===undefined){toast("Please fill all fields");return}if(d<1||d>31){toast("Day must be between 1 and 31");return}showLoading("Setting date & time...");try{await api("/api/time/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({year:y,month:mo,day:d,hour12:h12,minute:mi,isPm:pm})});toast("Date and time updated.");loadState()}catch(e){toast(e.message)}finally{hideLoading()}}
+function dateTimeView(){const d=state.device||{};const h24=d.rtcHour24!==undefined?d.rtcHour24:12;const ampm=h24>=12?'PM':'AM';const m=d.rtcMonth||1;const dd=d.rtcDay||1;const y=d.rtcYear||2026;const min=d.rtcMinute||0;const dateStr=y+'-'+(m<10?'0':'')+m+'-'+(dd<10?'0':'')+dd;const timeStr=(h24<10?'0':'')+h24+':'+(min<10?'0':'')+min;return '<div class="card"><h2>Set Date & Time (Offline)</h2><div class="field"><label>📅 Date</label><input type="date" id="dtDate" value="'+dateStr+'"></div><div class="field"><label>🕒 Time</label><div style="display:flex;gap:8px"><input type="time" id="dtTime" value="'+timeStr+'" style="flex:1"><select id="dtAmPm" style="width:80px"><option value="AM"'+(ampm==='AM'?' selected':'')+'>AM</option><option value="PM"'+(ampm==='PM'?' selected':'')+'>PM</option></select></div></div><button class="btn" onclick="saveDateTime()">Save Date & Time</button><div style="margin-top:12px;padding:12px;background:#fbfdfe;border-radius:8px;border:1px solid var(--line)"><div class="muted">Current device time</div><b>'+d.date+' '+d.time+'</b></div></div>'}
+async function saveDateTime(){const dateVal=$("dtDate").value;const timeVal=$("dtTime").value;const isPm=$("dtAmPm").value==="PM";if(!dateVal||!timeVal){toast("Please fill all fields");return}const p=dateVal.split('-');const t=timeVal.split(':');const y=parseInt(p[0]);const mo=parseInt(p[1]);const dd=parseInt(p[2]);let h24=parseInt(t[0]);const mi=parseInt(t[1]);if(isPm&&h24<12)h24+=12;if(!isPm&&h24===12)h24=0;const h12=h24===0?12:(h24>12?h24-12:h24);showLoading("Setting date & time...");try{await api("/api/time/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({year:y,month:mo,day:dd,hour12:h12,minute:mi,isPm:isPm})});toast("Date and time updated.");loadState()}catch(e){toast(e.message)}finally{hideLoading()}}
 function render(){if(["INPUT","TEXTAREA","SELECT"].includes(document.activeElement&&document.activeElement.tagName))return;shell();const v=state.view;let html=v==="Dashboard"?dashboard():v==="Attendance"?attendance():v==="Register User"?registerView():v==="Users"?usersView():v==="WiFi Settings"?wifiView():v==="Attendance Rules"?rulesView():v==="Date/Time"?dateTimeView():v==="Logs"?logsView():backupView();$("content").innerHTML=html}
 async function loadState(){try{state.device=await api("/api/state");render()}catch(e){console.log(e.message)}}
 async function loadAttendance(){setLoading("attendance",true);try{state.attendance=(await api("/api/attendance")).records||[]}catch(e){toast(e.message)}setLoading("attendance",false)}
 async function loadStudents(){setLoading("students",true);try{state.students=(await api("/api/students")).students||[]}catch(e){toast(e.message)}setLoading("students",false)}
+async function searchStudents(){const q=state.search.trim();if(!q){toast("Please enter a search term");return}setLoading("students",true);try{const res=await api("/api/students?search="+encodeURIComponent(q));state.students=res.students||[];toast("Found "+state.students.length+" student(s)")}catch(e){toast(e.message)}setLoading("students",false);render()}
 async function loadUsers(){setLoading("users",true);try{state.users=(await api("/api/users")).users||[]}catch(e){toast(e.message)}setLoading("users",false)}
 async function scanWifi(){showLoading("Scanning WiFi networks...");try{const r=await api("/api/wifi/scan");state.networks=r.networks||[];state.scanStatus=state.networks.length?"Found "+state.networks.length+" 2.4GHz networks":"No 2.4GHz WiFi networks found."}catch(e){state.scanStatus="";toast(e.message)}finally{hideLoading()}}
 async function loadLogs(){setLoading("logs",true);try{state.logs=await api("/api/logs")}catch(e){toast(e.message)}setLoading("logs",false)}
@@ -1093,6 +1094,11 @@ void handleApiStudents() {
     return;
   }
 
+  // Get search query parameter
+  String searchQuery = server.arg("search");
+  searchQuery.trim();
+  searchQuery.toLowerCase();
+
   // Try live API first; fall back to LittleFS cache for offline registration
   DynamicJsonDocument response(24576);
   int httpCode = 0;
@@ -1118,6 +1124,18 @@ void handleApiStudents() {
     if (role != "student" || status != "active") {
       continue;
     }
+    
+    // Apply search filter if provided
+    if (searchQuery.length() > 0) {
+      String idNumber = String((const char *) (user["idNumber"] | ""));
+      String fullName = String((const char *) (user["fullName"] | ""));
+      idNumber.toLowerCase();
+      fullName.toLowerCase();
+      if (idNumber.indexOf(searchQuery) < 0 && fullName.indexOf(searchQuery) < 0) {
+        continue;
+      }
+    }
+    
     if (!first) {
       payload += ",";
     }
@@ -1458,6 +1476,7 @@ void handleApiWifiSave() {
     checkApiStatus();
     fetchAndCacheUsers();
     drawScreen("WiFi Connected", "Station IP", WiFi.localIP().toString(), "AP: 192.168.4.1", ILI9341_GREEN);
+    delay(3000);
     logEvent("WIFI", "Connected to " + wifiSsid + " at " + WiFi.localIP().toString());
     sendJson(200, "{\"ok\":true,\"connected\":true}");
     return;
