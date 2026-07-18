@@ -2754,6 +2754,38 @@ int scanFingerprintForAttendance() {
   return finger.fingerID;
 }
 
+// Permanently remove an attendance record from local database after online sync
+void removeAttendanceFromLFS(const String &timestamp) {
+  if (!lfsReady) return;
+  if (!LittleFS.exists("/attendance.json")) return;
+
+  DynamicJsonDocument doc(16384);
+  File file = LittleFS.open("/attendance.json", "r");
+  if (!file) return;
+  DeserializationError err = deserializeJson(doc, file);
+  file.close();
+  if (err) return;
+
+  JsonArray records = doc.as<JsonArray>();
+  bool changed = false;
+  for (int i = records.size() - 1; i >= 0; i--) {
+    String ts = String((const char *)(records[i]["timestamp"] | ""));
+    if (ts == timestamp) {
+      records.remove(i);
+      changed = true;
+      break;  // remove only the first match
+    }
+  }
+
+  if (changed) {
+    file = LittleFS.open("/attendance.json", "w");
+    if (file) {
+      serializeJson(doc, file);
+      file.close();
+    }
+  }
+}
+
 // Queue for posting attendance to online database after 5-second delay
 // (keeps TFT on home screen — no display changes during online post)
 #define ATTENDANCE_ONLINE_DELAY_MS   5000
@@ -2773,6 +2805,8 @@ void processAttendanceQueue() {
   AttendanceResult result = postAttendance(fpId, rfid, ts, localRecordId);
   if (result.ok) {
     logEvent("ATTENDANCE", "Online post OK for " + result.idNumber);
+    // Permanently remove from local database (LFS) — no longer needed
+    removeAttendanceFromLFS(ts);
     // Remove first item, shift rest down
     for (int i = 1; i < pendingAttendanceCount; i++) {
       pendingAttendanceQueue[i - 1] = pendingAttendanceQueue[i];
@@ -2787,12 +2821,16 @@ void processAttendanceQueue() {
 
 void completeAttendanceAttempt() {
   String occurredAt = isoNow();
+  String displayId = "";
+  String displayName = "Verified";
 
   // ===== Always save locally first =====
   LocalUser matched = findStudentInLFS(attendanceFingerprintId, attendanceRfidUid);
   if (matched.found) {
     addAttendanceToLFS(matched.idNumber, matched.fullName, occurredAt, "IN");
     logEvent("ATTENDANCE", "IN for " + matched.idNumber + " " + matched.fullName + " (local)");
+    displayId = matched.idNumber;
+    displayName = matched.fullName;
   } else {
     // Try online API if local lookup failed (unrecognized user in local cache)
     String localRecordId = makeLocalRecordId();
@@ -2801,6 +2839,8 @@ void completeAttendanceAttempt() {
       String status = result.status.length() ? result.status : "IN";
       addAttendanceToLFS(result.idNumber, result.fullName, occurredAt, status);
       logEvent("ATTENDANCE", status + " for " + result.idNumber + " " + result.fullName + " (API)");
+      displayId = result.idNumber;
+      displayName = result.fullName;
     } else {
       logEvent("ATTENDANCE", "Failed FP " + attendanceFingerprintId + " RFID " + attendanceRfidUid);
       signalError();
@@ -2811,10 +2851,14 @@ void completeAttendanceAttempt() {
     }
   }
 
-  // Signal success and immediately return to home screen
+  // Signal success, show briefly, then return to home screen
   signalSuccess();
 
-  // Queue for silent online post after 5 seconds (TFT stays on home)
+  // Show attendance success screen for a short moment
+  drawScreen("Attendance Success", "ID: " + displayId, displayName, "Status: IN", ILI9341_GREEN);
+  delay(1200);
+
+  // Queue for silent online post after 5 seconds (TFT stays on home after this)
   if (pendingAttendanceCount < 8) {
     pendingAttendanceQueue[pendingAttendanceCount].fingerprintId = attendanceFingerprintId;
     pendingAttendanceQueue[pendingAttendanceCount].rfidUid = attendanceRfidUid;
