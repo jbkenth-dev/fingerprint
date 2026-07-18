@@ -1,0 +1,22 @@
+# Vercel ignore file
+# Exclude files not needed for deployment
+
+# Source files (not needed in production)
+src/
+scripts/
+arduino/
+create_db.sql
+vite.config.js
+package.json
+package-lock.json
+node_modules/
+.git/
+.gitignore
+README.md
+*.md
+
+# Keep only what's needed:
+# - api/ (serverless functions)
+# - public/ (static assets)
+# - index.html
+# - vercel.json
