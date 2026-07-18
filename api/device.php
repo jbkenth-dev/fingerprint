@@ -132,6 +132,11 @@ function fetch_active_users(PDO $pdo): array {
     return array_map('serialize_user', $stmt->fetchAll());
 }
 
+function fetch_all_users(PDO $pdo): array {
+    $stmt = $pdo->query('SELECT ' . select_device_user_fields($pdo) . ' FROM users ORDER BY id ASC');
+    return array_map('serialize_user', $stmt->fetchAll());
+}
+
 function credential_taken(PDO $pdo, string $column, string $value, int $excludeUserId): bool {
     if ($value === '') {
         return false;
@@ -350,6 +355,9 @@ try {
         if ($action === 'users') {
             json_response(['ok' => true, 'users' => fetch_active_users($pdo)]);
         }
+        if ($action === 'all_users') {
+            json_response(['ok' => true, 'users' => fetch_all_users($pdo)]);
+        }
         if ($action === 'attendance') {
             $stmt = $pdo->query('SELECT id, userId, idNumber, name, role, logDate, logTime, status, deviceId, createdAt FROM attendance_logs ORDER BY logDate DESC, logTime DESC, id DESC LIMIT 100');
             json_response(['ok' => true, 'records' => $stmt->fetchAll()]);
@@ -365,6 +373,33 @@ try {
         }
         if ($action === 'sync') {
             json_response(['ok' => true, 'results' => sync_records($pdo, $input)]);
+        }
+        if ($action === 'deactivate_user') {
+            $userId = (int) ($input['userId'] ?? 0);
+            if ($userId <= 0) json_response(['ok' => false, 'error' => 'userId is required.'], 400);
+            $user = fetch_user($pdo, $userId);
+            if (!$user) json_response(['ok' => false, 'error' => 'User not found.'], 404);
+            $stmt = $pdo->prepare('UPDATE users SET status = ? WHERE id = ?');
+            $stmt->execute(['Inactive', $userId]);
+            json_response(['ok' => true, 'user' => serialize_user(fetch_user($pdo, $userId))]);
+        }
+        if ($action === 'activate_user') {
+            $userId = (int) ($input['userId'] ?? 0);
+            if ($userId <= 0) json_response(['ok' => false, 'error' => 'userId is required.'], 400);
+            $user = fetch_user($pdo, $userId);
+            if (!$user) json_response(['ok' => false, 'error' => 'User not found.'], 404);
+            $stmt = $pdo->prepare('UPDATE users SET status = ? WHERE id = ?');
+            $stmt->execute(['Active', $userId]);
+            json_response(['ok' => true, 'user' => serialize_user(fetch_user($pdo, $userId))]);
+        }
+        if ($action === 'delete_credentials') {
+            $userId = (int) ($input['userId'] ?? 0);
+            if ($userId <= 0) json_response(['ok' => false, 'error' => 'userId is required.'], 400);
+            $user = fetch_user($pdo, $userId);
+            if (!$user) json_response(['ok' => false, 'error' => 'User not found.'], 404);
+            $stmt = $pdo->prepare('UPDATE users SET fingerprintId = NULL, smartCardId = NULL WHERE id = ?');
+            $stmt->execute([$userId]);
+            json_response(['ok' => true, 'user' => serialize_user(fetch_user($pdo, $userId))]);
         }
     }
 
