@@ -132,6 +132,7 @@ struct PendingAttendance {
   String fingerprintId;
   String rfidUid;
   String occurredAt;
+  String statusType;  // "IN" or "OUT"
 };
 PendingAttendance pendingAttendanceQueue[8];
 int pendingAttendanceCount = 0;
@@ -2774,6 +2775,53 @@ void removeAttendanceFromLFS(const String &timestamp) {
   }
 }
 
+// Remove both the IN and OUT records for a student when OUT is successfully posted.
+// Finds the most recent OUT record (by timestamp), then removes it and the matching IN record.
+void removeBothInOutFromLFS(const String &outTimestamp, const String &idNumber) {
+  if (!lfsReady) return;
+  if (!LittleFS.exists("/attendance.json")) return;
+  DynamicJsonDocument doc(16384);
+  File file = LittleFS.open("/attendance.json", "r");
+  if (!file) return;
+  DeserializationError err = deserializeJson(doc, file);
+  file.close();
+  if (err) return;
+
+  JsonArray records = doc.as<JsonArray>();
+  bool changed = false;
+
+  // Remove the OUT record by timestamp
+  for (int i = records.size() - 1; i >= 0; i--) {
+    String ts = String((const char *)(records[i]["timestamp"] | ""));
+    String rid = String((const char *)(records[i]["id_number"] | ""));
+    String type = String((const char *)(records[i]["type"] | ""));
+    if (ts == outTimestamp && rid == idNumber && type == "OUT") {
+      records.remove(i);
+      changed = true;
+      break;
+    }
+  }
+
+  // Remove the most recent IN record for this student (the one paired with this OUT)
+  for (int i = records.size() - 1; i >= 0; i--) {
+    String rid = String((const char *)(records[i]["id_number"] | ""));
+    String type = String((const char *)(records[i]["type"] | ""));
+    if (rid == idNumber && type == "IN") {
+      records.remove(i);
+      changed = true;
+      break;
+    }
+  }
+
+  if (changed) {
+    file = LittleFS.open("/attendance.json", "w");
+    if (file) {
+      serializeJson(doc, file);
+      file.close();
+    }
+  }
+}
+
 // Returns the last attendance type ("IN" or "OUT") for a student, scanning from most recent.
 // Also returns the timestamp of that last record via outTimestamp.
 String getLastAttendanceType(const String &idNumber, String &outTimestamp) {
@@ -2841,14 +2889,18 @@ void processAttendanceQueue() {
   String fpId = pendingAttendanceQueue[0].fingerprintId;
   String rfid = pendingAttendanceQueue[0].rfidUid;
   String ts   = pendingAttendanceQueue[0].occurredAt;
+  String type = pendingAttendanceQueue[0].statusType;
 
-  Serial.printf("[QUEUE] Posting attendance: FP=%s RFID=%s\n", fpId.c_str(), rfid.c_str());
+  Serial.printf("[QUEUE] Posting attendance: FP=%s RFID=%s Type=%s\n", fpId.c_str(), rfid.c_str(), type.c_str());
   AttendanceResult result = postAttendance(fpId, rfid, ts, localRecordId);
   if (result.ok) {
-    logEvent("ATTENDANCE", "Online post OK for " + result.idNumber);
-    Serial.printf("[QUEUE] Online post OK for %s\n", result.idNumber.c_str());
-    // Permanently remove from local database (LFS) — no longer needed
-    removeAttendanceFromLFS(ts);
+    logEvent("ATTENDANCE", type + " Online post OK for " + result.idNumber);
+    Serial.printf("[QUEUE] Online post OK for %s (%s)\n", result.idNumber.c_str(), type.c_str());
+    // IN: keep local record so next scan can determine OUT
+    // OUT: remove both IN and OUT records from local (attendance cycle complete)
+    if (type == "OUT") {
+      removeBothInOutFromLFS(ts, result.idNumber);
+    }
     // Remove first item, shift rest down
     for (int i = 1; i < pendingAttendanceCount; i++) {
       pendingAttendanceQueue[i - 1] = pendingAttendanceQueue[i];
@@ -2954,6 +3006,7 @@ void completeAttendanceAttempt() {
     pendingAttendanceQueue[pendingAttendanceCount].fingerprintId = attendanceFingerprintId;
     pendingAttendanceQueue[pendingAttendanceCount].rfidUid = attendanceRfidUid;
     pendingAttendanceQueue[pendingAttendanceCount].occurredAt = occurredAt;
+    pendingAttendanceQueue[pendingAttendanceCount].statusType = statusType;
     pendingAttendanceCount++;
     if (pendingAttendanceCount == 1) {
       pendingAttendanceFirstSavedAt = millis();
