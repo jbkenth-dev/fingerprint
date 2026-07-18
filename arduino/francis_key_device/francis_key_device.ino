@@ -778,21 +778,23 @@ void signalFingerprint() {
 
 void signalRfid() {
   digitalWrite(BLUE_LED_PIN, LOW);
-  pulseLed(YELLOW_LED_PIN, 1000);
+  digitalWrite(YELLOW_LED_PIN, HIGH);
   buzz(90);
 }
 
 void signalSuccess() {
   digitalWrite(BLUE_LED_PIN, LOW);
+  digitalWrite(YELLOW_LED_PIN, LOW);
   digitalWrite(GREEN_LED_PIN, HIGH);
   buzz(100, 80);
   buzz(120);
-  delay(500);
+  delay(100);
   digitalWrite(GREEN_LED_PIN, LOW);
 }
 
 void signalError() {
   digitalWrite(BLUE_LED_PIN, LOW);
+  digitalWrite(YELLOW_LED_PIN, LOW);
   digitalWrite(RED_LED_PIN, HIGH);
   buzz(900);
   delay(350);
@@ -801,6 +803,7 @@ void signalError() {
 
 void signalUnauthorized() {
   digitalWrite(BLUE_LED_PIN, LOW);
+  digitalWrite(YELLOW_LED_PIN, LOW);
   digitalWrite(RED_LED_PIN, HIGH);
   buzz(500, 160);
   buzz(500, 160);
@@ -2684,6 +2687,7 @@ void runAttendanceWorkflow() {
       }
       attendanceFingerprintId = String(fingerprintId);
       signalFingerprint();
+      digitalWrite(YELLOW_LED_PIN, HIGH);
       drawScreen(
           String("Attendance"),
           String("Please Tap ID Card"),
@@ -2751,7 +2755,7 @@ void completeAttendanceAttempt() {
     logEvent("ATTENDANCE", "IN for " + matched.idNumber + " " + matched.fullName + " (LFS)");
     drawScreen("Attendance Success", "ID: " + matched.idNumber, matched.fullName, "Status: IN", ILI9341_GREEN);
     signalSuccess();
-    delay(2500);
+    delay(600);
     // Attempt to sync pending records to API (best-effort)
     if (wifiReady) {
       syncUnsentAttendance();
@@ -2767,7 +2771,7 @@ void completeAttendanceAttempt() {
     logEvent("ATTENDANCE", status + " for " + result.idNumber + " " + result.fullName + " (API)");
     drawScreen("Attendance Success", "ID: " + result.idNumber, result.fullName, "Status: " + status, ILI9341_GREEN);
     signalSuccess();
-    delay(2500);
+    delay(600);
     return;
   }
 
