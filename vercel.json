@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "http://francis-key.atwebpages.com/api/$1"
+      "destination": "http://franciskey.atwebpages.com/api/$1"
     },
     {
       "source": "/(.*)",
