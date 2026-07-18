@@ -592,14 +592,14 @@ String formatDate(const DateTime &dt) {
 
 String formatTime12(const DateTime &dt) {
   uint8_t hour = dt.hour();
-  const bool isPm = hour >= 12;
   uint8_t hour12 = hour % 12;
   if (hour12 == 0) {
     hour12 = 12;
   }
+  const char* ampm = (hour >= 12) ? "PM" : "AM";
 
   char buffer[16];
-  snprintf(buffer, sizeof(buffer), "%02d:%02d %s", hour12, dt.minute(), isPm ? "PM" : "AM");
+  snprintf(buffer, sizeof(buffer), "%02d:%02d %s", hour12, dt.minute(), ampm);
   return String(buffer);
 }
 
@@ -982,8 +982,8 @@ function wifiView(){const ws=state.wifiStatus||{};const st=ws.status;const conne
 function rulesView(){const d=state.device||{}, r=d.rules||{};return `<div class="card"><h2>Attendance Rules</h2><div class="field"><label>Student OUT Allowed After</label><select id="outDelay">${[1,5,10,15,30,60].map(v=>`<option value="${v}" ${Number(r.outDelay)===v?"selected":""}>${v} minute${v>1?"s":""}</option>`).join("")}</select></div><button class="btn" onclick="saveRules()">Save Rules</button></div>`}
 function logsView(){if(state.loading.logs)return `<div class="card"><div class="loader"></div></div>`;const l=state.logs||{};return `<div class="grid"><div class="card"><div class="row"><h2 style="margin-right:auto">Device Logs</h2><button class="btn secondary" onclick="loadLogs()">Refresh</button></div><pre>${l.events||"No device log."}</pre></div><div class="card"><h2>Offline Sync Queue</h2><pre>${l.unsent||"No pending records."}</pre></div></div>`}
 function backupView(){return `<div class="grid"><div class="card"><h2>Backup</h2><p class="muted">Download SD files and settings. Fingerprint templates remain inside the fingerprint sensor.</p><div class="row"><button class="btn" onclick="download('/api/backup/settings','francis-key-settings.json')">Settings</button><button class="btn secondary" onclick="download('/api/backup/file?name=attendance','attendance.csv')">Attendance</button><button class="btn secondary" onclick="download('/api/backup/file?name=users','users.psv')">Users</button><button class="btn secondary" onclick="download('/api/backup/file?name=queue','unsent.psv')">Queue</button><button class="btn secondary" onclick="download('/api/backup/file?name=logs','device.log')">Logs</button></div></div><div class="card"><h2>Restore Settings</h2><div class="field"><label>Settings JSON</label><textarea id="restoreSettings"></textarea></div><button class="btn danger" onclick="restoreSettings()">Restore Settings</button></div><div class="card"><h2>Restore SD File</h2><div class="field"><label>File</label><select id="restoreFile"><option value="attendance">Attendance CSV</option><option value="users">Users cache</option><option value="queue">Unsent queue</option><option value="logs">Device log</option></select></div><div class="field"><label>Content</label><textarea id="restoreContent"></textarea></div><button class="btn danger" onclick="restoreFile()">Restore File</button></div><div class="card"><h2>Clear All Cache</h2><p class="muted">⚠ Erases all fingerprint templates from the sensor and removes all RFID cache, student data, attendance records, and unsent queue from LFS. This cannot be undone.</p><button class="btn danger" onclick="clearCache()">Clear All Cache</button></div></div>`}
-function dateTimeView(){const d=state.device||{};const h24=d.rtcHour24!==undefined?d.rtcHour24:12;const ampm=h24>=12?'PM':'AM';const m=d.rtcMonth||1;const dd=d.rtcDay||1;const y=d.rtcYear||2026;const min=d.rtcMinute||0;const dateStr=y+'-'+(m<10?'0':'')+m+'-'+(dd<10?'0':'')+dd;const timeStr=(h24<10?'0':'')+h24+':'+(min<10?'0':'')+min;return '<div class="card"><h2>Set Date & Time (Offline)</h2><div class="field"><label>📅 Date</label><input type="date" id="dtDate" value="'+dateStr+'"></div><div class="field"><label>🕒 Time</label><div style="display:flex;gap:8px"><input type="time" id="dtTime" value="'+timeStr+'" style="flex:1"><select id="dtAmPm" style="width:80px"><option value="AM"'+(ampm==='AM'?' selected':'')+'>AM</option><option value="PM"'+(ampm==='PM'?' selected':'')+'>PM</option></select></div></div><button class="btn" onclick="saveDateTime()">Save Date & Time</button><div style="margin-top:12px;padding:12px;background:#fbfdfe;border-radius:8px;border:1px solid var(--line)"><div class="muted">Current device time</div><b>'+d.date+' '+d.time+'</b></div></div>'}
-async function saveDateTime(){const dateVal=$("dtDate").value;const timeVal=$("dtTime").value;const isPm=$("dtAmPm").value==="PM";if(!dateVal||!timeVal){toast("Please fill all fields");return}const p=dateVal.split('-');const t=timeVal.split(':');const y=parseInt(p[0]);const mo=parseInt(p[1]);const dd=parseInt(p[2]);let h24=parseInt(t[0]);const mi=parseInt(t[1]);if(isPm&&h24<12)h24+=12;if(!isPm&&h24===12)h24=0;const h12=h24===0?12:(h24>12?h24-12:h24);showLoading("Setting date & time...");try{await api("/api/time/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({year:y,month:mo,day:dd,hour12:h12,minute:mi,isPm:isPm})});toast("Date and time updated.");loadState()}catch(e){toast(e.message)}finally{hideLoading()}}
+function dateTimeView(){const d=state.device||{};const h24=d.rtcHour24!==undefined?d.rtcHour24:12;const m=d.rtcMonth||1;const dd=d.rtcDay||1;const y=d.rtcYear||2026;const min=d.rtcMinute||0;const dateStr=y+'-'+(m<10?'0':'')+m+'-'+(dd<10?'0':'')+dd;const timeStr=(h24<10?'0':'')+h24+':'+(min<10?'0':'')+min;return '<div class="card"><h2>Set Date & Time (Offline)</h2><div class="field"><label>📅 Date</label><input type="date" id="dtDate" value="'+dateStr+'"></div><div class="field"><label>🕒 Time (24-hour format)</label><input type="time" id="dtTime" value="'+timeStr+'"></div><button class="btn" onclick="saveDateTime()">Save Date & Time</button><div style="margin-top:12px;padding:12px;background:#fbfdfe;border-radius:8px;border:1px solid var(--line)"><div class="muted">Current device time</div><b>'+d.date+' '+d.time+'</b></div></div>'}
+async function saveDateTime(){const dateVal=$("dtDate").value;const timeVal=$("dtTime").value;if(!dateVal||!timeVal){toast("Please fill all fields");return}const p=dateVal.split('-');const t=timeVal.split(':');const y=parseInt(p[0]);const mo=parseInt(p[1]);const dd=parseInt(p[2]);const h24=parseInt(t[0]);const mi=parseInt(t[1]);showLoading("Setting date & time...");try{await api("/api/time/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({year:y,month:mo,day:dd,hour24:h24,minute:mi})});toast("Date and time updated.");loadState()}catch(e){toast(e.message)}finally{hideLoading()}}
 function render(){if(["INPUT","TEXTAREA","SELECT"].includes(document.activeElement&&document.activeElement.tagName))return;shell();const v=state.view;let html=v==="Dashboard"?dashboard():v==="Attendance"?attendance():v==="Register User"?registerView():v==="Users"?usersView():v==="WiFi Settings"?wifiView():v==="Attendance Rules"?rulesView():v==="Date/Time"?dateTimeView():v==="Logs"?logsView():backupView();$("content").innerHTML=html}
 async function loadState(){try{state.device=await api("/api/state");render()}catch(e){console.log(e.message)}}
 async function loadAttendance(){setLoading("attendance",true);try{state.attendance=(await api("/api/attendance")).records||[]}catch(e){toast(e.message)}setLoading("attendance",false)}
@@ -1725,19 +1725,13 @@ void handleApiTimeSet() {
   int year = request["year"] | 0;
   int month = request["month"] | 0;
   int day = request["day"] | 0;
-  int hour12 = request["hour12"] | 0;
+  int hour24 = request["hour24"] | 0;
   int minute = request["minute"] | 0;
-  bool isPm = request["isPm"] | false;
 
   if (year < 2000 || year > 2099 || month < 1 || month > 12 || day < 1 || day > 31 ||
-      hour12 < 1 || hour12 > 12 || minute < 0 || minute > 59) {
+      hour24 < 0 || hour24 > 23 || minute < 0 || minute > 59) {
     sendJson(400, "{\"ok\":false,\"error\":\"Invalid date or time values.\"}");
     return;
-  }
-
-  int hour24 = hour12 % 12;
-  if (isPm) {
-    hour24 += 12;
   }
 
   if (rtcReady) {
