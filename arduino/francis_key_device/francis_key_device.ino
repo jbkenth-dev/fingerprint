@@ -761,16 +761,18 @@ void printNetworkInfo(const String &context) {
 }
 
 void signalFingerprint() {
-  pulseLed(BLUE_LED_PIN, 1000);
+  digitalWrite(BLUE_LED_PIN, HIGH);
   buzz(90);
 }
 
 void signalRfid() {
+  digitalWrite(BLUE_LED_PIN, LOW);
   pulseLed(YELLOW_LED_PIN, 1000);
   buzz(90);
 }
 
 void signalSuccess() {
+  digitalWrite(BLUE_LED_PIN, LOW);
   digitalWrite(GREEN_LED_PIN, HIGH);
   buzz(100, 80);
   buzz(120);
@@ -779,6 +781,7 @@ void signalSuccess() {
 }
 
 void signalError() {
+  digitalWrite(BLUE_LED_PIN, LOW);
   digitalWrite(RED_LED_PIN, HIGH);
   buzz(900);
   delay(350);
@@ -786,6 +789,7 @@ void signalError() {
 }
 
 void signalUnauthorized() {
+  digitalWrite(BLUE_LED_PIN, LOW);
   digitalWrite(RED_LED_PIN, HIGH);
   buzz(500, 160);
   buzz(500, 160);
