@@ -126,6 +126,16 @@ uint32_t lastHomeUpdateAt = 0;
 uint32_t lastApiCheckAt = 0;
 uint32_t lastWifiReconnectAt = 0;
 uint32_t lastSyncUnsentAt = 0;
+
+// Queue for posting attendance to online database after local save
+struct PendingAttendance {
+  String fingerprintId;
+  String rfidUid;
+  String occurredAt;
+};
+PendingAttendance pendingAttendanceQueue[8];
+int pendingAttendanceCount = 0;
+uint32_t pendingAttendanceFirstSavedAt = 0;
 WifiState wifiState = WIFI_STATE_DISCONNECTED;
 
 UiState uiState;
@@ -303,6 +313,9 @@ void loop() {
     syncUnsentAttendance();
     lastSyncUnsentAt = nowMs;
   }
+
+  // Process recently-saved attendance: post to online DB after 5s delay (silent — no TFT change)
+  processAttendanceQueue();
 
   if (mode == MODE_REGISTER_FINGERPRINT || mode == MODE_REGISTER_RFID) {
     runRegistrationWorkflow();
@@ -2740,35 +2753,80 @@ int scanFingerprintForAttendance() {
   return finger.fingerID;
 }
 
+// Queue for posting attendance to online database after 5-second delay
+// (keeps TFT on home screen — no display changes during online post)
+#define ATTENDANCE_ONLINE_DELAY_MS   5000
+#define ATTENDANCE_ONLINE_RETRY_MS   30000
+
+void processAttendanceQueue() {
+  if (pendingAttendanceCount == 0) return;
+  if (!wifiReady) return;
+  if (millis() - pendingAttendanceFirstSavedAt < ATTENDANCE_ONLINE_DELAY_MS) return;
+
+  // Post oldest pending record silently (no TFT changes)
+  String localRecordId = makeLocalRecordId();
+  String fpId = pendingAttendanceQueue[0].fingerprintId;
+  String rfid = pendingAttendanceQueue[0].rfidUid;
+  String ts   = pendingAttendanceQueue[0].occurredAt;
+
+  AttendanceResult result = postAttendance(fpId, rfid, ts, localRecordId);
+  if (result.ok) {
+    logEvent("ATTENDANCE", "Online post OK for " + result.idNumber);
+    // Remove first item, shift rest down
+    for (int i = 1; i < pendingAttendanceCount; i++) {
+      pendingAttendanceQueue[i - 1] = pendingAttendanceQueue[i];
+    }
+    pendingAttendanceCount--;
+    if (pendingAttendanceCount > 0) {
+      pendingAttendanceFirstSavedAt = millis();  // reset timer for next item
+    }
+  }
+  // If failed, retry on next cycle (30s from last attempt)
+}
+
 void completeAttendanceAttempt() {
   String occurredAt = isoNow();
 
-  // ===== Primary verification via LittleFS =====
+  // ===== Always save locally first =====
   LocalUser matched = findStudentInLFS(attendanceFingerprintId, attendanceRfidUid);
   if (matched.found) {
-    // Attendance verified via local cache
     addAttendanceToLFS(matched.idNumber, matched.fullName, occurredAt, "IN");
-    logEvent("ATTENDANCE", "IN for " + matched.idNumber + " " + matched.fullName + " (LFS)");
-    drawScreen("Attendance Success", "ID: " + matched.idNumber, matched.fullName, "Status: IN", ILI9341_GREEN);
-    signalSuccess();
-    return;
+    logEvent("ATTENDANCE", "IN for " + matched.idNumber + " " + matched.fullName + " (local)");
+  } else {
+    // Try online API if local lookup failed (unrecognized user in local cache)
+    String localRecordId = makeLocalRecordId();
+    AttendanceResult result = postAttendance(attendanceFingerprintId, attendanceRfidUid, occurredAt, localRecordId);
+    if (result.ok) {
+      String status = result.status.length() ? result.status : "IN";
+      addAttendanceToLFS(result.idNumber, result.fullName, occurredAt, status);
+      logEvent("ATTENDANCE", status + " for " + result.idNumber + " " + result.fullName + " (API)");
+    } else {
+      logEvent("ATTENDANCE", "Failed FP " + attendanceFingerprintId + " RFID " + attendanceRfidUid);
+      signalError();
+      attendanceFingerprintId = "";
+      attendanceRfidUid = "";
+      mode = MODE_HOME;
+      return;
+    }
   }
 
-  // ===== Fallback: try the online API =====
-  String localRecordId = makeLocalRecordId();
-  AttendanceResult result = postAttendance(attendanceFingerprintId, attendanceRfidUid, occurredAt, localRecordId);
-  if (result.ok) {
-    String status = result.status.length() ? result.status : "IN";
-    logEvent("ATTENDANCE", status + " for " + result.idNumber + " " + result.fullName + " (API)");
-    drawScreen("Attendance Success", "ID: " + result.idNumber, result.fullName, "Status: " + status, ILI9341_GREEN);
-    signalSuccess();
-    return;
+  // Signal success and immediately return to home screen
+  signalSuccess();
+
+  // Queue for silent online post after 5 seconds (TFT stays on home)
+  if (pendingAttendanceCount < 8) {
+    pendingAttendanceQueue[pendingAttendanceCount].fingerprintId = attendanceFingerprintId;
+    pendingAttendanceQueue[pendingAttendanceCount].rfidUid = attendanceRfidUid;
+    pendingAttendanceQueue[pendingAttendanceCount].occurredAt = occurredAt;
+    pendingAttendanceCount++;
+    if (pendingAttendanceCount == 1) {
+      pendingAttendanceFirstSavedAt = millis();
+    }
   }
 
-  // Not found in either LFS or API
-  drawScreen("Attendance Failed", "Cannot Be Recognized", "", "", ILI9341_RED);
-  logEvent("ATTENDANCE", "Failed FP " + attendanceFingerprintId + " RFID " + attendanceRfidUid + ": not in LFS or API");
-  signalError();
+  attendanceFingerprintId = "";
+  attendanceRfidUid = "";
+  mode = MODE_HOME;
 }
 
 // SD removed
