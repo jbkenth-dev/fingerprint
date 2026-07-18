@@ -2,7 +2,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import clsx from "clsx";
-import { Activity, Asterisk, BadgeCheck, BookOpenText, BookUser, CalendarRange, ChevronDown, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, LayoutDashboard, LockKeyhole, LogOut, Menu, ShieldUser, UserCog, UserRound, Users, X } from "lucide-react";
+import { Activity, Asterisk, BadgeCheck, BookOpenText, BookUser, CalendarRange, ChevronDown, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, LayoutDashboard, LockKeyhole, LogOut, Menu, RefreshCw, ShieldUser, UserCog, UserRound, Users, X } from "lucide-react";
 import { panelContent, roleLabels, roles, routeConfig, sampleAttendance } from "./data/mockData";
 import { useMockLoading } from "./hooks/useMockLoading";
 import { useManilaClock } from "./hooks/useManilaClock";
@@ -437,15 +437,6 @@ function RolePanel({ pageKey, role }) {
     }
   }, [isDashboard, attendancePage, attendanceFilterDate, fetchAttendanceLogs]);
 
-  // Auto-refresh attendance logs every 5 seconds for real-time updates without page reload
-  React.useEffect(() => {
-    if (!isDashboard) return;
-    const interval = setInterval(() => {
-      fetchAttendanceLogs(attendanceFilterDate, attendancePage);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [isDashboard, attendanceFilterDate, attendancePage, fetchAttendanceLogs]);
-
   const totalAttendancePages = Math.max(1, Math.ceil(attendanceTotal / pageSize));
 
   function formatAttendanceTime(logTime) {
@@ -522,7 +513,6 @@ function RolePanel({ pageKey, role }) {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <h2 className="text-lg font-semibold text-gray-800">Attendance Logs</h2>
-                <span className="badge badge-green text-[0.65rem] uppercase tracking-wider">Real-Time</span>
               </div>
               <div className="flex items-center gap-2">
                 <input
@@ -531,6 +521,15 @@ function RolePanel({ pageKey, role }) {
                   onChange={(e) => setAttendanceFilterDate(e.target.value)}
                   className="form-input rounded-lg px-3 py-2 text-sm"
                 />
+                <button
+                  type="button"
+                  onClick={() => fetchAttendanceLogs(attendanceFilterDate, attendancePage)}
+                  disabled={attendanceLoading}
+                  className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white p-2 text-gray-600 shadow-sm transition hover:bg-gray-50 hover:text-gray-800 disabled:opacity-50"
+                  title="Refresh attendance logs"
+                >
+                  <RefreshCw size={16} className={attendanceLoading ? "animate-spin" : ""} />
+                </button>
               </div>
             </div>
 
