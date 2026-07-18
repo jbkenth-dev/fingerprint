@@ -452,11 +452,12 @@ body,
   inset: 0;
   z-index: 110;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   background: rgba(15, 23, 42, 0.5);
   backdrop-filter: blur(4px);
   padding: 1rem;
+  overflow-y: auto;
 }
 
 .modal-overlay-sm {

@@ -214,7 +214,7 @@ bool checkApiStatus();
 bool fetchAndCacheUsers();
 bool registerCredentials(uint16_t fingerprintId, const String &rfidUid, String &error);
 bool upsertCachedUser(const LocalUser &updated, String &error);
-AttendanceResult postAttendance(const String &fingerprintId, const String &rfidUid, const String &occurredAt, const String &localRecordId);
+AttendanceResult postAttendance(const String &fingerprintId, const String &rfidUid, const String &occurredAt, const String &localRecordId, const String &statusType = "IN");
 void runRegistrationWorkflow();
 bool enrollFingerprint(uint16_t templateId, String &errorMsg);
 bool waitForFingerprintImage(uint8_t slot, uint32_t timeoutMs);
@@ -1897,7 +1897,7 @@ bool upsertCachedUser(const LocalUser &updated, String &error) {
                             "active", uid, error);
 }
 
-AttendanceResult postAttendance(const String &fingerprintId, const String &rfidUid, const String &occurredAt, const String &localRecordId) {
+AttendanceResult postAttendance(const String &fingerprintId, const String &rfidUid, const String &occurredAt, const String &localRecordId, const String &statusType = "IN") {
   AttendanceResult result;
   DynamicJsonDocument request(1536);
   DynamicJsonDocument response(4096);
@@ -1908,6 +1908,7 @@ AttendanceResult postAttendance(const String &fingerprintId, const String &rfidU
   request["smartCardId"] = rfidUid;
   request["occurredAt"] = occurredAt;
   request["localRecordId"] = localRecordId;
+  request["type"] = statusType;
 
   result.ok = postDeviceJson("attendance", request, response, httpCode, error);
   result.httpCode = httpCode;
@@ -2892,7 +2893,7 @@ void processAttendanceQueue() {
   String type = pendingAttendanceQueue[0].statusType;
 
   Serial.printf("[QUEUE] Posting attendance: FP=%s RFID=%s Type=%s\n", fpId.c_str(), rfid.c_str(), type.c_str());
-  AttendanceResult result = postAttendance(fpId, rfid, ts, localRecordId);
+  AttendanceResult result = postAttendance(fpId, rfid, ts, localRecordId, type);
   if (result.ok) {
     logEvent("ATTENDANCE", type + " Online post OK for " + result.idNumber);
     Serial.printf("[QUEUE] Online post OK for %s (%s)\n", result.idNumber.c_str(), type.c_str());
