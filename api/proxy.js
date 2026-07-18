@@ -47,6 +47,7 @@ export default async function handler(req, res) {
     };
     
     // Forward the body for POST/PUT requests
+    // In Vercel, req.body is already parsed if Content-Type is application/json
     if (['POST', 'PUT'].includes(req.method) && req.body) {
       fetchOptions.body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
     }
