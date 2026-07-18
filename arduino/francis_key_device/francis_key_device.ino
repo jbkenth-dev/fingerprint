@@ -695,10 +695,11 @@ void drawHomeScreen() {
   lastHomeDayText = "";
   tft.fillScreen(ILI9341_BLACK);
 
-  updateHomeClock(true);
+  // Brand at top with rounded rect
+  tft.drawRoundRect(18, 4, 284, 32, 8, ILI9341_GREEN);
+  drawCentered(10, "FRANCIS KEY", ILI9341_GREEN, 2);
 
-  tft.drawRoundRect(18, 136, 284, 58, 8, ILI9341_DARKGREY);
-  drawCentered(154, "FRANCIS KEY", ILI9341_GREEN, 2);
+  updateHomeClock(true);
 
   drawHomeNetworkLine(true);
   drawStatusFooter();
@@ -712,20 +713,20 @@ void updateHomeClock(bool force) {
   String dayText = formatDay(now);
 
   if (force || dateText != lastHomeDateText) {
-    tft.fillRect(0, 14, 320, 26, ILI9341_BLACK);
-    drawCentered(20, dateText, ILI9341_WHITE, 2);
+    tft.fillRect(0, 40, 320, 26, ILI9341_BLACK);
+    drawCentered(46, dateText, ILI9341_WHITE, 2);
     lastHomeDateText = dateText;
   }
 
   if (force || timeText != lastHomeTimeText) {
-    tft.fillRect(0, 52, 320, 38, ILI9341_BLACK);
-    drawCentered(58, timeText, ILI9341_CYAN, 3);
+    tft.fillRect(0, 72, 320, 44, ILI9341_BLACK);
+    drawCentered(78, timeText, ILI9341_CYAN, 5);
     lastHomeTimeText = timeText;
   }
 
   if (force || dayText != lastHomeDayText) {
-    tft.fillRect(0, 96, 320, 26, ILI9341_BLACK);
-    drawCentered(102, dayText, ILI9341_LIGHTGREY, 2);
+    tft.fillRect(0, 124, 320, 26, ILI9341_BLACK);
+    drawCentered(130, dayText, ILI9341_LIGHTGREY, 2);
     lastHomeDayText = dayText;
   }
 }
@@ -958,7 +959,7 @@ void sendAppShell() {
 <div class="toast" id="toast"></div>
 <div class="loadoverlay" id="loadOverlay"><div class="loadbox"><div class="spin"></div><div id="loadMsg">Loading...</div></div></div>
 <script>
-const menu=["Dashboard","Attendance","Register User","Users","WiFi Settings","Attendance Rules","Date/Time","Logs","Backup / Restore","Logout"];
+const menu=["Dashboard","Attendance","Register User","Users","WiFi Settings","Attendance Rules","Date/Time","Logs","Logout"];
 const state={view:"Dashboard",device:null,students:[],attendance:[],users:[],logs:null,networks:[],loading:{},scanStatus:"",modalStudent:null,search:"",wifiStatus:null};
 const $=id=>document.getElementById(id);
 function toast(msg){$("toast").textContent=msg;$("toast").classList.add("show");setTimeout(()=>$("toast").classList.remove("show"),3200)}
@@ -976,7 +977,7 @@ function liveScreen(){const u=(state.device&&state.device.ui)||{};return `<div c
 function dashboard(){return `${deviceCards()}`}
 function attendance(){if(state.loading.attendance)return `<div class="card"><div class="loader"></div></div>`;const rows=state.attendance.map(r=>`<tr><td>${r.date}</td><td>${r.time}</td><td>${r.id}</td><td>${r.name}</td><td>${r.status}</td></tr>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Recent Attendance</h2><button class="btn secondary" onclick="loadAttendance()">Refresh</button></div><div class="tablewrap"><table><thead><tr><th>Date</th><th>Time</th><th>ID</th><th>Name</th><th>Status</th></tr></thead><tbody>${rows||"<tr><td colspan=5>No local attendance records.</td></tr>"}</tbody></table></div></div>`}
 function registerView(){const d=state.device||{};if(!d.wifiReady||!d.databaseReady)return `<div class="card"><h2>Register User</h2><div class="empty">Registration unavailable.<br>Please connect to WiFi.</div></div>`;const q=state.search.toLowerCase();const filtered=state.students.filter(s=>(`${s.idNumber} ${s.fullName}`.toLowerCase()).includes(q));const list=filtered.map(s=>`<button class="item" onclick="openRegister(${s.id})"><b>${s.idNumber||s.id}</b> ${s.fullName}<div class="muted">${s.department||"Student"}</div></button>`).join("");return `<div class="card"><div class="row"><h2 style="margin-right:auto">Select Student</h2><button class="btn secondary" onclick="loadStudents()">Refresh</button></div><div class="field"><label>Realtime Search</label><input placeholder="Student ID, first name, last name, full name" value="${state.search}" oninput="state.search=this.value;render()"></div>${state.loading.students?'<div class="loader"></div>':`<div class="list">${list||'<div class="empty">No matching students.</div>'}</div>`}</div>`}
-function usersView(){if(state.loading.users)return '<div class="card"><div class="loader"></div></div>';const rows=state.users.map(u=>{const active=u.status!=="inactive";const stBadge=active?'<span class="pill ok">Active</span>':'<span class="pill bad">Inactive</span>';let opts='';if(active)opts+='<option value="deactivate">Deactivate</option>';if(!active)opts+='<option value="activate">Activate</option>';if(u.fingerprintId||u.smartCardId)opts+='<option value="delete">Delete Credentials</option>';const safeName=(u.fullName||'').replace(/'/g,"\\\\'");return '<tr><td>'+(u.idNumber||u.userId)+'</td><td>'+u.fullName+'</td><td>'+(u.fingerprintId||"--")+'</td><td>'+(u.smartCardId||"--")+'</td><td>'+stBadge+'</td><td>'+(opts?'<select onchange="userActionModal('+u.userId+',this.value,\''+safeName+'\','+active+');this.value=\'\'"><option value="">-- Action --</option>'+opts+'</select>':"")+'</tr>'}).join("");return '<div class="card"><div class="row"><h2 style="margin-right:auto">Registered Students</h2><button class="btn secondary" onclick="loadUsers()">Refresh</button></div><div class="tablewrap"><table><thead><tr><th>ID</th><th>Name</th><th>Fingerprint</th><th>RFID</th><th>Status</th><th>Action</th></tr></thead><tbody>'+(rows||'<tr><td colspan="6">No cached users.</td></tr>')+'</tbody></table></div></div>'}
+function usersView(){if(state.loading.users)return '<div class="card"><div class="loader"></div></div>';const students=state.users.filter(u=>(u.role||'').toLowerCase()==='student');const rows=students.map(u=>{const active=u.status!=="inactive";const stBadge=active?'<span class="pill ok">Active</span>':'<span class="pill bad">Inactive</span>';let opts='';if(active)opts+='<option value="deactivate">Deactivate</option>';if(!active)opts+='<option value="activate">Activate</option>';if(u.fingerprintId||u.smartCardId)opts+='<option value="delete">Delete Credentials</option>';const safeName=(u.fullName||'').replace(/'/g,"\\\\'");return '<tr><td>'+(u.idNumber||u.userId)+'</td><td>'+u.fullName+'</td><td>'+(u.fingerprintId||"--")+'</td><td>'+(u.smartCardId||"--")+'</td><td>'+stBadge+'</td><td>'+(opts?'<select onchange="userActionModal('+u.userId+',this.value,\''+safeName+'\','+active+');this.value=\'\'"><option value="">-- Action --</option>'+opts+'</select>':"")+'</tr>'}).join("");return '<div class="card"><div class="row"><h2 style="margin-right:auto">Registered Students</h2><button class="btn secondary" onclick="loadUsers()">Refresh</button></div><div class="tablewrap"><table><thead><tr><th>ID</th><th>Name</th><th>Fingerprint</th><th>RFID</th><th>Status</th><th>Action</th></tr></thead><tbody>'+(rows||'<tr><td colspan="6">No students found.</td></tr>')+'</tbody></table></div></div>'}
 function wifiView(){const ws=state.wifiStatus||{};const st=ws.status;const connected=st==="Connected";const authenticating=st==="Authenticating";const on=connected||authenticating;const connSsid=on?(ws.ssid||""):"Not Connected";const connBlock=`<div style="margin-bottom:12px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:13px;color:var(--muted);font-weight:800">WiFi Connected:</span><span style="width:10px;height:10px;border-radius:50%;background:${on?"#16a34a":"#9ca3af"};display:inline-block"></span><b>${connSsid}</b></div>`;if(connected||authenticating){const clr=connected?"#16a34a":"#ca8a04";const lbl=connected?"Connected":"Authenticated";return `<div class="card"><div class="row"><h2 style="margin-right:auto">WiFi Settings</h2></div>${connBlock}<div style="padding:16px;border:1px solid ${connected?"#bbf7bb":"#fef08a"};border-radius:8px;background:${connected?"#f0faf0":"#fefce8"};margin-bottom:12px"><div class="field"><label>SSID</label><div class="item"><b>${ws.ssid||""}</b></div></div><div class="field"><label>Status</label><div style="display:flex;align-items:center;gap:8px"><span style="width:12px;height:12px;border-radius:50%;background:${clr};display:inline-block"></span><b style="color:${clr}">${lbl}</b></div></div>${authenticating?'<div class="field"><label style="color:#dc2626">Please reset WiFi</label></div>':''}</div><button class="btn danger" onclick="resetWifi()">Reset WiFi</button></div>`}const nets=state.networks.map(n=>`<option value="${n.ssid}">${n.ssid}</option>`).join("");const scanMsg=state.loading.scan?'Scanning WiFi...':state.scanStatus;const statusColor=st==="Connecting"||st==="Authenticating"?"#2563eb":st==="Scanning"||st==="Reconnecting"?"#ca8a04":"#dc2626";const statusDot=st&&st!=="Disconnected"&&st!=="Connection Failed"?`<div style="padding:12px;border:1px solid ${statusColor};border-radius:8px;background:white;margin-bottom:8px;display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${statusColor};display:inline-block"></span><span>${st}</span></div>`:"";return `<div class="card"><div class="row"><h2 style="margin-right:auto">WiFi Settings</h2><button class="btn secondary" onclick="scanWifi()">Scan Networks</button></div>${connBlock}${statusDot}${scanMsg?'<p style="margin:8px 0;color:var(--muted)">'+scanMsg+'</p>':""}<div class="field"><label>Network</label><select id="wifiSsid">${nets}</select></div><div class="field"><label>Password</label><input id="wifiPass" type="password" placeholder="WiFi password"></div><button class="btn" onclick="saveWifi()">Save and Connect</button><button class="btn danger" onclick="resetWifi()" style="margin-top:12px">Reset WiFi</button></div>`}
 function rulesView(){const d=state.device||{}, r=d.rules||{};return `<div class="card"><h2>Attendance Rules</h2><div class="field"><label>Student OUT Allowed After</label><select id="outDelay">${[1,5,10,15,30,60].map(v=>`<option value="${v}" ${Number(r.outDelay)===v?"selected":""}>${v} minute${v>1?"s":""}</option>`).join("")}</select></div><button class="btn" onclick="saveRules()">Save Rules</button></div>`}
 function logsView(){if(state.loading.logs)return `<div class="card"><div class="loader"></div></div>`;const l=state.logs||{};return `<div class="grid"><div class="card"><div class="row"><h2 style="margin-right:auto">Device Logs</h2><button class="btn secondary" onclick="loadLogs()">Refresh</button></div><pre>${l.events||"No device log."}</pre></div><div class="card"><h2>Offline Sync Queue</h2><pre>${l.unsent||"No pending records."}</pre></div></div>`}
@@ -993,7 +994,7 @@ async function loadLogs(){setLoading("logs",true);try{state.logs=await api("/api
 async function loadWifiStatus(){try{state.wifiStatus=await api("/api/wifi/status")}catch(e){}}
 function loadView(v){if(v==="Attendance")loadAttendance();if(v==="Register User")loadStudents();if(v==="Users")loadUsers();if(v==="WiFi Settings"){loadWifiStatus();scanWifi()}if(v==="Date/Time")loadState();if(v==="Logs")loadLogs()}
 function openRegister(id){state.modalStudent=state.students.find(s=>s.id===id);showRegisterModal()}
-function showRegisterModal(){const s=state.modalStudent;if(!s)return;$("modal").innerHTML=`<h2>Register User</h2><div class="field"><label>Student ID</label><div class="item">${s.idNumber||s.id}</div></div><div class="field"><label>Full Name</label><div class="item">${s.fullName}</div></div><div class="item">Scan Fingerprint: follow TFT and browser status</div><div class="item">Scan RFID: follow TFT and browser status</div><div class="row" style="margin-top:12px"><button class="btn" onclick="startRegister()">Register</button><button class="btn secondary" onclick="closeModal()">Cancel</button></div><div style="margin-top:12px">${liveScreen()}</div>`;$("modalBg").classList.add("show")}
+function showRegisterModal(){const s=state.modalStudent;if(!s)return;$("modal").innerHTML=`<h2>Register User</h2><div class="field"><label>Student ID</label><div class="item">${s.idNumber||s.id}</div></div><div class="field"><label>Full Name</label><div class="item">${s.fullName}</div></div><div class="row" style="margin-top:12px"><button class="btn" onclick="startRegister()">Register</button><button class="btn secondary" onclick="closeModal()">Cancel</button></div>`;$("modalBg").classList.add("show")}
 function closeModal(){$("modalBg").classList.remove("show");api("/api/register/cancel",{method:"POST"}).catch(()=>{})}
 async function startRegister(){const s=state.modalStudent;showLoading("Starting registration...");try{await api("/api/register/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:s.id})});toast("Registration started. Follow the device screen.");showRegisterModal()}catch(e){toast(e.message)}finally{hideLoading()}}
 async function saveWifi(){if(!confirm("Save WiFi settings and connect now?"))return;const ssid=$("wifiSsid").value;if(!ssid){toast("Please select a WiFi network");return}showLoading("Connecting to WiFi...");try{await api("/api/wifi/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ssid:ssid,password:$("wifiPass").value})});toast("WiFi settings saved.");loadState()}catch(e){toast(e.message)}finally{hideLoading()}}
@@ -1300,6 +1301,7 @@ void handleApiUsers() {
       String st = String((const char *)(user["status"] | "Active"));
       st.toLowerCase();
       payload += F("\",\"status\":\""); payload += jsonEscape(st);
+      payload += F("\",\"role\":\""); payload += jsonEscape(String((const char *)(user["role"] | "")));
       payload += F("\"}");
     }
     payload += F("]}");
@@ -1334,7 +1336,8 @@ void handleApiUsers() {
           payload += jsonEscape(String((const char *)(s["uuid"] | "")));
           payload += F("\",\"status\":\"");
           payload += jsonEscape(String((const char *)(s["status"] | "active")));
-          payload += F("\"}");
+          payload += F("\",\"role\":\"student\"");
+          payload += F("}");
         }
       }
     }
@@ -1897,7 +1900,7 @@ bool upsertCachedUser(const LocalUser &updated, String &error) {
                             "active", uid, error);
 }
 
-AttendanceResult postAttendance(const String &fingerprintId, const String &rfidUid, const String &occurredAt, const String &localRecordId, const String &statusType = "IN") {
+AttendanceResult postAttendance(const String &fingerprintId, const String &rfidUid, const String &occurredAt, const String &localRecordId, const String &statusType) {
   AttendanceResult result;
   DynamicJsonDocument request(1536);
   DynamicJsonDocument response(4096);

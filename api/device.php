@@ -274,7 +274,12 @@ function save_attendance(PDO $pdo, array $input, bool $throwOnError = false): ar
     }
 
     [$logDate, $logTime] = split_occurrence_time($input['occurredAt'] ?? null);
-    $status = next_attendance_status($pdo, (int) $matchedUser['id'], $logDate);
+    $requestedType = strtoupper(trim((string) ($input['type'] ?? '')));
+    if ($requestedType === 'IN' || $requestedType === 'OUT') {
+        $status = $requestedType;
+    } else {
+        $status = next_attendance_status($pdo, (int) $matchedUser['id'], $logDate);
+    }
     $name = user_full_name($matchedUser);
 
     $stmt = $pdo->prepare(
