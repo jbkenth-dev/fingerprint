@@ -760,7 +760,7 @@ void drawCentered(int y, const String &text, uint16_t color, uint8_t size) {
 }
 
 void printNetworkInfo(const String &context) {
-  Serial.println();
+  Serial.println();dcsx
   Serial.println(context);
   Serial.print(F("SSID: "));
   Serial.println(WiFi.SSID());
