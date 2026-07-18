@@ -2,7 +2,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import clsx from "clsx";
-import { Activity, Asterisk, BadgeCheck, BookOpenText, BookUser, CalendarRange, ChevronDown, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, LayoutDashboard, LockKeyhole, LogOut, Menu, ScanLine, ShieldUser, UserCog, UserRound, Users, X } from "lucide-react";
+import { Activity, Asterisk, BadgeCheck, BookOpenText, BookUser, CalendarRange, ChevronDown, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, LayoutDashboard, LockKeyhole, LogOut, Menu, ShieldUser, UserCog, UserRound, Users, X } from "lucide-react";
 import { panelContent, roleLabels, roles, routeConfig, sampleAttendance } from "./data/mockData";
 import { useMockLoading } from "./hooks/useMockLoading";
 import { useManilaClock } from "./hooks/useManilaClock";
