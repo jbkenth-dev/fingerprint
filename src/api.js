@@ -101,7 +101,12 @@ export async function apiFetch(path, options = {}) {
       clearSession();
       window.dispatchEvent(new CustomEvent('auth:expired'));
     }
-    throw new Error(data.error || 'Session expired. Please sign in again.');
+    // Use a contextual fallback: "session expired" makes no sense during a login attempt
+    // since there is no session yet.
+    const fallback = isLoginAttempt
+      ? 'Sign in failed. Please check your credentials and try again.'
+      : 'Session expired. Please sign in again.';
+    throw new Error(data.error || fallback);
   }
 
   if (!res.ok) {

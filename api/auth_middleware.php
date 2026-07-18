@@ -112,7 +112,21 @@ function require_auth(PDO $pdo, ?string $allowedRole = null): array {
 function create_session(PDO $pdo, int $userId, string $role, int $ttlHours = 24): string {
     $token = bin2hex(random_bytes(32));
     $expiresAt = date('Y-m-d H:i:s', time() + ($ttlHours * 3600));
-    
+
+    // Ensure the sessions table exists before any write operation.
+    // validate_session() also creates it, but auth.php only calls
+    // create_session() during login — not validate_session() — so we
+    // need this here too.
+    $pdo->exec('CREATE TABLE IF NOT EXISTS sessions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        token VARCHAR(128) NOT NULL UNIQUE,
+        role VARCHAR(32) NOT NULL,
+        expires_at DATETIME NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )');
+
     // Clean up old sessions for this user (keep only the latest 5)
     $stmt = $pdo->prepare(
         'DELETE FROM sessions WHERE user_id = ? AND id NOT IN (
