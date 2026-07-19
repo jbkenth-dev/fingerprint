@@ -240,8 +240,8 @@ function ProtectedLayout({ allowedRole }) {
           <Menu size={20} />
         </button>
         <div className="flex items-center gap-2">
-          <BrandMark compact />
           <span className="text-sm font-semibold text-gray-800">Francis Key</span>
+          <BrandMark compact />
         </div>
       </div>
 
