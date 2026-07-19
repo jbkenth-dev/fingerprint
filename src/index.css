@@ -867,26 +867,9 @@ input[type="number"] {
   min-width: 0;
 }
 
-/* ─── Modal overlay: proper mobile sizing ─── */
-.modal-overlay {
-  padding: 0.75rem;
-}
-
-@media (min-width: 640px) {
-  .modal-overlay {
-    padding: 1rem;
-  }
-}
-
 /* ─── Modals: ensure they fit on small screens ─── */
 .modal-overlay > div {
-  max-width: calc(100vw - 1rem);
-}
-
-@media (min-width: 640px) {
-  .modal-overlay > div {
-    max-width: calc(100vw - 2rem);
-  }
+  max-width: min(var(--tw-max-w, 100%), calc(100vw - 2rem));
 }
 
 /* ─── Account tables with border-spacing: fix mobile layout ─── */
