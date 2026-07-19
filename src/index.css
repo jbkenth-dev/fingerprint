@@ -846,10 +846,9 @@ svg {
   min-width: 0;
 }
 
-/* ─── Ensure card-elevated and card don't overflow ─── */
+/* ─── Ensure card and card-elevated don't overflow ─── */
 .card,
 .card-elevated {
-  max-width: 100%;
   overflow-x: hidden;
 }
 
@@ -867,10 +866,6 @@ input[type="number"] {
   min-width: 0;
 }
 
-/* ─── Modals: ensure they fit on small screens ─── */
-.modal-overlay > div {
-  max-width: min(var(--tw-max-w, 100%), calc(100vw - 2rem));
-}
 
 /* ─── Account tables with border-spacing: fix mobile layout ─── */
 @media (max-width: 767px) {
