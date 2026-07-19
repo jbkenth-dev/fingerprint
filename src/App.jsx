@@ -389,7 +389,7 @@ function ProtectedLayout({ allowedRole }) {
 function RolePanel({ pageKey, role }) {
   const isDashboard = pageKey === "dashboard";
   // Dashboard fetches real data immediately — skip mock loading so the table renders without flicker
-  const mockLoading = isDashboard ? false : useMockLoading(3000, `${role}-${pageKey}`);
+  const mockLoading = useMockLoading(isDashboard ? null : 3000, `${role}-${pageKey}`);
   const data = panelContent[pageKey];
 
   // Attendance logs state
