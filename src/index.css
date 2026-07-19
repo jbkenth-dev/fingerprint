@@ -1055,12 +1055,10 @@ section {
 
 /* ─── Sign-in card: prevent overflow on very small screens ─── */
 .signin-card {
-  max-width: 100%;
   overflow-x: hidden;
 }
 
-/* ─── Home card: prevent overflow ─── */
+/* ─── Home card: allow logo to extend above ─── */
 .home-reference-card {
-  max-width: 100%;
-  overflow-x: hidden;
+  overflow: visible;
 }
