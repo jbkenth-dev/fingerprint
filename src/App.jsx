@@ -230,7 +230,7 @@ function ProtectedLayout({ allowedRole }) {
   return (
     <div className="app-shell min-h-dvh">
       {/* Mobile header */}
-      <div className="lg:hidden sticky top-0 z-40 flex items-center gap-3 border-b border-gray-200 bg-white px-4 py-3">
+      <div className="lg:hidden sticky top-0 z-40 flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
         <button
           type="button"
           onClick={() => setMobileMenuOpen(true)}
@@ -239,8 +239,10 @@ function ProtectedLayout({ allowedRole }) {
         >
           <Menu size={20} />
         </button>
-        <BrandMark compact />
-        <span className="text-sm font-semibold text-gray-800">Francis Key</span>
+        <div className="flex items-center gap-2">
+          <BrandMark compact />
+          <span className="text-sm font-semibold text-gray-800">Francis Key</span>
+        </div>
       </div>
 
       {/* Mobile menu overlay */}
