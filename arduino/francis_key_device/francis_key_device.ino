@@ -250,6 +250,7 @@ bool deleteStudentCredentialsInLFS(int userId, String &error);
 void handleApiStudentDeactivate();
 void handleApiStudentActivate();
 void handleApiStudentDelete();
+void handleApiAttendanceClear();
 
 void setup() {
   Serial.begin(115200);
@@ -496,6 +497,7 @@ void setupDeviceRoutes() {
   server.on("/api/student/deactivate", HTTP_POST, handleApiStudentDeactivate);
   server.on("/api/student/activate", HTTP_POST, handleApiStudentActivate);
   server.on("/api/student/delete", HTTP_POST, handleApiStudentDelete);
+  server.on("/api/attendance/clear", HTTP_POST, handleApiAttendanceClear);
 
   server.on("/generate_204", HTTP_GET, redirectToRoot);
   server.on("/fwlink", HTTP_GET, redirectToRoot);
@@ -508,7 +510,7 @@ void connectToSavedWifi() {
   wifiReady = connectToWifi(wifiSsid, wifiPassword, WIFI_CONNECT_TIMEOUT_MS);
   if (wifiReady) {
     printNetworkInfo("WiFi connected");
-    drawScreen("WiFi Connected", "IP Address", WiFi.localIP().toString(), "FRANCIS KEY", ILI9341_GREEN);
+    drawScreen("WiFi Connected", "WiFi SSID", WiFi.SSID(), "FRANCIS KEY", ILI9341_GREEN);
     delay(1000);
   }
 }
@@ -980,9 +982,9 @@ function registerView(){const d=state.device||{};if(!d.wifiReady||!d.databaseRea
 function usersView(){if(state.loading.users)return '<div class="card"><div class="loader"></div></div>';const students=state.users.filter(u=>(u.role||'').toLowerCase()==='student');const rows=students.map(u=>{const active=u.status!=="inactive";const stBadge=active?'<span class="pill ok">Active</span>':'<span class="pill bad">Inactive</span>';let opts='';if(active)opts+='<option value="deactivate">Deactivate</option>';if(!active)opts+='<option value="activate">Activate</option>';if(u.fingerprintId||u.smartCardId)opts+='<option value="delete">Delete Credentials</option>';const safeName=(u.fullName||'').replace(/'/g,"\\\\'");return '<tr><td>'+(u.idNumber||u.userId)+'</td><td>'+u.fullName+'</td><td>'+(u.fingerprintId||"--")+'</td><td>'+(u.smartCardId||"--")+'</td><td>'+stBadge+'</td><td>'+(opts?'<select onchange="userActionModal('+u.userId+',this.value,\''+safeName+'\','+active+');this.value=\'\'"><option value="">-- Action --</option>'+opts+'</select>':"")+'</tr>'}).join("");return '<div class="card"><div class="row"><h2 style="margin-right:auto">Registered Students</h2><button class="btn secondary" onclick="loadUsers()">Refresh</button></div><div class="tablewrap"><table><thead><tr><th>ID</th><th>Name</th><th>Fingerprint</th><th>RFID</th><th>Status</th><th>Action</th></tr></thead><tbody>'+(rows||'<tr><td colspan="6">No students found.</td></tr>')+'</tbody></table></div></div>'}
 function wifiView(){const ws=state.wifiStatus||{};const st=ws.status;const connected=st==="Connected";const authenticating=st==="Authenticating";const on=connected||authenticating;const connSsid=on?(ws.ssid||""):"Not Connected";const connBlock=`<div style="margin-bottom:12px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:13px;color:var(--muted);font-weight:800">WiFi Connected:</span><span style="width:10px;height:10px;border-radius:50%;background:${on?"#16a34a":"#9ca3af"};display:inline-block"></span><b>${connSsid}</b></div>`;if(connected||authenticating){const clr=connected?"#16a34a":"#ca8a04";const lbl=connected?"Connected":"Authenticated";return `<div class="card"><div class="row"><h2 style="margin-right:auto">WiFi Settings</h2></div>${connBlock}<div style="padding:16px;border:1px solid ${connected?"#bbf7bb":"#fef08a"};border-radius:8px;background:${connected?"#f0faf0":"#fefce8"};margin-bottom:12px"><div class="field"><label>SSID</label><div class="item"><b>${ws.ssid||""}</b></div></div><div class="field"><label>Status</label><div style="display:flex;align-items:center;gap:8px"><span style="width:12px;height:12px;border-radius:50%;background:${clr};display:inline-block"></span><b style="color:${clr}">${lbl}</b></div></div>${authenticating?'<div class="field"><label style="color:#dc2626">Please reset WiFi</label></div>':''}</div><button class="btn danger" onclick="resetWifi()">Reset WiFi</button></div>`}const nets=state.networks.map(n=>`<option value="${n.ssid}">${n.ssid}</option>`).join("");const scanMsg=state.loading.scan?'Scanning WiFi...':state.scanStatus;const statusColor=st==="Connecting"||st==="Authenticating"?"#2563eb":st==="Scanning"||st==="Reconnecting"?"#ca8a04":"#dc2626";const statusDot=st&&st!=="Disconnected"&&st!=="Connection Failed"?`<div style="padding:12px;border:1px solid ${statusColor};border-radius:8px;background:white;margin-bottom:8px;display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${statusColor};display:inline-block"></span><span>${st}</span></div>`:"";return `<div class="card"><div class="row"><h2 style="margin-right:auto">WiFi Settings</h2><button class="btn secondary" onclick="scanWifi()">Scan Networks</button></div>${connBlock}${statusDot}${scanMsg?'<p style="margin:8px 0;color:var(--muted)">'+scanMsg+'</p>':""}<div class="field"><label>Network</label><select id="wifiSsid">${nets}</select></div><div class="field"><label>Password</label><input id="wifiPass" type="password" placeholder="WiFi password"></div><button class="btn" onclick="saveWifi()">Save and Connect</button><button class="btn danger" onclick="resetWifi()" style="margin-top:12px">Reset WiFi</button></div>`}
 function rulesView(){const d=state.device||{}, r=d.rules||{};return `<div class="card"><h2>Attendance Rules</h2><div class="field"><label>Student OUT Allowed After</label><select id="outDelay">${[1,5,10,15,30,60].map(v=>`<option value="${v}" ${Number(r.outDelay)===v?"selected":""}>${v} minute${v>1?"s":""}</option>`).join("")}</select></div><button class="btn" onclick="saveRules()">Save Rules</button></div>`}
-function logsView(){if(state.loading.logs)return `<div class="card"><div class="loader"></div></div>`;const l=state.logs||{};return `<div class="grid"><div class="card"><div class="row"><h2 style="margin-right:auto">Device Logs</h2><button class="btn secondary" onclick="loadLogs()">Refresh</button></div><pre>${l.events||"No device log."}</pre></div><div class="card"><h2>Offline Sync Queue</h2><pre>${l.unsent||"No pending records."}</pre></div></div>`}
+function logsView(){if(state.loading.logs)return `<div class="card"><div class="loader"></div></div>`;const l=state.logs||{};return `<div class="grid"><div class="card"><div class="row"><h2 style="margin-right:auto">Device Logs</h2><button class="btn secondary" onclick="loadLogs()">Refresh</button></div><pre>${l.events||"No device log."}</pre></div><div class="card"><div class="row"><h2 style="margin-right:auto">Offline Sync Queue</h2><button class="btn danger" onclick="clearOfflineAttendance()">Clear</button></div><pre>${l.unsent||"No pending records."}</pre></div></div>`}
 function backupView(){return `<div class="grid"><div class="card"><h2>Backup</h2><p class="muted">Download SD files and settings. Fingerprint templates remain inside the fingerprint sensor.</p><div class="row"><button class="btn" onclick="download('/api/backup/settings','francis-key-settings.json')">Settings</button><button class="btn secondary" onclick="download('/api/backup/file?name=attendance','attendance.csv')">Attendance</button><button class="btn secondary" onclick="download('/api/backup/file?name=users','users.psv')">Users</button><button class="btn secondary" onclick="download('/api/backup/file?name=queue','unsent.psv')">Queue</button><button class="btn secondary" onclick="download('/api/backup/file?name=logs','device.log')">Logs</button></div></div><div class="card"><h2>Restore Settings</h2><div class="field"><label>Settings JSON</label><textarea id="restoreSettings"></textarea></div><button class="btn danger" onclick="restoreSettings()">Restore Settings</button></div><div class="card"><h2>Restore SD File</h2><div class="field"><label>File</label><select id="restoreFile"><option value="attendance">Attendance CSV</option><option value="users">Users cache</option><option value="queue">Unsent queue</option><option value="logs">Device log</option></select></div><div class="field"><label>Content</label><textarea id="restoreContent"></textarea></div><button class="btn danger" onclick="restoreFile()">Restore File</button></div><div class="card"><h2>Clear All Cache</h2><p class="muted">⚠ Erases all fingerprint templates from the sensor and removes all RFID cache, student data, attendance records, and unsent queue from LFS. This cannot be undone.</p><button class="btn danger" onclick="clearCache()">Clear All Cache</button></div></div>`}
-function dateTimeView(){const d=state.device||{};const h24=d.rtcHour24!==undefined?d.rtcHour24:12;const m=d.rtcMonth||1;const dd=d.rtcDay||1;const y=d.rtcYear||2026;const min=d.rtcMinute||0;const dateStr=y+'-'+(m<10?'0':'')+m+'-'+(dd<10?'0':'')+dd;const timeStr=(h24<10?'0':'')+h24+':'+(min<10?'0':'')+min;return '<div class="card"><h2>Set Date & Time (Offline)</h2><div class="field"><label>📅 Date</label><input type="date" id="dtDate" value="'+dateStr+'"></div><div class="field"><label>🕒 Time (24-hour format)</label><input type="time" id="dtTime" value="'+timeStr+'"></div><button class="btn" onclick="saveDateTime()">Save Date & Time</button><div style="margin-top:12px;padding:12px;background:#fbfdfe;border-radius:8px;border:1px solid var(--line)"><div class="muted">Current device time</div><b>'+d.date+' '+d.time+'</b></div></div>'}
+function dateTimeView(){const d=state.device||{};const h24=d.rtcHour24!==undefined?d.rtcHour24:12;const m=d.rtcMonth||1;const dd=d.rtcDay||1;const y=d.rtcYear||2026;const min=d.rtcMinute||0;const dateStr=y+'-'+(m<10?'0':'')+m+'-'+(dd<10?'0':'')+dd;const timeStr=(h24<10?'0':'')+h24+':'+(min<10?'0':'')+min;return '<div class="card"><h2>Set Date & Time (Offline)</h2><div class="field"><label>Date</label><input type="date" id="dtDate" value="'+dateStr+'"></div><div class="field"><label>Time</label><input type="time" id="dtTime" value="'+timeStr+'"></div><button class="btn" onclick="saveDateTime()">Save Date & Time</button><div style="margin-top:12px;padding:12px;background:#fbfdfe;border-radius:8px;border:1px solid var(--line)"><div class="muted">Current device time</div><b>'+d.date+' '+d.time+'</b></div></div>'}
 async function saveDateTime(){const dateVal=$("dtDate").value;const timeVal=$("dtTime").value;if(!dateVal||!timeVal){toast("Please fill all fields");return}const p=dateVal.split('-');const t=timeVal.split(':');const y=parseInt(p[0]);const mo=parseInt(p[1]);const dd=parseInt(p[2]);const h24=parseInt(t[0]);const mi=parseInt(t[1]);showLoading("Setting date & time...");try{await api("/api/time/set",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({year:y,month:mo,day:dd,hour24:h24,minute:mi})});toast("Date and time updated.");loadState()}catch(e){toast(e.message)}finally{hideLoading()}}
 function render(){if(["INPUT","TEXTAREA","SELECT"].includes(document.activeElement&&document.activeElement.tagName))return;shell();const v=state.view;let html=v==="Dashboard"?dashboard():v==="Attendance"?attendance():v==="Register User"?registerView():v==="Users"?usersView():v==="WiFi Settings"?wifiView():v==="Attendance Rules"?rulesView():v==="Date/Time"?dateTimeView():v==="Logs"?logsView():backupView();$("content").innerHTML=html}
 async function loadState(){try{state.device=await api("/api/state");render()}catch(e){console.log(e.message)}}
@@ -1007,6 +1009,7 @@ async function restoreFile(){if(!confirm("Replace the selected SD file?"))return
 async function clearCache(){if(!confirm("Permanently delete ALL fingerprint templates, RFID cache, student data, and attendance records? This cannot be undone."))return;if(!confirm("Are you sure? All enrolled fingerprints will be erased from the sensor and all cached data will be removed."))return;showLoading("Clearing cache...");try{const r=await api("/api/cache/clear",{method:"POST"});toast("Cache cleared. ("+r.message+")");loadState()}catch(e){toast(e.message)}finally{hideLoading()}}
 function userActionModal(userId,action,name,isActive){if(!action)return;const titles={deactivate:"Deactivate User",activate:"Activate User",delete:"Delete Credentials"};const msgs={deactivate:"Deactivate "+name+"? This user will not be able to attend.",activate:"Activate "+name+"? This user will be able to attend again.",delete:"Delete credentials for "+name+"? Fingerprint and RFID will be removed and freed for reuse. This cannot be undone."};const colors={deactivate:"#b7791f",activate:"#16845b",delete:"#c24141"};$("modal").innerHTML=`<div style="display:grid;gap:12px"><h2 style="color:${colors[action]}">${titles[action]}</h2><p>${msgs[action]}</p><div class="row"><button class="btn" style="background:${colors[action]}" onclick="confirmUserAction(${userId},'${action}')">Confirm</button><button class="btn secondary" onclick="closeModal()">Cancel</button></div></div>`;$("modalBg").classList.add("show")}
 async function confirmUserAction(userId,action){showLoading("Processing...");try{await api("/api/student/"+action,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:userId})});closeModal();toast("Action completed.");loadUsers()}catch(e){toast(e.message)}finally{hideLoading()}}
+async function clearOfflineAttendance(){if(!confirm("Clear all offline attendance records? This cannot be undone."))return;showLoading("Clearing offline attendance...");try{await api("/api/attendance/clear",{method:"POST"});toast("Offline attendance cleared.");loadLogs()}catch(e){toast(e.message)}finally{hideLoading()}}
 $("menuBtn").onclick=openMenu;$("overlay").onclick=closeMenu;$("backBtn").onclick=()=>{state.view="Dashboard";render();loadState()};$("modalBg").onclick=e=>{if(e.target===$("modalBg"))closeModal()};
 render();loadState();setInterval(async()=>{try{state.device=await api("/api/state");if(state.view==="Dashboard")render();try{state.wifiStatus=await api("/api/wifi/status")}catch(e){}}catch(e){}},2000);
 </script>
@@ -1124,7 +1127,7 @@ void handleApiStudents() {
     if (role != "student" || status != "active") {
       continue;
     }
-    
+
     // Apply search filter if provided
     if (searchQuery.length() > 0) {
       String idNumber = String((const char *) (user["idNumber"] | ""));
@@ -1135,7 +1138,7 @@ void handleApiStudents() {
         continue;
       }
     }
-    
+
     if (!first) {
       payload += ",";
     }
@@ -1475,7 +1478,7 @@ void handleApiWifiSave() {
     syncClock();
     checkApiStatus();
     fetchAndCacheUsers();
-    drawScreen("WiFi Connected", "Station IP", WiFi.localIP().toString(), "AP: 192.168.4.1", ILI9341_GREEN);
+    drawScreen("WiFi Connected", "WiFi SSID", WiFi.SSID(), "AP: 192.168.4.1", ILI9341_GREEN);
     delay(3000);
     logEvent("WIFI", "Connected to " + wifiSsid + " at " + WiFi.localIP().toString());
     sendJson(200, "{\"ok\":true,\"connected\":true}");
@@ -3126,6 +3129,17 @@ void handleApiStudentDelete() {
   }
   logEvent("ADMIN", "Deleted credentials for userId " + String(userId));
   sendJson(200, "{\"ok\":true,\"message\":\"Credentials deleted and fingerprint slot freed.\"}");
+}
+
+void handleApiAttendanceClear() {
+  if (!requireApiAdmin()) {
+    return;
+  }
+  if (lfsReady && LittleFS.exists("/attendance.json")) {
+    LittleFS.remove("/attendance.json");
+  }
+  logEvent("LOGS", "Offline attendance records cleared by user");
+  sendJson(200, "{\"ok\":true,\"message\":\"Offline attendance cleared.\"}");
 }
 
 void handleApiCacheClear() {
