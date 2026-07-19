@@ -317,9 +317,9 @@ function ProtectedLayout({ allowedRole }) {
         </div>
       ) : null}
 
-      <div className="relative grid min-h-dvh gap-0 lg:h-dvh lg:grid-cols-[280px_minmax(0,1fr)] lg:overflow-hidden">
+      <div className="relative grid min-h-dvh gap-0 overflow-x-hidden lg:h-dvh lg:grid-cols-[280px_minmax(0,1fr)] lg:overflow-hidden">
         {/* Desktop sidebar */}
-        <aside className="sidebar overflow-hidden lg:sticky lg:top-0 lg:h-dvh">
+        <aside className="sidebar overflow-hidden lg:sticky lg:top-0 lg:h-dvh lg:min-w-0">
           <div className="flex h-full flex-col overflow-y-auto p-5">
             <BrandLockup />
 
@@ -377,7 +377,7 @@ function ProtectedLayout({ allowedRole }) {
           </div>
         </aside>
 
-        <main className="space-y-4 px-3 py-4 sm:px-5 sm:py-5 lg:min-h-0 lg:overflow-y-auto">
+        <main className="min-w-0 space-y-4 overflow-x-hidden px-3 py-4 sm:px-5 sm:py-5 lg:min-h-0 lg:overflow-y-auto">
           <Outlet />
         </main>
       </div>
@@ -519,7 +519,7 @@ function RolePanel({ pageKey, role }) {
                   type="date"
                   value={attendanceFilterDate}
                   onChange={(e) => setAttendanceFilterDate(e.target.value)}
-                  className="form-input rounded-lg px-3 py-2 text-sm"
+                  className="form-input min-w-0 flex-1 rounded-lg px-3 py-2 text-sm sm:flex-initial"
                 />
                 <button
                   type="button"
@@ -625,9 +625,9 @@ function RolePanel({ pageKey, role }) {
 
         </section>
       ) : (
-        <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
           <article className="card-elevated p-5">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-gray-800">Recent Attendance Feed</h2>
               <span className="badge badge-green text-[0.65rem] uppercase tracking-wider">Real-Time</span>
             </div>
@@ -868,7 +868,7 @@ function ClassSubjectPage() {
       <HeaderBlock
         badgeLabel="Class Subject"
         rightContent={(
-          <div className="grid w-full gap-3 md:grid-cols-[minmax(0,1fr)_190px] md:items-center">
+          <div className="grid w-full gap-3 grid-cols-1 sm:grid-cols-[minmax(0,1fr)_160px] md:grid-cols-[minmax(0,1fr)_190px] md:items-center">
             <div className="w-full">
               <Field
                 label="Search Subject"
@@ -1902,7 +1902,7 @@ function AdminAccountPage() {
     <div className="animate-fade-up space-y-4">
       <HeaderBlock
         rightContent={(
-          <div className="grid w-full gap-3 md:grid-cols-[minmax(0,1.1fr)_250px_190px] md:items-center">
+          <div className="grid w-full gap-3 md:grid-cols-[minmax(0,1.1fr)_200px] lg:grid-cols-[minmax(0,1.1fr)_250px_190px] md:items-center">
             <div className="w-full">
               <Field
                 label="Search Accounts"
@@ -2254,7 +2254,7 @@ function AdminAccountPage() {
       {isAddUserModalOpen
         ? createPortal(
             <div className="modal-overlay">
-              <div className="my-auto w-full max-w-3xl max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-h-[calc(100dvh-3rem)]">
+              <div className="my-auto w-full max-w-3xl max-h-[calc(100dvh-2rem)] overflow-y-auto overflow-x-hidden px-1 sm:max-h-[calc(100dvh-3rem)] sm:px-0">
                 <FormCard title="Add User Account">
                   <form onSubmit={submitNewUser} className="grid gap-4 md:grid-cols-2">
                     <SelectField
@@ -2300,7 +2300,7 @@ function AdminAccountPage() {
               className="fixed z-[115] w-52 origin-top-right rounded-xl border border-gray-200 bg-white p-2 shadow-xl animate-fade-up"
               style={{
                 top: `${Math.max(16, openFacultyActionsMenu.top)}px`,
-                left: `${Math.max(16, openFacultyActionsMenu.left)}px`,
+                left: `${Math.min(Math.max(16, openFacultyActionsMenu.left), window.innerWidth - 224)}px`,
               }}
             >
               {(() => {
@@ -2360,7 +2360,7 @@ function AdminAccountPage() {
               className="fixed z-[115] w-52 origin-top-right rounded-xl border border-gray-200 bg-white p-2 shadow-xl animate-fade-up"
               style={{
                 top: `${Math.max(16, openStudentActionsMenu.top)}px`,
-                left: `${Math.max(16, openStudentActionsMenu.left)}px`,
+                left: `${Math.min(Math.max(16, openStudentActionsMenu.left), window.innerWidth - 224)}px`,
               }}
             >
               {(() => {
@@ -2954,7 +2954,7 @@ function DashboardSkeleton() {
           </div>
         ))}
       </div>
-      <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+      <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="card-elevated h-80 skeleton" />
         <div className="card-elevated h-80 skeleton" />
       </div>
