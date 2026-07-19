@@ -230,96 +230,95 @@ function ProtectedLayout({ allowedRole }) {
   return (
     <div className="app-shell min-h-dvh">
       {/* Mobile header */}
-      <div className="lg:hidden sticky top-0 z-40 flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
-        <div className="flex items-center gap-3">
-          <BrandMark compact />
-          <span className="text-sm font-semibold text-gray-800">Francis Key</span>
-        </div>
+      <div className="lg:hidden sticky top-0 z-40 flex items-center gap-3 border-b border-gray-200 bg-white px-4 py-3">
         <button
           type="button"
           onClick={() => setMobileMenuOpen(true)}
-          className="btn btn-ghost p-2"
+          className="btn btn-ghost shrink-0 p-2"
           aria-label="Open menu"
         >
           <Menu size={20} />
         </button>
+        <BrandMark compact />
+        <span className="text-sm font-semibold text-gray-800">Francis Key</span>
       </div>
 
       {/* Mobile menu overlay */}
-      {mobileMenuOpen ? (
-        <div className="lg:hidden">
-          <div className="sidebar-mobile-overlay" onClick={() => setMobileMenuOpen(false)} />
-          <div className="sidebar-mobile animate-fade-up">
-            <div className="flex items-start justify-between p-5">
-              <BrandLockup />
-              <button
-                type="button"
-                onClick={() => setMobileMenuOpen(false)}
-                className="mt-1 rounded-lg p-1 text-white/60 hover:text-white"
-                aria-label="Close menu"
-              >
-                <X size={20} />
-              </button>
+      <div className="lg:hidden">
+        <div
+          className={`sidebar-mobile-overlay${mobileMenuOpen ? " open" : ""}`}
+          onClick={() => setMobileMenuOpen(false)}
+        />
+        <div className={`sidebar-mobile${mobileMenuOpen ? " open" : ""}`}>
+          <div className="flex items-start justify-between p-5">
+            <BrandLockup />
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(false)}
+              className="mt-1 rounded-lg p-1 text-white/60 hover:text-white"
+              aria-label="Close menu"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="mx-5 mb-4 rounded-xl border border-white/10 bg-white/5 p-4">
+            <div className="text-xs uppercase tracking-wider text-white/50">Signed in as</div>
+            <div className="mt-2 text-base font-semibold text-white">
+              {[currentUser?.firstName, currentUser?.middleName, currentUser?.lastName].filter(Boolean).join(" ")}
             </div>
-
-            <div className="mx-5 mb-4 rounded-xl border border-white/10 bg-white/5 p-4">
-              <div className="text-xs uppercase tracking-wider text-white/50">Signed in as</div>
-              <div className="mt-2 text-base font-semibold text-white">
-                {[currentUser?.firstName, currentUser?.middleName, currentUser?.lastName].filter(Boolean).join(" ")}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <InfoPill label="Role" value={roleLabels[allowedRole]} variant="sidebar" />
-                <InfoPill
-                  label="Username"
-                  value={currentUser?.username ?? currentUser?.email?.split("@")[0] ?? "N/A"}
-                  variant="sidebar"
-                />
-              </div>
-            </div>
-
-            <nav className="space-y-1 px-5">
-              {routeConfig[allowedRole].map((item) => {
-                const Icon = navIcons[item.label];
-                return (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    className={({ isActive }) =>
-                      clsx(
-                        "sidebar-nav-item",
-                        (isActive || location.pathname === item.path) && "active",
-                      )
-                    }
-                  >
-                    <span className="sidebar-nav-icon">
-                      <Icon size={16} />
-                    </span>
-                    <span>{item.label}</span>
-                  </NavLink>
-                );
-              })}
-            </nav>
-
-            <div className="px-5 pt-6 pb-5">
-              <button
-                type="button"
-                onClick={() => {
-                  logout();
-                  navigate("/signin", { replace: true });
-                }}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white/80 transition hover:bg-white/10 hover:text-white"
-              >
-                <LogOut size={16} />
-                Sign Out
-              </button>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <InfoPill label="Role" value={roleLabels[allowedRole]} variant="sidebar" />
+              <InfoPill
+                label="Username"
+                value={currentUser?.username ?? currentUser?.email?.split("@")[0] ?? "N/A"}
+                variant="sidebar"
+              />
             </div>
           </div>
+
+          <nav className="space-y-1 px-5">
+            {routeConfig[allowedRole].map((item) => {
+              const Icon = navIcons[item.label];
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  className={({ isActive }) =>
+                    clsx(
+                      "sidebar-nav-item",
+                      (isActive || location.pathname === item.path) && "active",
+                    )
+                  }
+                >
+                  <span className="sidebar-nav-icon">
+                    <Icon size={16} />
+                  </span>
+                  <span>{item.label}</span>
+                </NavLink>
+              );
+            })}
+          </nav>
+
+          <div className="px-5 pt-6 pb-5">
+            <button
+              type="button"
+              onClick={() => {
+                logout();
+                navigate("/signin", { replace: true });
+              }}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white/80 transition hover:bg-white/10 hover:text-white"
+            >
+              <LogOut size={16} />
+              Sign Out
+            </button>
+          </div>
         </div>
-      ) : null}
+      </div>
 
       <div className="relative grid min-h-dvh gap-0 overflow-x-hidden lg:h-dvh lg:grid-cols-[280px_minmax(0,1fr)] lg:overflow-hidden">
         {/* Desktop sidebar */}
-        <aside className="sidebar overflow-hidden lg:sticky lg:top-0 lg:h-dvh lg:min-w-0">
+        <aside className="sidebar hidden overflow-hidden lg:block lg:sticky lg:top-0 lg:h-dvh lg:min-w-0">
           <div className="flex h-full flex-col overflow-y-auto p-5">
             <BrandLockup />
 
