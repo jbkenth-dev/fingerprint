@@ -37,7 +37,6 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let mounted = true;
     apiFetch("/users.php")
-      .then((r) => r.json())
       .then((data) => {
         if (mounted && Array.isArray(data)) setUsers(data);
       })
@@ -100,34 +99,29 @@ export function AuthProvider({ children }) {
   };
 
   const addUser = async (payload) => {
-    const res = await apiFetch("/users.php", {
+    const user = await apiFetch("/users.php", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) throw new Error("Failed to add user");
-    const user = await res.json();
     setUsers((prev) => [...prev, user]);
     return user;
   };
 
   const updateUser = async (id, payload) => {
-    const res = await apiFetch("/users.php", {
+    const user = await apiFetch("/users.php", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, ...payload }),
     });
-    if (!res.ok) throw new Error("Failed to update user");
-    const user = await res.json();
     setUsers((prev) => prev.map((u) => (u.id === user.id ? user : u)));
     return user;
   };
 
   const deleteUser = async (id) => {
-    const res = await apiFetch(`/users.php?id=${encodeURIComponent(id)}`, {
+    await apiFetch(`/users.php?id=${encodeURIComponent(id)}`, {
       method: "DELETE",
     });
-    if (!res.ok) throw new Error("Failed to delete user");
     setUsers((prev) => prev.filter((u) => u.id !== id));
     return true;
   };
