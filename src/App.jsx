@@ -975,7 +975,7 @@ function ClassSubjectPage() {
 
       {isSubjectModalOpen ? (
         <div className="modal-overlay">
-          <div className="w-full max-w-2xl">
+          <div className="my-auto w-full max-w-2xl">
             <FormCard
               title={editingId ? "Edit Class Subject" : "Add Class Subject"}
             >
@@ -1039,7 +1039,7 @@ function ClassSubjectPage() {
 
       {deletingSubject ? (
         <div className="modal-overlay">
-          <div className="w-full max-w-md">
+          <div className="my-auto w-full max-w-md">
             <FormCard
               title="Delete Class Subject"
               subtitle={`Are you sure you want to delete ${deletingSubject.subjectCode} - ${deletingSubject.subjectName}?`}
@@ -1491,8 +1491,7 @@ function ClassSchedulingPage() {
 
       {isScheduleModalOpen ? (
         <div className="modal-overlay">
-          <div className="flex min-h-full items-start justify-center">
-            <div className="w-full max-w-2xl py-4">
+            <div className="my-auto w-full max-w-2xl py-4">
               <FormCard title={editingSchedule ? "Edit Schedule" : "Add Schedule"}>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <SelectField
@@ -1607,13 +1606,12 @@ function ClassSchedulingPage() {
                 </form>
               </FormCard>
             </div>
-          </div>
         </div>
       ) : null}
 
       {deletingSchedule ? (
         <div className="modal-overlay">
-          <div className="w-full max-w-2xl">
+          <div className="my-auto w-full max-w-2xl">
             <FormCard
               title="Delete Class Schedule"
               subtitle={`Are you sure you want to delete Section ${deletingSchedule.section} - ${deletingSchedule.yearLevel} (${deletingSchedule.semester})?`}
@@ -2256,7 +2254,7 @@ function AdminAccountPage() {
       {isAddUserModalOpen
         ? createPortal(
             <div className="modal-overlay">
-              <div className="w-full max-w-3xl max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-h-[calc(100dvh-3rem)]">
+              <div className="my-auto w-full max-w-3xl max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-h-[calc(100dvh-3rem)]">
                 <FormCard title="Add User Account">
                   <form onSubmit={submitNewUser} className="grid gap-4 md:grid-cols-2">
                     <SelectField
@@ -2418,7 +2416,7 @@ function AdminAccountPage() {
       {pendingFacultyAction
         ? createPortal(
             <div className="modal-overlay">
-              <div className="w-full max-w-md">
+              <div className="my-auto w-full max-w-md">
                 <FormCard
                   title={`${pendingFacultyAction.type === "delete" ? "Delete" : pendingFacultyAction.type === "deactivate" ? "Deactivate" : "Activate"} Faculty Account`}
                   subtitle={(() => {
@@ -2484,7 +2482,7 @@ function AdminAccountPage() {
       {pendingStudentAction
         ? createPortal(
             <div className="modal-overlay">
-              <div className="w-full max-w-md">
+              <div className="my-auto w-full max-w-md">
                 <FormCard
                   title={`${pendingStudentAction.type === "delete" ? "Delete" : pendingStudentAction.type === "deactivate" ? "Deactivate" : "Activate"} Student Account`}
                   subtitle={(() => {
@@ -2544,7 +2542,7 @@ function AdminAccountPage() {
       {viewedFaculty
         ? createPortal(
             <div className="modal-overlay">
-              <div className="w-full max-w-2xl">
+              <div className="my-auto w-full max-w-2xl">
                 <FormCard title="Faculty Account Details">
                   {facultyEditForm ? (
                     <form
@@ -2612,7 +2610,7 @@ function AdminAccountPage() {
       {viewedStudent
         ? createPortal(
             <div className="modal-overlay">
-              <div className="w-full max-w-2xl">
+              <div className="my-auto w-full max-w-2xl">
                 <FormCard title="Student Account Details">
                   {studentEditForm ? (
                     <form
@@ -3204,7 +3202,7 @@ function FeedbackModal({ message, tone = "success", onClose }) {
 
   return createPortal(
     <div className="modal-overlay">
-      <div className="card-elevated w-full max-w-md p-6 text-center">
+      <div className="my-auto card-elevated w-full max-w-md p-6 text-center">
         <div
           className={clsx(
             "mx-auto flex size-14 items-center justify-center rounded-full border",
