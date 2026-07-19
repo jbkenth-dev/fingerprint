@@ -1371,6 +1371,14 @@ void handleApiWifiScan() {
     return;
   }
 
+  // Reset STA to a clean state so scanning works reliably in AP+STA mode.
+  // After a failed connection the STA stack can be in a degraded state
+  // that causes scanNetworks() to return 0 or fail silently.
+  WiFi.disconnect(true);
+  delay(200);
+  WiFi.mode(WIFI_AP_STA);
+  delay(200);
+
   wifiState = WIFI_STATE_SCANNING;
 
   // Delete previous scan results and start a new async scan
