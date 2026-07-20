@@ -2925,7 +2925,6 @@ function AdminAccountPage() {
                     <th className="px-4 py-2">ID Number</th>
                     <th className="px-4 py-2">Full Name</th>
                     <th className="px-4 py-2">Username/Email</th>
-                    <th className="px-4 py-2">Password</th>
                     <th className="px-4 py-2">Actions</th>
                   </tr>
                 </thead>
@@ -2944,7 +2943,6 @@ function AdminAccountPage() {
                           <div>{faculty.username ?? "N/A"}</div>
                           <div className="mt-1 text-xs text-gray-500">{faculty.email ?? "N/A"}</div>
                         </td>
-                        <td className="px-4 py-4 align-top">{faculty.password ?? "N/A"}</td>
                         <td className="rounded-r-[1.3rem] px-4 py-4 align-top">
                           <div className="inline-block">
                             <button
@@ -3047,7 +3045,6 @@ function AdminAccountPage() {
                     <th className="px-4 py-2">ID Number</th>
                     <th className="px-4 py-2">Full Name</th>
                     <th className="px-4 py-2">Username/Email</th>
-                    <th className="px-4 py-2">Password</th>
                     <th className="px-4 py-2">Actions</th>
                   </tr>
                 </thead>
@@ -3066,7 +3063,6 @@ function AdminAccountPage() {
                           <div>{student.username ?? "N/A"}</div>
                           <div className="mt-1 text-xs text-gray-500">{student.email ?? "N/A"}</div>
                         </td>
-                        <td className="px-4 py-4 align-top">{student.password ?? "N/A"}</td>
                         <td className="rounded-r-[1.3rem] px-4 py-4 align-top">
                           <div className="inline-block">
                             <button
