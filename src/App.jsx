@@ -1902,29 +1902,33 @@ function AdminArchivePage() {
   const { users, updateUser } = useAuth();
   const [feedback, setFeedback] = React.useState({ message: "", tone: "success" });
   const [search, setSearch] = React.useState("");
+  const [roleFilter, setRoleFilter] = React.useState("student");
   const [pageSize, setPageSize] = React.useState("10");
   const [page, setPage] = React.useState(1);
   const [pendingRestore, setPendingRestore] = React.useState(null);
 
-  const archivedStudents = React.useMemo(
+  const archivedUsers = React.useMemo(
     () =>
       users.filter((user) => {
         if (user.status !== "Archived") return false;
-        const haystack = `${user.idNumber ?? ""} ${user.firstName} ${user.middleName ?? ""} ${user.lastName} ${user.username ?? ""} ${user.email ?? ""} ${user.role ?? ""}`.toLowerCase();
+        if (user.role !== roleFilter) return false;
+        const haystack = `${user.idNumber ?? ""} ${user.firstName} ${user.middleName ?? ""} ${user.lastName} ${user.username ?? ""} ${user.email ?? ""}`.toLowerCase();
         return haystack.includes(search.toLowerCase());
       }),
-    [search, users],
+    [search, users, roleFilter],
   );
 
-  const totalPages = Math.max(1, Math.ceil(archivedStudents.length / Number(pageSize)));
-  const paginatedStudents = React.useMemo(() => {
+  const totalPages = Math.max(1, Math.ceil(archivedUsers.length / Number(pageSize)));
+  const paginatedUsers = React.useMemo(() => {
     const size = Number(pageSize);
     const startIndex = (page - 1) * size;
-    return archivedStudents.slice(startIndex, startIndex + size);
-  }, [page, pageSize, archivedStudents]);
+    return archivedUsers.slice(startIndex, startIndex + size);
+  }, [page, pageSize, archivedUsers]);
 
-  React.useEffect(() => { setPage(1); }, [search, pageSize]);
+  React.useEffect(() => { setPage(1); }, [search, pageSize, roleFilter]);
   React.useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+
+  const isStudent = roleFilter === "student";
 
   return (
     <div className="space-y-6">
@@ -1936,14 +1940,24 @@ function AdminArchivePage() {
 
       <section className="card p-0 overflow-hidden">
         <div className="flex flex-col gap-4 border-b border-gray-100 p-5 sm:flex-row sm:items-center sm:justify-between">
-          <input
-            type="text"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search archived students..."
-            className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-500/20 sm:max-w-xs"
-          />
-          <div className="text-sm text-gray-500">{archivedStudents.length} archived account{archivedStudents.length === 1 ? "" : "s"}</div>
+          <div className="flex items-center gap-3">
+            <select
+              value={roleFilter}
+              onChange={(event) => setRoleFilter(event.target.value)}
+              className="rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none"
+            >
+              <option value="student">Student</option>
+              <option value="faculty">Faculty</option>
+            </select>
+            <input
+              type="text"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search archived accounts..."
+              className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-500/20 sm:max-w-xs"
+            />
+          </div>
+          <div className="text-sm text-gray-500">{archivedUsers.length} archived account{archivedUsers.length === 1 ? "" : "s"}</div>
         </div>
 
         <div className="overflow-x-auto">
@@ -1952,37 +1966,54 @@ function AdminArchivePage() {
               <tr className="border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500">
                 <th className="px-5 py-4 font-medium">No.</th>
                 <th className="px-5 py-4 font-medium">Name</th>
-                <th className="px-5 py-4 font-medium">Role</th>
                 <th className="px-5 py-4 font-medium">ID Number</th>
-                <th className="px-5 py-4 font-medium">Department</th>
+                {isStudent ? (
+                  <>
+                    <th className="px-5 py-4 font-medium">Year</th>
+                    <th className="px-5 py-4 font-medium">Section</th>
+                  </>
+                ) : (
+                  <th className="px-5 py-4 font-medium">Department</th>
+                )}
                 <th className="px-5 py-4 font-medium text-right">Action</th>
               </tr>
             </thead>
             <tbody>
-              {paginatedStudents.length === 0 ? (
+              {paginatedUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-gray-400">No archived accounts found.</td>
+                  <td colSpan={isStudent ? 7 : 6} className="px-5 py-10 text-center text-gray-400">No archived accounts found.</td>
                 </tr>
               ) : (
-                paginatedStudents.map((student, index) => (
-                  <tr key={student.id} className="border-b border-gray-50 transition hover:bg-gray-50/60">
-                    <td className="px-5 py-3.5 text-gray-500">{(page - 1) * Number(pageSize) + index + 1}</td>
-                    <td className="px-5 py-3.5 font-medium text-gray-800">{[student.firstName, student.middleName, student.lastName].filter(Boolean).join(" ")}</td>
-                    <td className="px-5 py-3.5 text-gray-600 capitalize">{student.role ?? "—"}</td>
-                    <td className="px-5 py-3.5 text-gray-600">{student.idNumber ?? "—"}</td>
-                    <td className="px-5 py-3.5 text-gray-600">{student.department ?? "—"}</td>
-                    <td className="px-5 py-3.5 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setPendingRestore(student)}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 transition hover:bg-green-100"
-                      >
-                        <RefreshCw size={13} />
-                        Restore
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                paginatedUsers.map((user, index) => {
+                  const deptParts = (user.department ?? "").split(" - ");
+                  const yearLevel = deptParts.length >= 2 ? deptParts[0] : "—";
+                  const section = deptParts.length >= 2 ? deptParts[1] : "—";
+                  return (
+                    <tr key={user.id} className="border-b border-gray-50 transition hover:bg-gray-50/60">
+                      <td className="px-5 py-3.5 text-gray-500">{(page - 1) * Number(pageSize) + index + 1}</td>
+                      <td className="px-5 py-3.5 font-medium text-gray-800">{[user.firstName, user.middleName, user.lastName].filter(Boolean).join(" ")}</td>
+                      <td className="px-5 py-3.5 text-gray-600">{user.idNumber ?? "—"}</td>
+                      {isStudent ? (
+                        <>
+                          <td className="px-5 py-3.5 text-gray-600">{yearLevel}</td>
+                          <td className="px-5 py-3.5 text-gray-600">{section}</td>
+                        </>
+                      ) : (
+                        <td className="px-5 py-3.5 text-gray-600">{user.department ?? "—"}</td>
+                      )}
+                      <td className="px-5 py-3.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setPendingRestore(user)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 transition hover:bg-green-100"
+                        >
+                          <RefreshCw size={13} />
+                          Restore
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
