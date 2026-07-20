@@ -70,6 +70,7 @@ export default function App() {
           <Route path="department" element={<AdminDepartmentPage />} />
           <Route path="account" element={<AdminAccountPage />} />
           <Route path="archive" element={<AdminArchivePage />} />
+          <Route path="developer-mode/attendance" element={<DeveloperAttendancePage />} />
         </Route>
         <Route path="/faculty" element={<ProtectedLayout allowedRole="faculty" />}>
           <Route index element={<Navigate to="/faculty/dashboard" replace />} />
@@ -3625,6 +3626,177 @@ function AdminAccountPage() {
             document.body,
           )
         : null}
+    </div>
+  );
+}
+
+/* ─── Developer Mode: Test Attendance ─── */
+function DeveloperAttendancePage() {
+  const [students, setStudents] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+  const [feedback, setFeedback] = React.useState({ message: "", tone: "success" });
+  const [submitting, setSubmitting] = React.useState(null);
+  const [todayDate, setTodayDate] = React.useState("");
+  const [search, setSearch] = React.useState("");
+
+  const fetchStudents = React.useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await apiFetch("/test-attendance.php");
+      setStudents(Array.isArray(result.students) ? result.students : []);
+      setTodayDate(result.date || "");
+    } catch (err) {
+      setError(err.message || "Failed to load students.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => { fetchStudents(); }, [fetchStudents]);
+
+  const handleAttendance = React.useCallback(async (userId, type) => {
+    setSubmitting(`${userId}-${type}`);
+    try {
+      const result = await apiFetch("/test-attendance.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, type }),
+      });
+      setFeedback({ message: `${result.name} — ${type} recorded at ${result.time}`, tone: "success" });
+      // Refresh the list to update status
+      fetchStudents();
+    } catch (err) {
+      setFeedback({ message: err.message || "Failed to record attendance.", tone: "error" });
+    } finally {
+      setSubmitting(null);
+    }
+  }, [fetchStudents]);
+
+  const filteredStudents = React.useMemo(() => {
+    if (!search.trim()) return students;
+    const q = search.toLowerCase();
+    return students.filter((s) => {
+      const full = `${s.idNumber ?? ""} ${s.firstName} ${s.middleName ?? ""} ${s.lastName} ${s.department ?? ""}`.toLowerCase();
+      return full.includes(q);
+    });
+  }, [students, search]);
+
+  function formatTime(time) {
+    if (!time) return "—";
+    const [h, m] = time.split(":").map(Number);
+    return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+  }
+
+  return (
+    <div className="animate-fade-up space-y-6">
+      <HeaderBlock
+        title="Developer Mode — Test Attendance"
+        description="Simulate fingerprint/card attendance for testing. Click IN or OUT to record attendance for any active student."
+      />
+
+      {feedback.message ? (
+        <FeedbackModal message={feedback.message} tone={feedback.tone} onClose={() => setFeedback({ message: "", tone: "success" })} />
+      ) : null}
+
+      {error ? (
+        <div className="alert alert-error">
+          <p className="font-semibold">Error</p>
+          <p className="mt-1 text-xs opacity-80">{error}</p>
+          <button onClick={fetchStudents} className="btn btn-secondary mt-3 text-xs">Retry</button>
+        </div>
+      ) : null}
+
+      <section className="card-elevated p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800">Active Students</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Today: <strong className="text-gray-700">{todayDate}</strong> &middot; {students.length} student{students.length === 1 ? "" : "s"}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search students..."
+              className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-500/20 sm:max-w-xs"
+            />
+            <button onClick={fetchStudents} disabled={loading} className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white p-2.5 text-gray-600 shadow-sm transition hover:bg-gray-50 hover:text-gray-800 disabled:opacity-50" title="Refresh">
+              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+            </button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">Loading students...</div>
+        ) : (
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500">
+                  <th className="px-4 py-3 font-medium">#</th>
+                  <th className="px-4 py-3 font-medium">Name</th>
+                  <th className="px-4 py-3 font-medium">ID Number</th>
+                  <th className="px-4 py-3 font-medium">Department</th>
+                  <th className="px-4 py-3 font-medium">Last Status</th>
+                  <th className="px-4 py-3 font-medium">Last Time</th>
+                  <th className="px-4 py-3 font-medium text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredStudents.length ? filteredStudents.map((s, i) => {
+                  const fullName = [s.firstName, s.middleName, s.lastName].filter(Boolean).join(" ");
+                  const isSubmittingIN = submitting === `${s.id}-IN`;
+                  const isSubmittingOUT = submitting === `${s.id}-OUT`;
+                  return (
+                    <tr key={s.id} className="border-b border-gray-50 transition hover:bg-gray-50/60">
+                      <td className="px-4 py-3 text-gray-500">{i + 1}</td>
+                      <td className="px-4 py-3 font-medium text-gray-800">{fullName}</td>
+                      <td className="px-4 py-3 text-gray-600">{s.idNumber ?? "—"}</td>
+                      <td className="px-4 py-3 text-gray-600">{s.department ?? "—"}</td>
+                      <td className="px-4 py-3">
+                        {s.lastLogStatus ? (
+                          <span className={clsx("rounded-full px-2.5 py-0.5 text-xs font-medium", s.lastLogStatus === "IN" ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700")}>
+                            {s.lastLogStatus}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400">No record</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">{formatTime(s.lastLogTime)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleAttendance(s.id, "IN")}
+                            disabled={submitting !== null}
+                            className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-green-700 disabled:opacity-50"
+                          >
+                            {isSubmittingIN ? <RefreshCw size={12} className="animate-spin" /> : null}
+                            IN
+                          </button>
+                          <button
+                            onClick={() => handleAttendance(s.id, "OUT")}
+                            disabled={submitting !== null}
+                            className="inline-flex items-center gap-1 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-600 disabled:opacity-50"
+                          >
+                            {isSubmittingOUT ? <RefreshCw size={12} className="animate-spin" /> : null}
+                            OUT
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }) : (
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">{search ? "No students match your search." : "No active students found."}</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
