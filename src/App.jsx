@@ -2,7 +2,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import clsx from "clsx";
-import { Activity, Asterisk, BadgeCheck, BookOpenText, BookUser, Building2, CalendarRange, ChevronDown, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, LayoutDashboard, LockKeyhole, LogOut, Menu, RefreshCw, ShieldUser, UserCog, UserRound, Users, X } from "lucide-react";
+import { Activity, Asterisk, BadgeCheck, BookOpenText, Building2, CalendarRange, ChevronDown, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, LayoutDashboard, LockKeyhole, LogOut, Menu, RefreshCw, ShieldUser, UserCog, UserRound, Users, X } from "lucide-react";
 import { panelContent, roleLabels, roles, routeConfig, sampleAttendance } from "./data/mockData";
 import { useMockLoading } from "./hooks/useMockLoading";
 import { useManilaClock } from "./hooks/useManilaClock";
@@ -869,7 +869,6 @@ function ClassSubjectPage() {
   return (
     <div className="space-y-4">
       <HeaderBlock
-        badgeLabel="Class Subject"
         rightContent={(
           <div className="grid w-full gap-3 grid-cols-1 sm:grid-cols-[minmax(0,1fr)_160px] md:grid-cols-[minmax(0,1fr)_190px] md:items-center">
             <div className="w-full">
@@ -1391,7 +1390,6 @@ function ClassSchedulingPage() {
   return (
     <div className="space-y-4">
       <HeaderBlock
-        badgeLabel="Class Scheduling"
         rightContent={(
           <button
             type="button"
@@ -3303,16 +3301,12 @@ function BrandMark({ compact = false }) {
   );
 }
 
-function HeaderBlock({ title, description, rightContent = null, badgeLabel = "Account Management" }) {
+function HeaderBlock({ title, description, rightContent = null }) {
   return (
     <section className="hero-card p-6 sm:p-7">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <div className="badge badge-white inline-flex items-center gap-2 text-xs uppercase tracking-wider">
-            <BookUser size={14} />
-            {badgeLabel}
-          </div>
-          {title ? <h1 className="mt-4 text-2xl font-semibold text-white sm:text-[1.75rem]">{title}</h1> : null}
+          {title ? <h1 className="text-2xl font-semibold text-white sm:text-[1.75rem]">{title}</h1> : null}
           {description ? <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/70">{description}</p> : null}
         </div>
         {rightContent ? <div className="w-full lg:w-auto">{rightContent}</div> : null}
