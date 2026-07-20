@@ -2480,11 +2480,11 @@ function AdminAccountPage() {
             isOwnAccountView ? (
               <div className="space-y-4">
                 <form onSubmit={saveOwnAccount} className="grid gap-4 md:grid-cols-2">
-                  <Field label="Username" value={form.username} onChange={(value) => setForm((prev) => ({ ...prev, username: value }))} />
-                  <Field label="First Name" value={form.firstName} onChange={(value) => setForm((prev) => ({ ...prev, firstName: value }))} />
-                  <Field label="Middle Name" value={form.middleName} onChange={(value) => setForm((prev) => ({ ...prev, middleName: value }))} />
-                  <Field label="Last Name" value={form.lastName} onChange={(value) => setForm((prev) => ({ ...prev, lastName: value }))} />
-                  <Field label="Email" type="email" value={form.email} onChange={(value) => setForm((prev) => ({ ...prev, email: value }))} />
+                  <Field label="Username" placeholder="Enter username" value={form.username} onChange={(value) => setForm((prev) => ({ ...prev, username: value }))} />
+                  <Field label="First Name" placeholder="Enter first name" value={form.firstName} onChange={(value) => setForm((prev) => ({ ...prev, firstName: value }))} />
+                  <Field label="Middle Name" placeholder="Enter middle name" value={form.middleName} onChange={(value) => setForm((prev) => ({ ...prev, middleName: value }))} />
+                  <Field label="Last Name" placeholder="Enter last name" value={form.lastName} onChange={(value) => setForm((prev) => ({ ...prev, lastName: value }))} />
+                  <Field label="Email" type="email" placeholder="Enter email address" value={form.email} onChange={(value) => setForm((prev) => ({ ...prev, email: value }))} />
                   <button type="submit" className="btn btn-primary md:col-span-2 justify-self-start">
                     Save Profile
                   </button>
@@ -2496,10 +2496,10 @@ function AdminAccountPage() {
                     subtitle=""
                   >
                     <form onSubmit={saveOwnPassword} className="grid gap-4 md:grid-cols-2">
-                      <Field label="Current Password" type="password" allowVisibilityToggle value={passwordForm.currentPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, currentPassword: value }))} />
-                      <Field label="New Password" type="password" allowVisibilityToggle value={passwordForm.newPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, newPassword: value }))} />
+                      <Field label="Current Password" type="password" placeholder="Enter current password" allowVisibilityToggle value={passwordForm.currentPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, currentPassword: value }))} />
+                      <Field label="New Password" type="password" placeholder="Enter new password" allowVisibilityToggle value={passwordForm.newPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, newPassword: value }))} />
                       <div className="md:col-span-2">
-                        <Field label="Confirm New Password" type="password" allowVisibilityToggle value={passwordForm.confirmNewPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, confirmNewPassword: value }))} />
+                        <Field label="Confirm New Password" type="password" placeholder="Confirm new password" allowVisibilityToggle value={passwordForm.confirmNewPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, confirmNewPassword: value }))} />
                       </div>
                       <button type="submit" className="btn btn-primary md:col-span-2 justify-self-start">
                         Change Password
@@ -2579,15 +2579,15 @@ function AdminAccountPage() {
                         />
                       </>
                     ) : null}
-                    <Field required label="ID Number" value={newUser.idNumber} onChange={(value) => setNewUser((prev) => ({ ...prev, idNumber: value }))} />
-                    <Field required label="First Name" value={newUser.firstName} onChange={(value) => setNewUser((prev) => ({ ...prev, firstName: value }))} />
-                    <Field label="Middle Name" value={newUser.middleName} onChange={(value) => setNewUser((prev) => ({ ...prev, middleName: value }))} />
-                    <Field required label="Last Name" value={newUser.lastName} onChange={(value) => setNewUser((prev) => ({ ...prev, lastName: value }))} />
-                    <Field required label="Username" value={newUser.username} onChange={(value) => setNewUser((prev) => ({ ...prev, username: value }))} />
-                    <Field required label="Email" type="email" value={newUser.email} onChange={(value) => setNewUser((prev) => ({ ...prev, email: value }))} />
-                    <Field required label="Phone" value={newUser.phone} onChange={(value) => setNewUser((prev) => ({ ...prev, phone: value }))} />
-                    <Field required label="Password" type="password" allowVisibilityToggle value={newUser.password} onChange={(value) => setNewUser((prev) => ({ ...prev, password: value }))} />
-                    <Field required label="Confirm Password" type="password" allowVisibilityToggle value={newUser.confirmPassword} onChange={(value) => setNewUser((prev) => ({ ...prev, confirmPassword: value }))} />
+                    <Field required label="ID Number" placeholder="Enter ID number" value={newUser.idNumber} onChange={(value) => setNewUser((prev) => ({ ...prev, idNumber: value }))} />
+                    <Field required label="First Name" placeholder="Enter first name" value={newUser.firstName} onChange={(value) => setNewUser((prev) => ({ ...prev, firstName: value }))} />
+                    <Field label="Middle Name" placeholder="Enter middle name (optional)" value={newUser.middleName} onChange={(value) => setNewUser((prev) => ({ ...prev, middleName: value }))} />
+                    <Field required label="Last Name" placeholder="Enter last name" value={newUser.lastName} onChange={(value) => setNewUser((prev) => ({ ...prev, lastName: value }))} />
+                    <Field required label="Username" placeholder="Enter username" value={newUser.username} onChange={(value) => setNewUser((prev) => ({ ...prev, username: value }))} />
+                    <Field required label="Email" type="email" placeholder="Enter email address" value={newUser.email} onChange={(value) => setNewUser((prev) => ({ ...prev, email: value }))} />
+                    <Field required label="Phone" placeholder="09xxxxxxxxx" value={newUser.phone} onChange={(value) => setNewUser((prev) => ({ ...prev, phone: value }))} />
+                    <Field required label="Password" type="password" placeholder="Enter password" allowVisibilityToggle value={newUser.password} onChange={(value) => setNewUser((prev) => ({ ...prev, password: value }))} />
+                    <Field required label="Confirm Password" type="password" placeholder="Confirm password" allowVisibilityToggle value={newUser.confirmPassword} onChange={(value) => setNewUser((prev) => ({ ...prev, confirmPassword: value }))} />
                     <div className="md:col-span-2 flex flex-col gap-3 sm:flex-row sm:justify-end">
                       <button type="button" onClick={() => { setIsAddUserModalOpen(false); setStudentSection(""); setStudentYearLevel(""); }} className="btn btn-secondary">
                         Cancel
@@ -2887,16 +2887,16 @@ function AdminAccountPage() {
                       }}
                       className="grid gap-4 md:grid-cols-2"
                     >
-                      <Field required label="ID Number" value={facultyEditForm.idNumber} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, idNumber: value }))} />
-                      <Field required label="Username" value={facultyEditForm.username} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, username: value }))} />
-                      <Field required label="First Name" value={facultyEditForm.firstName} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, firstName: value }))} />
-                      <Field label="Middle Name" value={facultyEditForm.middleName} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, middleName: value }))} />
-                      <Field required label="Last Name" value={facultyEditForm.lastName} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, lastName: value }))} />
-                      <Field required label="Email" value={facultyEditForm.email} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, email: value }))} />
-                      <Field required label="Phone" value={facultyEditForm.phone} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, phone: value }))} />
-                      <Field required label="Department / Section" value={facultyEditForm.department} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, department: value }))} />
-                      <Field required label="Password" type="password" allowVisibilityToggle value={facultyEditForm.password} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, password: value }))} />
-                      <Field required label="Confirm Password" type="password" allowVisibilityToggle value={facultyEditForm.confirmPassword} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, confirmPassword: value }))} />
+                      <Field required label="ID Number" placeholder="Enter ID number" value={facultyEditForm.idNumber} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, idNumber: value }))} />
+                      <Field required label="Username" placeholder="Enter username" value={facultyEditForm.username} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, username: value }))} />
+                      <Field required label="First Name" placeholder="Enter first name" value={facultyEditForm.firstName} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, firstName: value }))} />
+                      <Field label="Middle Name" placeholder="Enter middle name (optional)" value={facultyEditForm.middleName} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, middleName: value }))} />
+                      <Field required label="Last Name" placeholder="Enter last name" value={facultyEditForm.lastName} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, lastName: value }))} />
+                      <Field required label="Email" placeholder="Enter email address" value={facultyEditForm.email} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, email: value }))} />
+                      <Field required label="Phone" placeholder="09xxxxxxxxx" value={facultyEditForm.phone} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, phone: value }))} />
+                      <Field required label="Department / Section" placeholder="Enter department or section" value={facultyEditForm.department} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, department: value }))} />
+                      <Field required label="Password" type="password" placeholder="Enter password" allowVisibilityToggle value={facultyEditForm.password} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, password: value }))} />
+                      <Field required label="Confirm Password" type="password" placeholder="Confirm password" allowVisibilityToggle value={facultyEditForm.confirmPassword} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, confirmPassword: value }))} />
                       <div className="md:col-span-2 flex flex-col gap-3 sm:flex-row sm:justify-end">
                         <button
                           type="button"
@@ -2955,16 +2955,16 @@ function AdminAccountPage() {
                       }}
                       className="grid gap-4 md:grid-cols-2"
                     >
-                      <Field required label="ID Number" value={studentEditForm.idNumber} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, idNumber: value }))} />
-                      <Field required label="Username" value={studentEditForm.username} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, username: value }))} />
-                      <Field required label="First Name" value={studentEditForm.firstName} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, firstName: value }))} />
-                      <Field label="Middle Name" value={studentEditForm.middleName} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, middleName: value }))} />
-                      <Field required label="Last Name" value={studentEditForm.lastName} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, lastName: value }))} />
-                      <Field required label="Email" value={studentEditForm.email} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, email: value }))} />
-                      <Field required label="Phone" value={studentEditForm.phone} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, phone: value }))} />
-                      <Field required label="Department / Section" value={studentEditForm.department} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, department: value }))} />
-                      <Field required label="Password" type="password" allowVisibilityToggle value={studentEditForm.password} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, password: value }))} />
-                      <Field required label="Confirm Password" type="password" allowVisibilityToggle value={studentEditForm.confirmPassword} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, confirmPassword: value }))} />
+                      <Field required label="ID Number" placeholder="Enter ID number" value={studentEditForm.idNumber} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, idNumber: value }))} />
+                      <Field required label="Username" placeholder="Enter username" value={studentEditForm.username} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, username: value }))} />
+                      <Field required label="First Name" placeholder="Enter first name" value={studentEditForm.firstName} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, firstName: value }))} />
+                      <Field label="Middle Name" placeholder="Enter middle name (optional)" value={studentEditForm.middleName} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, middleName: value }))} />
+                      <Field required label="Last Name" placeholder="Enter last name" value={studentEditForm.lastName} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, lastName: value }))} />
+                      <Field required label="Email" placeholder="Enter email address" value={studentEditForm.email} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, email: value }))} />
+                      <Field required label="Phone" placeholder="09xxxxxxxxx" value={studentEditForm.phone} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, phone: value }))} />
+                      <Field required label="Department / Section" placeholder="Enter department or section" value={studentEditForm.department} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, department: value }))} />
+                      <Field required label="Password" type="password" placeholder="Enter password" allowVisibilityToggle value={studentEditForm.password} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, password: value }))} />
+                      <Field required label="Confirm Password" type="password" placeholder="Confirm password" allowVisibilityToggle value={studentEditForm.confirmPassword} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, confirmPassword: value }))} />
                       <div className="md:col-span-2 flex flex-col gap-3 sm:flex-row sm:justify-end">
                         <button
                           type="button"
@@ -3066,22 +3066,22 @@ function SelfAccountPage({ role }) {
           {usesManagedSelfAccount ? (
             <Field label="ID Number" value={form.idNumber} onChange={(value) => setForm((prev) => ({ ...prev, idNumber: value }))} disabled />
           ) : null}
-          <Field label="First Name" value={form.firstName} onChange={(value) => setForm((prev) => ({ ...prev, firstName: value }))} />
-          <Field label="Middle Name" value={form.middleName} onChange={(value) => setForm((prev) => ({ ...prev, middleName: value }))} />
-          <Field label="Last Name" value={form.lastName} onChange={(value) => setForm((prev) => ({ ...prev, lastName: value }))} />
+          <Field label="First Name" placeholder="Enter first name" value={form.firstName} onChange={(value) => setForm((prev) => ({ ...prev, firstName: value }))} />
+          <Field label="Middle Name" placeholder="Enter middle name (optional)" value={form.middleName} onChange={(value) => setForm((prev) => ({ ...prev, middleName: value }))} />
+          <Field label="Last Name" placeholder="Enter last name" value={form.lastName} onChange={(value) => setForm((prev) => ({ ...prev, lastName: value }))} />
           {usesManagedSelfAccount ? (
-            <Field label="Username" value={form.username} onChange={(value) => setForm((prev) => ({ ...prev, username: value }))} />
+            <Field label="Username" placeholder="Enter username" value={form.username} onChange={(value) => setForm((prev) => ({ ...prev, username: value }))} />
           ) : null}
-          <Field label="Email" type="email" value={form.email} onChange={(value) => setForm((prev) => ({ ...prev, email: value }))} />
-          <Field label="Phone" value={form.phone} onChange={(value) => setForm((prev) => ({ ...prev, phone: value }))} />
+          <Field label="Email" type="email" placeholder="Enter email address" value={form.email} onChange={(value) => setForm((prev) => ({ ...prev, email: value }))} />
+          <Field label="Phone" placeholder="09xxxxxxxxx" value={form.phone} onChange={(value) => setForm((prev) => ({ ...prev, phone: value }))} />
           {!usesManagedSelfAccount ? (
-            <Field label="Smart Card ID" value={form.smartCardId} onChange={(value) => setForm((prev) => ({ ...prev, smartCardId: value }))} />
+            <Field label="Smart Card ID" placeholder="Enter smart card ID" value={form.smartCardId} onChange={(value) => setForm((prev) => ({ ...prev, smartCardId: value }))} />
           ) : null}
           {!usesManagedSelfAccount ? (
-            <Field label="Fingerprint ID" value={form.fingerprintId} onChange={(value) => setForm((prev) => ({ ...prev, fingerprintId: value }))} />
+            <Field label="Fingerprint ID" placeholder="Enter fingerprint ID" value={form.fingerprintId} onChange={(value) => setForm((prev) => ({ ...prev, fingerprintId: value }))} />
           ) : null}
           <div className="md:col-span-2">
-            <Field label="Department / Section" value={form.department} onChange={(value) => setForm((prev) => ({ ...prev, department: value }))} />
+            <Field label="Department / Section" placeholder="Enter department or section" value={form.department} onChange={(value) => setForm((prev) => ({ ...prev, department: value }))} />
           </div>
           <button type="submit" className="btn btn-primary md:col-span-2 justify-self-start">
             Update Account
@@ -3092,10 +3092,10 @@ function SelfAccountPage({ role }) {
       {usesManagedSelfAccount ? (
         <FormCard title="Change Password">
           <form onSubmit={handlePasswordSubmit} className="grid gap-4 md:grid-cols-2">
-            <Field label="Current Password" type="password" allowVisibilityToggle value={passwordForm.currentPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, currentPassword: value }))} />
-            <Field label="New Password" type="password" allowVisibilityToggle value={passwordForm.newPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, newPassword: value }))} />
+            <Field label="Current Password" type="password" placeholder="Enter current password" allowVisibilityToggle value={passwordForm.currentPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, currentPassword: value }))} />
+            <Field label="New Password" type="password" placeholder="Enter new password" allowVisibilityToggle value={passwordForm.newPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, newPassword: value }))} />
             <div className="md:col-span-2">
-              <Field label="Confirm New Password" type="password" allowVisibilityToggle value={passwordForm.confirmNewPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, confirmNewPassword: value }))} />
+              <Field label="Confirm New Password" type="password" placeholder="Confirm new password" allowVisibilityToggle value={passwordForm.confirmNewPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, confirmNewPassword: value }))} />
             </div>
             <button type="submit" className="btn btn-primary md:col-span-2 justify-self-start">
               Change Password
@@ -3140,14 +3140,14 @@ function EditableUserCard({ user, onSave, onToggleStatus, onDelete }) {
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Field small label="First Name" value={draft.firstName} onChange={(value) => setDraft((prev) => ({ ...prev, firstName: value }))} />
-        <Field small label="Middle Name" value={draft.middleName ?? ""} onChange={(value) => setDraft((prev) => ({ ...prev, middleName: value }))} />
-        <Field small label="Last Name" value={draft.lastName} onChange={(value) => setDraft((prev) => ({ ...prev, lastName: value }))} />
-        <Field small label="Email" value={draft.email} onChange={(value) => setDraft((prev) => ({ ...prev, email: value }))} />
-        <Field small label="Phone" value={draft.phone} onChange={(value) => setDraft((prev) => ({ ...prev, phone: value }))} />
-        <Field small label="Smart Card ID" value={draft.smartCardId} onChange={(value) => setDraft((prev) => ({ ...prev, smartCardId: value }))} />
-        <Field small label="Fingerprint ID" value={draft.fingerprintId} onChange={(value) => setDraft((prev) => ({ ...prev, fingerprintId: value }))} />
-        <Field small label="Department" value={draft.department} onChange={(value) => setDraft((prev) => ({ ...prev, department: value }))} />
+        <Field small label="First Name" placeholder="Enter first name" value={draft.firstName} onChange={(value) => setDraft((prev) => ({ ...prev, firstName: value }))} />
+        <Field small label="Middle Name" placeholder="Enter middle name (optional)" value={draft.middleName ?? ""} onChange={(value) => setDraft((prev) => ({ ...prev, middleName: value }))} />
+        <Field small label="Last Name" placeholder="Enter last name" value={draft.lastName} onChange={(value) => setDraft((prev) => ({ ...prev, lastName: value }))} />
+        <Field small label="Email" placeholder="Enter email address" value={draft.email} onChange={(value) => setDraft((prev) => ({ ...prev, email: value }))} />
+        <Field small label="Phone" placeholder="09xxxxxxxxx" value={draft.phone} onChange={(value) => setDraft((prev) => ({ ...prev, phone: value }))} />
+        <Field small label="Smart Card ID" placeholder="Enter smart card ID" value={draft.smartCardId} onChange={(value) => setDraft((prev) => ({ ...prev, smartCardId: value }))} />
+        <Field small label="Fingerprint ID" placeholder="Enter fingerprint ID" value={draft.fingerprintId} onChange={(value) => setDraft((prev) => ({ ...prev, fingerprintId: value }))} />
+        <Field small label="Department" placeholder="Enter department or section" value={draft.department} onChange={(value) => setDraft((prev) => ({ ...prev, department: value }))} />
         <SelectField
           small
           label="Role"
