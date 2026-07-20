@@ -2070,20 +2070,24 @@ function AdminAccountPage() {
       return;
     }
 
+    const deptStr = viewedStudent.department ?? "";
+    const deptParts = deptStr.split(" - ");
+    const parsedYearLevel = deptParts.length >= 2 ? deptParts[0] : "";
+    const parsedSection = deptParts.length >= 2 ? deptParts[1] : "";
+
     setStudentEditForm({
       id: viewedStudent.id,
       role: viewedStudent.role ?? "student",
+      status: viewedStudent.status ?? "Active",
       idNumber: viewedStudent.idNumber ?? "",
-      department: viewedStudent.department ?? "",
       firstName: viewedStudent.firstName ?? "",
       middleName: viewedStudent.middleName ?? "",
       lastName: viewedStudent.lastName ?? "",
       username: viewedStudent.username ?? "",
       email: viewedStudent.email ?? "",
       phone: viewedStudent.phone ?? "",
-      password: viewedStudent.password ?? "",
-      confirmPassword: viewedStudent.password ?? "",
-      status: viewedStudent.status ?? "Active",
+      studentYearLevel: parsedYearLevel,
+      studentSection: parsedSection,
     });
   }, [viewedStudent]);
 
@@ -2915,13 +2919,15 @@ function AdminAccountPage() {
       {viewedStudent
         ? createPortal(
             <div className="modal-overlay">
-              <div className="my-auto w-full max-w-2xl">
+              <div className="my-auto w-full max-w-3xl max-h-[calc(100dvh-2rem)] overflow-y-auto overflow-x-hidden px-1 sm:max-h-[calc(100dvh-3rem)] sm:px-0">
                 <FormCard title="Student Account Details">
                   {studentEditForm ? (
                     <form
                       onSubmit={async (event) => {
                         event.preventDefault();
-                        const error = validateNewUserAccount(studentEditForm, users, studentEditForm.id);
+                        const composedDepartment = `${studentEditForm.studentYearLevel} - ${studentEditForm.studentSection}`;
+                        const formWithDept = { ...studentEditForm, department: composedDepartment };
+                        const error = validateNewUserAccount(formWithDept, users, studentEditForm.id);
                         if (error) {
                           setFeedback({ message: error, tone: "error" });
                           return;
@@ -2932,14 +2938,13 @@ function AdminAccountPage() {
                             role: "student",
                             status: studentEditForm.status,
                             idNumber: studentEditForm.idNumber,
-                            department: studentEditForm.department,
+                            department: composedDepartment,
                             firstName: studentEditForm.firstName,
                             middleName: studentEditForm.middleName,
                             lastName: studentEditForm.lastName,
                             username: studentEditForm.username,
                             email: studentEditForm.email,
                             phone: studentEditForm.phone,
-                            password: studentEditForm.password,
                           });
                           setViewedStudent(updatedStudent);
                           setFeedback({ message: "Student account updated successfully.", tone: "success" });
@@ -2949,16 +2954,50 @@ function AdminAccountPage() {
                       }}
                       className="grid gap-4 md:grid-cols-2"
                     >
+                      <SelectField
+                        label="Role"
+                        value={studentEditForm.role}
+                        onChange={() => {}}
+                        disabled
+                        options={[{ label: "Student", value: "student" }]}
+                      />
+                      <SelectField
+                        label="Status"
+                        value={studentEditForm.status}
+                        onChange={(value) => setStudentEditForm((prev) => ({ ...prev, status: value }))}
+                        required
+                        options={[
+                          { label: "Active", value: "Active" },
+                          { label: "Inactive", value: "Inactive" },
+                        ]}
+                      />
+                      <SelectField
+                        label="Year Level"
+                        value={studentEditForm.studentYearLevel}
+                        onChange={(value) => setStudentEditForm((prev) => ({ ...prev, studentYearLevel: value }))}
+                        required
+                        options={[
+                          { label: "Select year level...", value: "" },
+                          { label: "1st Year", value: "1st Year" },
+                          { label: "2nd Year", value: "2nd Year" },
+                          { label: "3rd Year", value: "3rd Year" },
+                          { label: "4th Year", value: "4th Year" },
+                        ]}
+                      />
+                      <SelectField
+                        label="Section"
+                        value={studentEditForm.studentSection}
+                        onChange={(value) => setStudentEditForm((prev) => ({ ...prev, studentSection: value }))}
+                        required
+                        options={[{ label: "Select section...", value: "" }, ...["A", "B", "C", "D", "E"].map((s) => ({ label: s, value: s }))]}
+                      />
                       <Field required label="ID Number" placeholder="Enter ID number" value={studentEditForm.idNumber} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, idNumber: value }))} />
-                      <Field required label="Username" placeholder="Enter username" value={studentEditForm.username} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, username: value }))} />
                       <Field required label="First Name" placeholder="Enter first name" value={studentEditForm.firstName} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, firstName: value }))} />
                       <Field label="Middle Name" placeholder="Enter middle name (optional)" value={studentEditForm.middleName} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, middleName: value }))} />
                       <Field required label="Last Name" placeholder="Enter last name" value={studentEditForm.lastName} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, lastName: value }))} />
-                      <Field required label="Email" placeholder="Enter email address" value={studentEditForm.email} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, email: value }))} />
+                      <Field required label="Username" placeholder="Enter username" value={studentEditForm.username} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, username: value }))} />
+                      <Field required label="Email" type="email" placeholder="Enter email address" value={studentEditForm.email} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, email: value }))} />
                       <Field required label="Phone" placeholder="09xxxxxxxxx" value={studentEditForm.phone} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, phone: value }))} />
-                      <Field required label="Department / Section" placeholder="Enter department or section" value={studentEditForm.department} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, department: value }))} />
-                      <Field required label="Password" type="password" placeholder="Enter password" allowVisibilityToggle value={studentEditForm.password} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, password: value }))} />
-                      <Field required label="Confirm Password" type="password" placeholder="Confirm password" allowVisibilityToggle value={studentEditForm.confirmPassword} onChange={(value) => setStudentEditForm((prev) => ({ ...prev, confirmPassword: value }))} />
                       <div className="md:col-span-2 flex flex-col gap-3 sm:flex-row sm:justify-end">
                         <button
                           type="button"
@@ -3350,11 +3389,10 @@ function Field({ label, value, onChange, placeholder, type = "text", hideLabel =
           className={clsx(
             "w-full outline-none transition",
             isSignin
-              ? "signin-input rounded-none px-0 pb-0 pt-0 text-base"
+              ? "signin-input rounded-none py-3.5 pr-3 pl-11 text-base"
               : small
                 ? "form-input rounded-lg px-3 py-2.5 text-sm"
                 : "form-input rounded-lg px-4 py-3 text-sm",
-            Icon && isSignin ? "pl-11 pr-3" : "",
             Icon && !isSignin ? "pl-12" : "",
             allowVisibilityToggle ? "pr-12" : "",
             invalid ? "error" : "",
@@ -3375,7 +3413,7 @@ function Field({ label, value, onChange, placeholder, type = "text", hideLabel =
   );
 }
 
-function SelectField({ label, value, onChange, options, small = false, icon: Icon, variant = "default", hideLabel = false, required = false }) {
+function SelectField({ label, value, onChange, options, small = false, icon: Icon, variant = "default", hideLabel = false, required = false, disabled = false }) {
   const isSignin = variant === "signin";
 
   return (
@@ -3396,17 +3434,17 @@ function SelectField({ label, value, onChange, options, small = false, icon: Ico
           value={value}
           onChange={(event) => onChange(event.target.value)}
           required={required}
+          disabled={disabled}
           className={clsx(
             "w-full appearance-none outline-none transition",
             isSignin
-              ? "signin-input rounded-none px-0 pb-0 pt-0 text-base"
+              ? "signin-input rounded-none py-3.5 pr-10 pl-11 text-base"
               : small
                 ? "form-input rounded-lg px-3 py-2.5 text-sm"
                 : "form-input rounded-lg px-4 py-3 text-sm",
-            Icon && isSignin ? "pl-11" : "",
             Icon && !isSignin ? "pl-12 pr-10" : "",
             !Icon && !isSignin ? "pr-10" : "",
-            isSignin ? "pr-10" : "",
+            disabled ? "opacity-60 cursor-not-allowed bg-gray-50" : "",
           )}
         >
           {options.map((option) => (
@@ -3605,10 +3643,12 @@ function validateNewUserAccount(payload, users = [], excludedUserId = null) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email ?? "")) return "A valid email address is required.";
   if (comparableUsers.some((user) => String(user.email ?? "").trim().toLowerCase() === normalizedEmail)) return "Email address already exists.";
   if (!/^09\d{9}$/.test(payload.phone ?? "")) return "Phone number must start with 09 and be exactly 11 digits long.";
-  if (!payload.password?.trim()) return "Password is required.";
-  if (payload.password.trim().length < 6) return "Password must be at least 6 characters long.";
-  if (!payload.confirmPassword?.trim()) return "Confirm password is required.";
-  if (payload.confirmPassword.trim().length < 6) return "Confirm password must be at least 6 characters long.";
-  if (payload.password !== payload.confirmPassword) return "Password and confirm password must match.";
+  if (payload.password !== undefined || payload.confirmPassword !== undefined) {
+    if (!payload.password?.trim()) return "Password is required.";
+    if (payload.password.trim().length < 6) return "Password must be at least 6 characters long.";
+    if (!payload.confirmPassword?.trim()) return "Confirm password is required.";
+    if (payload.confirmPassword.trim().length < 6) return "Confirm password must be at least 6 characters long.";
+    if (payload.password !== payload.confirmPassword) return "Password and confirm password must match.";
+  }
   return "";
 }

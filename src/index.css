@@ -688,7 +688,6 @@ body,
 }
 
 .signin-input {
-  padding: 0.875rem 1rem;
   border: 1px solid var(--gray-300);
   border-radius: var(--radius-lg);
   background: var(--white);
