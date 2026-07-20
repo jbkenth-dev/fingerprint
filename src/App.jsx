@@ -2045,6 +2045,7 @@ function AdminAccountPage() {
   const { currentUser, users, updateOwnAccount, addUser, updateUser, deleteUser } = useAuth();
   const navigate = useNavigate();
   const [feedback, setFeedback] = React.useState({ message: "", tone: "success" });
+  const [archiveRedirect, setArchiveRedirect] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [selectedAccountView, setSelectedAccountView] = React.useState("my");
   const [isAddUserModalOpen, setIsAddUserModalOpen] = React.useState(false);
@@ -2361,7 +2362,13 @@ function AdminAccountPage() {
       <FeedbackModal
         message={feedback.message}
         tone={feedback.tone}
-        onClose={() => setFeedback((prev) => ({ ...prev, message: "" }))}
+        onClose={() => {
+          setFeedback((prev) => ({ ...prev, message: "" }));
+          if (archiveRedirect) {
+            setArchiveRedirect(false);
+            navigate("/admin/archive");
+          }
+        }}
       />
 
       <section className="grid gap-4">
@@ -2850,10 +2857,12 @@ function AdminAccountPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={async () => {
-                        await updateUser(activeStudent.id, { status: "Archived" });
+                      onClick={() => {
+                        setPendingStudentAction({
+                          type: "archive",
+                          studentId: activeStudent.id,
+                        });
                         setOpenStudentActionsMenu(null);
-                        navigate("/admin/archive");
                       }}
                       className="mt-1 flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-orange-600 transition hover:bg-orange-50"
                     >
@@ -2938,10 +2947,11 @@ function AdminAccountPage() {
             <div className="modal-overlay">
               <div className="my-auto w-full max-w-md">
                 <FormCard
-                  title={`${pendingStudentAction.type === "deactivate" ? "Deactivate" : "Activate"} Student Account`}
+                  title={pendingStudentAction.type === "archive" ? "Archive Student Account" : `${pendingStudentAction.type === "deactivate" ? "Deactivate" : "Activate"} Student Account`}
                   subtitle={(() => {
                     const targetStudent = users.find((user) => user.id === pendingStudentAction.studentId);
                     const fullName = targetStudent ? [targetStudent.firstName, targetStudent.lastName].filter(Boolean).join(" ") : "this student";
+                    if (pendingStudentAction.type === "archive") return `Are you sure you want to archive ${fullName}? They will be hidden from the student list.`;
                     if (pendingStudentAction.type === "deactivate") return `Are you sure you want to deactivate ${fullName}?`;
                     return `Are you sure you want to activate ${fullName}?`;
                   })()}
@@ -2952,7 +2962,7 @@ function AdminAccountPage() {
                       onClick={() => setPendingStudentAction(null)}
                       className="btn btn-secondary"
                     >
-                      Cancel
+                      No
                     </button>
                     <button
                       type="button"
@@ -2963,16 +2973,27 @@ function AdminAccountPage() {
                           return;
                         }
 
-                        await updateUser(targetStudent.id, {
-                          status: pendingStudentAction.type === "deactivate" ? "Inactive" : "Active",
-                        });
-                        setFeedback({ message: `${[targetStudent.firstName, targetStudent.lastName].filter(Boolean).join(" ")} status updated.`, tone: "success" });
-
-                        setPendingStudentAction(null);
+                        if (pendingStudentAction.type === "archive") {
+                          await updateUser(targetStudent.id, { status: "Archived" });
+                          setFeedback({ message: `${[targetStudent.firstName, targetStudent.lastName].filter(Boolean).join(" ")} has been archived successfully.`, tone: "success" });
+                          setPendingStudentAction(null);
+                          setArchiveRedirect(true);
+                        } else {
+                          await updateUser(targetStudent.id, {
+                            status: pendingStudentAction.type === "deactivate" ? "Inactive" : "Active",
+                          });
+                          setFeedback({ message: `${[targetStudent.firstName, targetStudent.lastName].filter(Boolean).join(" ")} status updated.`, tone: "success" });
+                          setPendingStudentAction(null);
+                        }
                       }}
-                      className="rounded-2xl px-5 py-3.5 text-sm font-semibold btn btn-secondary"
+                      className={clsx(
+                        "rounded-2xl px-5 py-3.5 text-sm font-semibold",
+                        pendingStudentAction.type === "archive"
+                          ? "btn btn-primary"
+                          : "btn btn-secondary",
+                      )}
                     >
-                      Confirm
+                      Yes
                     </button>
                   </div>
                 </FormCard>
