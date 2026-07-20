@@ -2709,8 +2709,6 @@ function AdminAccountPage() {
       username: viewedFaculty.username ?? "",
       email: viewedFaculty.email ?? "",
       phone: viewedFaculty.phone ?? "",
-      password: viewedFaculty.password ?? "",
-      confirmPassword: viewedFaculty.password ?? "",
       status: viewedFaculty.status ?? "Active",
     });
   }, [viewedFaculty]);
