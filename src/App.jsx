@@ -3555,7 +3555,13 @@ function AdminAccountPage() {
                       <Field required label="Last Name" placeholder="Enter last name" value={facultyEditForm.lastName} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, lastName: value }))} />
                       <Field required label="Email" type="email" placeholder="Enter email address" value={facultyEditForm.email} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, email: value }))} />
                       <Field required label="Phone" placeholder="09xxxxxxxxx" value={facultyEditForm.phone} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, phone: value }))} />
-                      <Field required label="Department" placeholder="Enter department" value={facultyEditForm.department} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, department: value }))} />
+                      <SelectField
+                        label="Department"
+                        value={facultyEditForm.department}
+                        onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, department: value }))}
+                        required
+                        options={[{ label: "Select department...", value: "" }, ...departments.map((d) => ({ label: d.name, value: d.name }))]}
+                      />
                       <div className="md:col-span-2 flex flex-col gap-3 sm:flex-row sm:justify-end">
                         <button
                           type="button"
