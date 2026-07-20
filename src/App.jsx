@@ -1493,6 +1493,12 @@ function ClassSubjectPage() {
 }
 
 function ClassSchedulingPage() {
+  const { users } = useAuth();
+  const facultyUsers = React.useMemo(
+    () => users.filter((u) => u.role === "faculty" && u.status === "Active"),
+    [users],
+  );
+
   const [form, setForm] = React.useState({
     section: "",
     yearLevel: "",
@@ -1548,23 +1554,21 @@ function ClassSchedulingPage() {
         if (!isMounted) return;
 
         const nextEntries = Array.isArray(data.subjects)
-          ? data.subjects.map((subject) => ({
-              subjectId: subject.id,
-              subjectCode: subject.subjectCode,
-              subjectName: subject.subjectName,
-              startTime:
+          ? data.subjects.map((subject) => {
+              const editingItem =
                 editingSchedule?.yearLevel === form.yearLevel && editingSchedule?.semester === form.semester
-                  ? normalizeTimeInputValue(
-                      editingSchedule.items.find((item) => Number(item.subjectId) === Number(subject.id))?.startTime,
-                    )
-                  : "",
-              endTime:
-                editingSchedule?.yearLevel === form.yearLevel && editingSchedule?.semester === form.semester
-                  ? normalizeTimeInputValue(
-                      editingSchedule.items.find((item) => Number(item.subjectId) === Number(subject.id))?.endTime,
-                    )
-                  : "",
-            }))
+                  ? editingSchedule.items.find((item) => Number(item.subjectId) === Number(subject.id))
+                  : null;
+              return {
+                subjectId: subject.id,
+                subjectCode: subject.subjectCode,
+                subjectName: subject.subjectName,
+                startTime: editingItem ? normalizeTimeInputValue(editingItem.startTime) : "",
+                endTime: editingItem ? normalizeTimeInputValue(editingItem.endTime) : "",
+                facultyId: editingItem?.facultyId ? Number(editingItem.facultyId) : "",
+                facultyName: editingItem?.facultyName ?? "",
+              };
+            })
           : [];
 
         setSubjectEntries(nextEntries);
@@ -1588,6 +1592,11 @@ function ClassSchedulingPage() {
     };
   }, [editingSchedule, form.yearLevel, form.semester]);
 
+  const selectedFacultyIds = React.useMemo(
+    () => new Set(subjectEntries.map((e) => e.facultyId).filter(Boolean)),
+    [subjectEntries],
+  );
+
   const validateSchedule = React.useCallback(() => {
     if (!form.section) return "Section is required";
     if (!form.yearLevel) return "Year level is required";
@@ -1598,6 +1607,7 @@ function ClassSchedulingPage() {
     const windows = [];
     for (const entry of subjectEntries) {
       if (!entry.startTime || !entry.endTime) return "Start and end times are required";
+      if (!entry.facultyId) return `Faculty is required for ${entry.subjectCode}.`;
 
       const start = parseTimeToMinutes(entry.startTime);
       const end = parseTimeToMinutes(entry.endTime);
@@ -1704,7 +1714,20 @@ function ClassSchedulingPage() {
   const handleEntryChange = (subjectId, field, value) => {
     setOverlapSubjectIds((prev) => prev.filter((id) => id !== subjectId));
     setSubjectEntries((prev) =>
-      prev.map((entry) => (entry.subjectId === subjectId ? { ...entry, [field]: value } : entry)),
+      prev.map((entry) => {
+        if (entry.subjectId !== subjectId) return entry;
+        if (field === "facultyId") {
+          const selectedFaculty = facultyUsers.find((f) => Number(f.id) === Number(value));
+          return {
+            ...entry,
+            facultyId: value ? Number(value) : "",
+            facultyName: selectedFaculty
+              ? `${selectedFaculty.firstName} ${selectedFaculty.middleName ? selectedFaculty.middleName + " " : ""}${selectedFaculty.lastName}`
+              : "",
+          };
+        }
+        return { ...entry, [field]: value };
+      }),
     );
   };
 
@@ -1789,6 +1812,8 @@ function ClassSchedulingPage() {
             subjectId: entry.subjectId,
             startTime: normalizeTimeInputValue(entry.startTime),
             endTime: normalizeTimeInputValue(entry.endTime),
+            facultyId: entry.facultyId || null,
+            facultyName: entry.facultyName || "",
           })),
         }),
       });
@@ -1850,6 +1875,7 @@ function ClassSchedulingPage() {
                 <tr>
                   <th className="px-4 py-3">Code</th>
                   <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">Faculty</th>
                   <th className="px-4 py-3">Days</th>
                   <th className="px-4 py-3">Time</th>
                   <th className="w-[1%] px-4 py-3 whitespace-nowrap">Actions</th>
@@ -1858,7 +1884,7 @@ function ClassSchedulingPage() {
               <tbody>
                 {loadingRows ? (
                   <tr>
-                    <td colSpan="5" className="px-4 py-6 text-center text-gray-500">
+                    <td colSpan="6" className="px-4 py-6 text-center text-gray-500">
                       Loading class schedules...
                     </td>
                   </tr>
@@ -1866,7 +1892,7 @@ function ClassSchedulingPage() {
                   groupedScheduleRows.map((group) => (
                     <React.Fragment key={group.key}>
                       <tr className="table-section-row">
-                        <td colSpan="5" className="px-4 py-2">
+                        <td colSpan="6" className="px-4 py-2">
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <div className="text-center font-semibold sm:text-left">{group.label}</div>
                             <div className="inline-flex items-center justify-center gap-2 sm:justify-end">
@@ -1892,6 +1918,7 @@ function ClassSchedulingPage() {
                         <tr key={row.id}>
                           <td className="px-4 py-3 font-semibold text-gray-800">{row.subjectCode}</td>
                           <td className="px-4 py-3">{row.subjectName}</td>
+                          <td className="px-4 py-3">{row.facultyName || "—"}</td>
                           <td className="px-4 py-3">{formatScheduleDays(row.days)}</td>
                           <td className="px-4 py-3">{formatTimeRange(row.startTime, row.endTime)}</td>
                           <td className="px-4 py-3" />
@@ -1901,7 +1928,7 @@ function ClassSchedulingPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="5" className="px-4 py-6 text-center text-gray-500">
+                    <td colSpan="6" className="px-4 py-6 text-center text-gray-500">
                       No class schedules found yet.
                     </td>
                   </tr>
@@ -1996,6 +2023,23 @@ function ClassSchedulingPage() {
                                 value={entry.endTime}
                                 onChange={(value) => handleEntryChange(entry.subjectId, "endTime", value)}
                                 invalid={hasOverlap}
+                                required
+                              />
+                            </div>
+                            <div className="mt-3">
+                              <SelectField
+                                label="Faculty"
+                                value={entry.facultyId}
+                                onChange={(value) => handleEntryChange(entry.subjectId, "facultyId", value)}
+                                options={[
+                                  { label: "Select faculty", value: "" },
+                                  ...facultyUsers
+                                    .filter((f) => !selectedFacultyIds.has(Number(f.id)) || Number(f.id) === Number(entry.facultyId))
+                                    .map((f) => ({
+                                      label: `${f.firstName} ${f.middleName ? f.middleName + " " : ""}${f.lastName}`,
+                                      value: f.id,
+                                    })),
+                                ]}
                                 required
                               />
                             </div>

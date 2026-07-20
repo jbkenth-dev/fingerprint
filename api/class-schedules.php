@@ -30,6 +30,8 @@ function ensure_class_schedules_table(PDO $pdo): void {
             subjectName VARCHAR(255) NOT NULL,
             startTime TIME NOT NULL,
             endTime TIME NOT NULL,
+            facultyId INT DEFAULT NULL,
+            facultyName VARCHAR(255) DEFAULT NULL,
             createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             UNIQUE KEY unique_schedule_subject (sectionName, yearLevel, semester, subjectId),
@@ -40,6 +42,16 @@ function ensure_class_schedules_table(PDO $pdo): void {
     $columns = $pdo->query('SHOW COLUMNS FROM class_schedules LIKE "days"')->fetchAll();
     if (count($columns) === 0) {
         $pdo->exec("ALTER TABLE class_schedules ADD COLUMN days VARCHAR(64) NOT NULL DEFAULT 'Monday' AFTER semester");
+    }
+
+    $facultyIdColumns = $pdo->query('SHOW COLUMNS FROM class_schedules LIKE "facultyId"')->fetchAll();
+    if (count($facultyIdColumns) === 0) {
+        $pdo->exec("ALTER TABLE class_schedules ADD COLUMN facultyId INT DEFAULT NULL AFTER endTime");
+    }
+
+    $facultyNameColumns = $pdo->query('SHOW COLUMNS FROM class_schedules LIKE "facultyName"')->fetchAll();
+    if (count($facultyNameColumns) === 0) {
+        $pdo->exec("ALTER TABLE class_schedules ADD COLUMN facultyName VARCHAR(255) DEFAULT NULL AFTER facultyId");
     }
 }
 
@@ -122,6 +134,10 @@ function validate_schedule_payload(array $input): ?string {
         if (($endMinutes - $startMinutes) < 60) {
             return 'Start and end times must be at least 1 hour apart';
         }
+
+        if (empty($entry['facultyId'])) {
+            return 'Faculty is required for each subject.';
+        }
     }
 
     return null;
@@ -134,7 +150,7 @@ function section_schedule_exists(PDO $pdo, string $section, string $yearLevel, s
 }
 
 function fetch_schedule_group_rows(PDO $pdo, string $section, string $yearLevel, string $semester): array {
-    $stmt = $pdo->prepare('SELECT id, sectionName AS section, yearLevel, semester, days, subjectId, subjectCode, subjectName, startTime, endTime, createdAt, updatedAt FROM class_schedules WHERE sectionName = ? AND yearLevel = ? AND semester = ? ORDER BY startTime ASC, subjectCode ASC');
+    $stmt = $pdo->prepare('SELECT id, sectionName AS section, yearLevel, semester, days, subjectId, subjectCode, subjectName, startTime, endTime, facultyId, facultyName, createdAt, updatedAt FROM class_schedules WHERE sectionName = ? AND yearLevel = ? AND semester = ? ORDER BY startTime ASC, subjectCode ASC');
     $stmt->execute([$section, $yearLevel, $semester]);
     $rows = $stmt->fetchAll();
     foreach ($rows as &$row) {
@@ -169,12 +185,17 @@ function validate_subject_matches(PDO $pdo, array $inputEntries, array $availabl
         }
 
         $subject = $subjectsById[$subjectId];
+        $facultyId = !empty($entry['facultyId']) ? (int) $entry['facultyId'] : null;
+        $facultyName = normalize_value($entry['facultyName'] ?? '');
+
         $normalizedEntries[] = [
             'subjectId' => $subjectId,
             'subjectCode' => $subject['subjectCode'],
             'subjectName' => $subject['subjectName'],
             'startTime' => normalize_value($entry['startTime'] ?? ''),
             'endTime' => normalize_value($entry['endTime'] ?? ''),
+            'facultyId' => $facultyId,
+            'facultyName' => $facultyName,
         ];
     }
 
@@ -244,7 +265,7 @@ function find_subject_schedule_conflict(PDO $pdo, array $entries, ?array $exclud
 }
 
 function fetch_schedule_rows(PDO $pdo): array {
-    $stmt = $pdo->query('SELECT id, sectionName AS section, yearLevel, semester, days, subjectId, subjectCode, subjectName, startTime, endTime, createdAt, updatedAt FROM class_schedules ORDER BY sectionName ASC, yearLevel ASC, semester ASC, startTime ASC, subjectCode ASC');
+    $stmt = $pdo->query('SELECT id, sectionName AS section, yearLevel, semester, days, subjectId, subjectCode, subjectName, startTime, endTime, facultyId, facultyName, createdAt, updatedAt FROM class_schedules ORDER BY sectionName ASC, yearLevel ASC, semester ASC, startTime ASC, subjectCode ASC');
     $rows = $stmt->fetchAll();
     foreach ($rows as &$row) {
         $row['days'] = decode_days($row['days'] ?? '');
@@ -348,7 +369,7 @@ if ($method === 'POST') {
 
     $pdo->beginTransaction();
     try {
-        $stmt = $pdo->prepare('INSERT INTO class_schedules (sectionName, yearLevel, semester, days, subjectId, subjectCode, subjectName, startTime, endTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt = $pdo->prepare('INSERT INTO class_schedules (sectionName, yearLevel, semester, days, subjectId, subjectCode, subjectName, startTime, endTime, facultyId, facultyName) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         foreach ($entries as $entry) {
             $stmt->execute([
                 $section,
@@ -360,6 +381,8 @@ if ($method === 'POST') {
                 $entry['subjectName'],
                 $entry['startTime'],
                 $entry['endTime'],
+                $entry['facultyId'],
+                $entry['facultyName'],
             ]);
         }
         $pdo->commit();
@@ -466,7 +489,7 @@ if ($method === 'PUT') {
     try {
         delete_schedule_group($pdo, $originalSection, $originalYearLevel, $originalSemester);
 
-        $stmt = $pdo->prepare('INSERT INTO class_schedules (sectionName, yearLevel, semester, days, subjectId, subjectCode, subjectName, startTime, endTime) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        $stmt = $pdo->prepare('INSERT INTO class_schedules (sectionName, yearLevel, semester, days, subjectId, subjectCode, subjectName, startTime, endTime, facultyId, facultyName) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         foreach ($entries as $entry) {
             $stmt->execute([
                 $section,
@@ -478,6 +501,8 @@ if ($method === 'PUT') {
                 $entry['subjectName'],
                 $entry['startTime'],
                 $entry['endTime'],
+                $entry['facultyId'],
+                $entry['facultyName'],
             ]);
         }
         $pdo->commit();
