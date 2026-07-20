@@ -1945,6 +1945,15 @@ function AdminAccountPage() {
     confirmPassword: "",
     department: "",
   });
+  const [studentSection, setStudentSection] = React.useState("");
+  const [studentYearLevel, setStudentYearLevel] = React.useState("");
+  const [departments, setDepartments] = React.useState([]);
+
+  React.useEffect(() => {
+    apiFetch("/departments.php")
+      .then((data) => { if (Array.isArray(data)) setDepartments(data); })
+      .catch(() => {});
+  }, []);
 
   const selectedAccount = React.useMemo(() => {
     if (selectedAccountView === "my") return currentUser ?? null;
@@ -2122,7 +2131,13 @@ function AdminAccountPage() {
 
   const submitNewUser = async (event) => {
     event.preventDefault();
-    const error = validateNewUserAccount(newUser, users);
+    // Compose department value for students from year level + section
+    const isStudent = newUser.role === "student";
+    const department = isStudent
+      ? `${studentYearLevel} - ${studentSection}`
+      : newUser.department;
+    const payload = { ...newUser, department };
+    const error = validateNewUserAccount(payload, users);
     if (error) {
       setFeedback({ message: error, tone: "error" });
       return;
@@ -2132,7 +2147,7 @@ function AdminAccountPage() {
         role: newUser.role,
         status: "Active",
         idNumber: newUser.idNumber,
-        department: newUser.department,
+        department,
         firstName: newUser.firstName,
         middleName: newUser.middleName,
         lastName: newUser.lastName,
@@ -2154,6 +2169,8 @@ function AdminAccountPage() {
         confirmPassword: "",
         department: "",
       });
+      setStudentSection("");
+      setStudentYearLevel("");
       setFeedback({ message: "New user account added.", tone: "success" });
       setIsAddUserModalOpen(false);
     } catch (submissionError) {
@@ -2523,14 +2540,45 @@ function AdminAccountPage() {
                     <SelectField
                       label="Role"
                       value={newUser.role}
-                      onChange={(value) => setNewUser((prev) => ({ ...prev, role: value }))}
+                      onChange={(value) => setNewUser((prev) => ({ ...prev, role: value, department: "", studentSection: "", studentYearLevel: "" }))}
                       required
                       options={[
                         { label: "Faculty", value: "faculty" },
                         { label: "Student", value: "student" },
                       ]}
                     />
-                    <Field required label="Department / Section" value={newUser.department} onChange={(value) => setNewUser((prev) => ({ ...prev, department: value }))} />
+                    {newUser.role === "faculty" ? (
+                      <SelectField
+                        label="Department"
+                        value={newUser.department}
+                        onChange={(value) => setNewUser((prev) => ({ ...prev, department: value }))}
+                        required
+                        options={[{ label: "Select department...", value: "" }, ...departments.map((d) => ({ label: d.name, value: d.name }))]}
+                      />
+                    ) : newUser.role === "student" ? (
+                      <>
+                        <SelectField
+                          label="Year Level"
+                          value={studentYearLevel}
+                          onChange={setStudentYearLevel}
+                          required
+                          options={[
+                            { label: "Select year level...", value: "" },
+                            { label: "1st Year", value: "1st Year" },
+                            { label: "2nd Year", value: "2nd Year" },
+                            { label: "3rd Year", value: "3rd Year" },
+                            { label: "4th Year", value: "4th Year" },
+                          ]}
+                        />
+                        <SelectField
+                          label="Section"
+                          value={studentSection}
+                          onChange={setStudentSection}
+                          required
+                          options={[{ label: "Select section...", value: "" }, ...["A", "B", "C", "D", "E"].map((s) => ({ label: s, value: s }))]}
+                        />
+                      </>
+                    ) : null}
                     <Field required label="ID Number" value={newUser.idNumber} onChange={(value) => setNewUser((prev) => ({ ...prev, idNumber: value }))} />
                     <Field required label="First Name" value={newUser.firstName} onChange={(value) => setNewUser((prev) => ({ ...prev, firstName: value }))} />
                     <Field label="Middle Name" value={newUser.middleName} onChange={(value) => setNewUser((prev) => ({ ...prev, middleName: value }))} />
@@ -2541,7 +2589,7 @@ function AdminAccountPage() {
                     <Field required label="Password" type="password" allowVisibilityToggle value={newUser.password} onChange={(value) => setNewUser((prev) => ({ ...prev, password: value }))} />
                     <Field required label="Confirm Password" type="password" allowVisibilityToggle value={newUser.confirmPassword} onChange={(value) => setNewUser((prev) => ({ ...prev, confirmPassword: value }))} />
                     <div className="md:col-span-2 flex flex-col gap-3 sm:flex-row sm:justify-end">
-                      <button type="button" onClick={() => setIsAddUserModalOpen(false)} className="btn btn-secondary">
+                      <button type="button" onClick={() => { setIsAddUserModalOpen(false); setStudentSection(""); setStudentYearLevel(""); }} className="btn btn-secondary">
                         Cancel
                       </button>
                       <button type="submit" className="btn btn-secondary">
@@ -3357,6 +3405,7 @@ function SelectField({ label, value, onChange, options, small = false, icon: Ico
         <select
           value={value}
           onChange={(event) => onChange(event.target.value)}
+          required={required}
           className={clsx(
             "w-full appearance-none outline-none transition",
             isSignin
@@ -3556,7 +3605,6 @@ function validateNewUserAccount(payload, users = [], excludedUserId = null) {
   if (payload.idNumber.trim().length < 6) return "ID number must be at least 6 characters long.";
   if (comparableUsers.some((user) => String(user.idNumber ?? "").trim().toLowerCase() === normalizedIdNumber)) return "ID number already exists.";
   if (!payload.department?.trim()) return "Department / Section is required.";
-  if (payload.department.trim().length < 6) return "Department / Section must be at least 6 characters long.";
   if (!payload.firstName?.trim()) return "First name is required.";
   if (hasNumber.test(payload.firstName)) return "First name must not contain numbers.";
   if (payload.middleName?.trim() && hasNumber.test(payload.middleName)) return "Middle name must not contain numbers.";
