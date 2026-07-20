@@ -65,9 +65,12 @@ $input = json_decode(file_get_contents('php://input'), true);
 
 if ($method === 'POST') {
     require_auth($pdo, 'admin');
-    // create new user
+    // create new user — hash password for non-student roles, store plaintext for students
     if (isset($input['password']) && $input['password'] !== '') {
-        $input['password'] = password_hash($input['password'], PASSWORD_BCRYPT);
+        $role = $input['role'] ?? '';
+        if ($role !== 'student') {
+            $input['password'] = password_hash($input['password'], PASSWORD_BCRYPT);
+        }
     }
     if (find_duplicate_field($pdo, 'idNumber', $input['idNumber'] ?? null)) {
         http_response_code(409);
@@ -82,11 +85,6 @@ if ($method === 'POST') {
     if (find_duplicate_field($pdo, 'email', $input['email'] ?? null)) {
         http_response_code(409);
         echo json_encode(["error" => "Email address already exists."]);
-        exit;
-    }
-    if (find_duplicate_field($pdo, 'phone', $input['phone'] ?? null)) {
-        http_response_code(409);
-        echo json_encode(["error" => "Phone number already exists."]);
         exit;
     }
 
@@ -113,6 +111,12 @@ if ($method === 'PUT') {
     $id = $input['id'] ?? null;
     if (!$id) { http_response_code(400); echo json_encode(["error"=>"An ID is required."]); exit; }
     if (isset($input['password']) && $input['password'] !== '') {
+        // Fetch the target user's role to decide hashing
+        $stmt = $pdo->prepare('SELECT role FROM users WHERE id = ?');
+        $stmt->execute([(int) $id]);
+        $targetUser = $stmt->fetch(PDO::FETCH_ASSOC);
+        $targetRole = $targetUser['role'] ?? '';
+
         // If the user is changing their own password, verify current password
         if ((int) $id === (int) $authUser['id']) {
             $currentPassword = $input['currentPassword'] ?? '';
@@ -134,7 +138,10 @@ if ($method === 'PUT') {
             // Admin resetting another user's password — no current password needed
             unset($input['currentPassword']);
         }
-        $input['password'] = password_hash($input['password'], PASSWORD_BCRYPT);
+        // Hash password for non-student roles, store plaintext for students
+        if ($targetRole !== 'student') {
+            $input['password'] = password_hash($input['password'], PASSWORD_BCRYPT);
+        }
     }
     if (find_duplicate_field($pdo, 'idNumber', $input['idNumber'] ?? null, (int) $id)) {
         http_response_code(409);
@@ -149,11 +156,6 @@ if ($method === 'PUT') {
     if (find_duplicate_field($pdo, 'email', $input['email'] ?? null, (int) $id)) {
         http_response_code(409);
         echo json_encode(["error" => "Email address already exists."]);
-        exit;
-    }
-    if (find_duplicate_field($pdo, 'phone', $input['phone'] ?? null, (int) $id)) {
-        http_response_code(409);
-        echo json_encode(["error" => "Phone number already exists."]);
         exit;
     }
     $fields = writable_user_fields($pdo);

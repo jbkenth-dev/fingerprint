@@ -3569,7 +3569,6 @@ function validateFacultyOwnAccount(payload, users = [], currentUser = null) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email ?? "")) return "A valid email address is required.";
   if (comparableUsers.some((user) => String(user.email ?? "").trim().toLowerCase() === normalizedEmail)) return "Email address already exists.";
   if (!/^09\d{9}$/.test(payload.phone ?? "")) return "Phone number must start with 09 and be exactly 11 digits long.";
-  if (comparableUsers.some((user) => String(user.phone ?? "").trim() === normalizedPhone)) return "Phone number already exists.";
   if (!payload.department?.trim()) return "Department or section is required.";
   return "";
 }
@@ -3606,7 +3605,6 @@ function validateNewUserAccount(payload, users = [], excludedUserId = null) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email ?? "")) return "A valid email address is required.";
   if (comparableUsers.some((user) => String(user.email ?? "").trim().toLowerCase() === normalizedEmail)) return "Email address already exists.";
   if (!/^09\d{9}$/.test(payload.phone ?? "")) return "Phone number must start with 09 and be exactly 11 digits long.";
-  if (comparableUsers.some((user) => String(user.phone ?? "").trim() === normalizedPhone)) return "Phone number already exists.";
   if (!payload.password?.trim()) return "Password is required.";
   if (payload.password.trim().length < 6) return "Password must be at least 6 characters long.";
   if (!payload.confirmPassword?.trim()) return "Confirm password is required.";

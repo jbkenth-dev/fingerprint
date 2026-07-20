@@ -43,15 +43,18 @@ try {
     $passwordValid = password_verify($password, $storedPassword);
 
     // If password_verify failed and the stored value is not a bcrypt hash,
-    // the password may have been inserted as plaintext (e.g. from seed data).
-    // Try a direct comparison and, if it matches, upgrade to bcrypt on the fly.
+    // the password may have been inserted as plaintext (e.g. students or seed data).
+    // Try a direct comparison. For non-student roles, upgrade to bcrypt on the fly.
     if (!$passwordValid && $storedPassword !== '' && !str_starts_with($storedPassword, '$2')) {
         if (hash_equals($storedPassword, $password)) {
             $passwordValid = true;
-            $newHash = password_hash($password, PASSWORD_BCRYPT);
-            $stmt = $pdo->prepare('UPDATE users SET password = ? WHERE id = ?');
-            $stmt->execute([$newHash, $user['id']]);
-            $user['password'] = $newHash;
+            // Only upgrade to bcrypt for non-student roles
+            if (($user['role'] ?? '') !== 'student') {
+                $newHash = password_hash($password, PASSWORD_BCRYPT);
+                $stmt = $pdo->prepare('UPDATE users SET password = ? WHERE id = ?');
+                $stmt->execute([$newHash, $user['id']]);
+                $user['password'] = $newHash;
+            }
         }
     }
 
