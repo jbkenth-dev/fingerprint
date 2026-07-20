@@ -1910,7 +1910,7 @@ function AdminArchivePage() {
     () =>
       users.filter((user) => {
         if (user.role !== "student") return false;
-        if (user.status !== "Inactive") return false;
+        if (user.status !== "Archived") return false;
         const haystack = `${user.idNumber ?? ""} ${user.firstName} ${user.middleName ?? ""} ${user.lastName} ${user.username ?? ""} ${user.email ?? ""}`.toLowerCase();
         return haystack.includes(search.toLowerCase());
       }),
@@ -2121,7 +2121,7 @@ function AdminAccountPage() {
     () =>
       users.filter((user) => {
         if (user.role !== "student") return false;
-        if (user.status === "Inactive") return false;
+        if (user.status === "Archived") return false;
         const haystack = `${user.idNumber ?? ""} ${user.firstName} ${user.middleName ?? ""} ${user.lastName} ${user.username ?? ""} ${user.email ?? ""} ${user.status ?? ""}`.toLowerCase();
         return haystack.includes(search.toLowerCase());
       }),
@@ -2851,7 +2851,7 @@ function AdminAccountPage() {
                     <button
                       type="button"
                       onClick={async () => {
-                        await updateUser(activeStudent.id, { status: "Inactive" });
+                        await updateUser(activeStudent.id, { status: "Archived" });
                         setOpenStudentActionsMenu(null);
                         navigate("/admin/archive");
                       }}
