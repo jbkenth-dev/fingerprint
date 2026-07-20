@@ -2046,6 +2046,7 @@ function AdminAccountPage() {
   const navigate = useNavigate();
   const [feedback, setFeedback] = React.useState({ message: "", tone: "success" });
   const [archiveRedirect, setArchiveRedirect] = React.useState(false);
+  const [closeStudentModal, setCloseStudentModal] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [selectedAccountView, setSelectedAccountView] = React.useState("my");
   const [isAddUserModalOpen, setIsAddUserModalOpen] = React.useState(false);
@@ -2367,6 +2368,10 @@ function AdminAccountPage() {
           if (archiveRedirect) {
             setArchiveRedirect(false);
             navigate("/admin/archive");
+          }
+          if (closeStudentModal) {
+            setCloseStudentModal(false);
+            setViewedStudent(null);
           }
         }}
       />
@@ -3103,6 +3108,7 @@ function AdminAccountPage() {
                           });
                           setViewedStudent(updatedStudent);
                           setFeedback({ message: "Student account updated successfully.", tone: "success" });
+                          setCloseStudentModal(true);
                         } catch (submissionError) {
                           setFeedback({ message: submissionError.message || "Failed to update the student account.", tone: "error" });
                         }
