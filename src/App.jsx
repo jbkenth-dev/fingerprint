@@ -491,11 +491,7 @@ function RolePanel({ pageKey, role }) {
     <div className="animate-fade-up space-y-4">
       <section className="hero-card overflow-hidden p-6 sm:p-7">
         <div>
-          <div className="badge badge-white inline-flex items-center gap-2 text-xs uppercase tracking-wider">
-            <BadgeCheck size={14} />
-            {roleLabels[role]}
-          </div>
-          <h1 className="mt-5 text-2xl font-semibold text-white sm:text-3xl">{data.title}</h1>
+          <h1 className="text-2xl font-semibold text-white sm:text-3xl">{data.title}</h1>
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/70 sm:text-base">{data.description}</p>
         </div>
       </section>
