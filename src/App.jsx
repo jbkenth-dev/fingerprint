@@ -1842,12 +1842,13 @@ function AdminAccountPage() {
 
   const saveOwnPassword = async (event) => {
     event.preventDefault();
-    const error = validateAdminPasswordChange(passwordForm, currentUser);
+    const error = validateAdminPasswordChange(passwordForm);
     if (error) {
       setFeedback({ message: error, tone: "error" });
       return;
     }
     await updateOwnAccount({
+      currentPassword: passwordForm.currentPassword,
       password: passwordForm.newPassword,
     });
     setPasswordForm({
@@ -2722,12 +2723,13 @@ function SelfAccountPage({ role }) {
 
   const handlePasswordSubmit = async (event) => {
     event.preventDefault();
-    const error = validateAdminPasswordChange(passwordForm, currentUser);
+    const error = validateAdminPasswordChange(passwordForm);
     if (error) {
       setFeedback({ message: error, tone: "error" });
       return;
     }
     await updateOwnAccount({
+      currentPassword: passwordForm.currentPassword,
       password: passwordForm.newPassword,
     });
     setPasswordForm({
@@ -3272,8 +3274,8 @@ function validateFacultyOwnAccount(payload, users = [], currentUser = null) {
   return "";
 }
 
-function validateAdminPasswordChange(payload, currentUser = null) {
-  if (payload.currentPassword !== (currentUser?.password ?? "")) return "Invalid current password.";
+function validateAdminPasswordChange(payload) {
+  if (!(payload.currentPassword ?? "").trim()) return "Current password is required.";
   if ((payload.newPassword ?? "").trim().length < 6) return "Password must be at least 6 characters long.";
   if (payload.currentPassword === payload.newPassword) return "The current password and new password must not be the same.";
   if (payload.newPassword !== payload.confirmNewPassword) return "The new password and confirm new password do not match.";

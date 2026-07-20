@@ -108,11 +108,32 @@ if ($method === 'POST') {
 }
 
 if ($method === 'PUT') {
-    require_auth($pdo, 'admin');
+    $authUser = require_auth($pdo, 'admin');
     // update user (requires id)
     $id = $input['id'] ?? null;
     if (!$id) { http_response_code(400); echo json_encode(["error"=>"An ID is required."]); exit; }
     if (isset($input['password']) && $input['password'] !== '') {
+        // If the user is changing their own password, verify current password
+        if ((int) $id === (int) $authUser['id']) {
+            $currentPassword = $input['currentPassword'] ?? '';
+            if (!$currentPassword) {
+                http_response_code(400);
+                echo json_encode(["error" => "Current password is required to change your password."]);
+                exit;
+            }
+            $stmt = $pdo->prepare('SELECT password FROM users WHERE id = ?');
+            $stmt->execute([(int) $id]);
+            $stored = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$stored || !password_verify($currentPassword, $stored['password'])) {
+                http_response_code(401);
+                echo json_encode(["error" => "Invalid current password."]);
+                exit;
+            }
+            unset($input['currentPassword']);
+        } else {
+            // Admin resetting another user's password — no current password needed
+            unset($input['currentPassword']);
+        }
         $input['password'] = password_hash($input['password'], PASSWORD_BCRYPT);
     }
     if (find_duplicate_field($pdo, 'idNumber', $input['idNumber'] ?? null, (int) $id)) {
