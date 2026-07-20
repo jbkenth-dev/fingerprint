@@ -13,6 +13,7 @@ export const routeConfig = {
     { label: "Class Scheduling", path: "/admin/class-scheduling" },
     { label: "Attendance", path: "/admin/attendance" },
     { label: "Reports", path: "/admin/reports" },
+    { label: "Department", path: "/admin/department" },
     { label: "Account", path: "/admin/account" },
   ],
   faculty: [

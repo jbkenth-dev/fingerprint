@@ -2,7 +2,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import clsx from "clsx";
-import { Activity, Asterisk, BadgeCheck, BookOpenText, BookUser, CalendarRange, ChevronDown, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, LayoutDashboard, LockKeyhole, LogOut, Menu, RefreshCw, ShieldUser, UserCog, UserRound, Users, X } from "lucide-react";
+import { Activity, Asterisk, BadgeCheck, BookOpenText, BookUser, Building2, CalendarRange, ChevronDown, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, LayoutDashboard, LockKeyhole, LogOut, Menu, RefreshCw, ShieldUser, UserCog, UserRound, Users, X } from "lucide-react";
 import { panelContent, roleLabels, roles, routeConfig, sampleAttendance } from "./data/mockData";
 import { useMockLoading } from "./hooks/useMockLoading";
 import { useManilaClock } from "./hooks/useManilaClock";
@@ -17,6 +17,7 @@ const navIcons = {
   "Fingerprint Biometric": Fingerprint,
   Attendance: Activity,
   Reports: FileBarChart,
+  Department: Building2,
   Account: UserCog,
 };
 
@@ -64,6 +65,7 @@ export default function App() {
           <Route path="fingerprint-biometric" element={<RolePanel pageKey="biometric" role="admin" />} />
           <Route path="attendance" element={<RolePanel pageKey="attendance" role="admin" />} />
           <Route path="reports" element={<RolePanel pageKey="reports" role="admin" />} />
+          <Route path="department" element={<AdminDepartmentPage />} />
           <Route path="account" element={<AdminAccountPage />} />
         </Route>
         <Route path="/faculty" element={<ProtectedLayout allowedRole="faculty" />}>
@@ -1637,6 +1639,261 @@ function ClassSchedulingPage() {
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function AdminDepartmentPage() {
+  const [departments, setDepartments] = React.useState([]);
+  const [search, setSearch] = React.useState("");
+  const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState("10");
+  const [feedback, setFeedback] = React.useState({ message: "", tone: "success" });
+  const [addModalOpen, setAddModalOpen] = React.useState(false);
+  const [newName, setNewName] = React.useState("");
+  const [editId, setEditId] = React.useState(null);
+  const [editName, setEditName] = React.useState("");
+  const [deleteTarget, setDeleteTarget] = React.useState(null);
+
+  const fetchDepartments = React.useCallback(async () => {
+    try {
+      const data = await apiFetch("/departments.php");
+      if (Array.isArray(data)) setDepartments(data);
+    } catch {
+      // keep current state on failure
+    }
+  }, []);
+
+  React.useEffect(() => { fetchDepartments(); }, [fetchDepartments]);
+
+  const filtered = React.useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    if (!keyword) return departments;
+    return departments.filter((d) => d.name.toLowerCase().includes(keyword));
+  }, [search, departments]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / Number(pageSize)));
+  const safePage = Math.min(page, totalPages);
+  const paginated = filtered.slice((safePage - 1) * Number(pageSize), safePage * Number(pageSize));
+
+  React.useEffect(() => { setPage(1); }, [search, pageSize]);
+
+  const handleAdd = async () => {
+    const name = newName.trim();
+    if (!name) {
+      setFeedback({ message: "Department name is required.", tone: "error" });
+      return;
+    }
+    try {
+      await apiFetch("/departments.php", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
+      setAddModalOpen(false);
+      setNewName("");
+      setFeedback({ message: "Department successfully added.", tone: "success" });
+      await fetchDepartments();
+    } catch (err) {
+      setFeedback({ message: err.message || "Failed to add department.", tone: "error" });
+    }
+  };
+
+  const startEdit = (dept) => {
+    setEditId(dept.id);
+    setEditName(dept.name);
+  };
+
+  const cancelEdit = () => {
+    setEditId(null);
+    setEditName("");
+  };
+
+  const saveEdit = async (dept) => {
+    const name = editName.trim();
+    if (!name) {
+      setFeedback({ message: "Department name is required.", tone: "error" });
+      return;
+    }
+    if (name.toLowerCase() === dept.name.toLowerCase()) {
+      setFeedback({ message: "No change made.", tone: "error" });
+      cancelEdit();
+      return;
+    }
+    try {
+      await apiFetch("/departments.php", {
+        method: "PUT",
+        body: JSON.stringify({ id: dept.id, name }),
+      });
+      cancelEdit();
+      setFeedback({ message: "Department successfully saved.", tone: "success" });
+      await fetchDepartments();
+    } catch (err) {
+      setFeedback({ message: err.message || "Failed to update department.", tone: "error" });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await apiFetch(`/departments.php?id=${encodeURIComponent(deleteTarget.id)}`, { method: "DELETE" });
+      setDeleteTarget(null);
+      setFeedback({ message: "Department successfully deleted.", tone: "success" });
+      await fetchDepartments();
+    } catch (err) {
+      setFeedback({ message: err.message || "Failed to delete department.", tone: "error" });
+    }
+  };
+
+  return (
+    <div className="animate-fade-up space-y-4">
+      <HeaderBlock
+        title="Department Management"
+        description="Manage department names used across the system."
+      />
+      <FeedbackModal
+        message={feedback.message}
+        tone={feedback.tone}
+        onClose={() => setFeedback((prev) => ({ ...prev, message: "" }))}
+      />
+
+      <section className="card-elevated p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <Field label="Search" hideLabel value={search} onChange={setSearch} placeholder="Search departments..." small />
+          </div>
+          <button type="button" onClick={() => { setAddModalOpen(true); setNewName(""); }} className="btn btn-secondary whitespace-nowrap">
+            Add Department
+          </button>
+        </div>
+      </section>
+
+      <section className="card-elevated p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+          <div className="text-sm text-gray-500">
+            Showing <span className="text-gray-700">{paginated.length}</span> of <span className="text-gray-700">{filtered.length}</span> departments
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-500">Rows per page</span>
+            <div className="w-24">
+              <SelectField label="Rows per page" hideLabel small value={pageSize} onChange={setPageSize} options={[{ label: "10", value: "10" }, { label: "30", value: "30" }, { label: "50", value: "50" }]} />
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full border-separate border-spacing-y-3">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-[0.18em] text-gray-500">
+                <th className="px-4 py-2 font-semibold">Department Name</th>
+                <th className="px-4 py-2 font-semibold text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginated.length > 0 ? (
+                paginated.map((dept) => (
+                  <tr key={dept.id} className="group rounded-xl bg-gray-50/80 transition hover:bg-gray-100/80">
+                    <td className="whitespace-nowrap rounded-l-xl px-4 py-3 text-sm font-medium text-gray-800">
+                      {editId === dept.id ? (
+                        <input
+                          autoFocus
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveEdit(dept);
+                            if (e.key === "Escape") cancelEdit();
+                          }}
+                          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      ) : (
+                        dept.name
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap rounded-r-xl px-4 py-3 text-right">
+                      {editId === dept.id ? (
+                        <div className="flex justify-end gap-2">
+                          <button type="button" onClick={() => saveEdit(dept)} className="btn btn-primary px-3 py-1 text-xs">Save</button>
+                          <button type="button" onClick={cancelEdit} className="btn btn-secondary px-3 py-1 text-xs">Cancel</button>
+                        </div>
+                      ) : (
+                        <div className="flex justify-end gap-2">
+                          <button type="button" onClick={() => startEdit(dept)} className="text-gray-400 transition hover:text-blue-600">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-4"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" /></svg>
+                          </button>
+                          <button type="button" onClick={() => setDeleteTarget(dept)} className="text-gray-400 transition hover:text-red-600">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-4"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={2} className="px-4 py-6 text-center text-gray-500">
+                    {search.trim() ? "No matching departments found." : "No departments found."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {filtered.length > Number(pageSize) ? (
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-gray-500">
+              Page <span className="text-gray-700">{safePage}</span> of <span className="text-gray-700">{totalPages}</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={safePage === 1} className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+              <button type="button" onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))} disabled={safePage === totalPages} className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      {addModalOpen
+        ? createPortal(
+            <div className="modal-overlay">
+              <div className="my-auto w-full max-w-md">
+                <div className="card-elevated p-6">
+                  <h2 className="text-lg font-semibold text-gray-800">Add Department</h2>
+                  <p className="mt-1 text-sm text-gray-500">Enter the name of the new department.</p>
+                  <div className="mt-4">
+                    <Field label="Department Name" value={newName} onChange={setNewName} placeholder="e.g. CIST" />
+                  </div>
+                  <div className="mt-6 flex justify-end gap-3">
+                    <button type="button" onClick={() => { setAddModalOpen(false); setNewName(""); }} className="btn btn-secondary">Cancel</button>
+                    <button type="button" onClick={handleAdd} className="btn btn-primary">Add</button>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {deleteTarget
+        ? createPortal(
+            <div className="modal-overlay">
+              <div className="my-auto w-full max-w-md">
+                <div className="card-elevated p-6 text-center">
+                  <div className="mx-auto flex size-14 items-center justify-center rounded-full border border-red-200 bg-red-50 text-red-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-7"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                  </div>
+                  <h2 className="mt-4 text-lg font-semibold text-gray-800">Confirm Deletion</h2>
+                  <p className="mt-2 text-sm text-gray-600">
+                    Are you sure to delete department name <span className="font-semibold text-gray-800">{deleteTarget.name}</span>?
+                  </p>
+                  <div className="mt-6 flex justify-center gap-3">
+                    <button type="button" onClick={() => setDeleteTarget(null)} className="btn btn-secondary">No</button>
+                    <button type="button" onClick={handleDelete} className="btn btn-primary bg-red-600 hover:bg-red-700">Yes</button>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
