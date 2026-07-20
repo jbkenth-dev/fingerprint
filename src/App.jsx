@@ -19,7 +19,7 @@ const navIcons = {
   Reports: FileBarChart,
   Department: Building2,
   Account: UserCog,
-  Archive: Archive,
+  Archived: Archive,
 };
 
 const emptyClassSubjectForm = {
@@ -1929,7 +1929,7 @@ function AdminArchivePage() {
 
   return (
     <div className="space-y-6">
-      <HeaderBlock title="Archive" description="Archived student accounts can be restored at any time." />
+      <HeaderBlock title="Archived" description="Archived student accounts can be restored at any time." />
 
       {feedback.message ? (
         <FeedbackModal message={feedback.message} tone={feedback.tone} onClose={() => setFeedback({ message: "", tone: "success" })} />
@@ -2043,6 +2043,7 @@ function AdminArchivePage() {
 
 function AdminAccountPage() {
   const { currentUser, users, updateOwnAccount, addUser, updateUser, deleteUser } = useAuth();
+  const navigate = useNavigate();
   const [feedback, setFeedback] = React.useState({ message: "", tone: "success" });
   const [search, setSearch] = React.useState("");
   const [selectedAccountView, setSelectedAccountView] = React.useState("my");
@@ -2850,11 +2851,9 @@ function AdminAccountPage() {
                     <button
                       type="button"
                       onClick={async () => {
-                        setPendingStudentAction({
-                          type: "archive",
-                          studentId: activeStudent.id,
-                        });
+                        await updateUser(activeStudent.id, { status: "Inactive" });
                         setOpenStudentActionsMenu(null);
+                        navigate("/admin/archive");
                       }}
                       className="mt-1 flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-orange-600 transition hover:bg-orange-50"
                     >
@@ -2939,11 +2938,10 @@ function AdminAccountPage() {
             <div className="modal-overlay">
               <div className="my-auto w-full max-w-md">
                 <FormCard
-                  title={`${pendingStudentAction.type === "archive" ? "Archive" : pendingStudentAction.type === "deactivate" ? "Deactivate" : "Activate"} Student Account`}
+                  title={`${pendingStudentAction.type === "deactivate" ? "Deactivate" : "Activate"} Student Account`}
                   subtitle={(() => {
                     const targetStudent = users.find((user) => user.id === pendingStudentAction.studentId);
                     const fullName = targetStudent ? [targetStudent.firstName, targetStudent.lastName].filter(Boolean).join(" ") : "this student";
-                    if (pendingStudentAction.type === "archive") return `Are you sure you want to archive ${fullName}? They will be hidden from the student list.`;
                     if (pendingStudentAction.type === "deactivate") return `Are you sure you want to deactivate ${fullName}?`;
                     return `Are you sure you want to activate ${fullName}?`;
                   })()}
@@ -2965,24 +2963,14 @@ function AdminAccountPage() {
                           return;
                         }
 
-                        if (pendingStudentAction.type === "archive") {
-                          await updateUser(targetStudent.id, { status: "Inactive" });
-                          setFeedback({ message: `${[targetStudent.firstName, targetStudent.lastName].filter(Boolean).join(" ")} archived.`, tone: "success" });
-                        } else {
-                          await updateUser(targetStudent.id, {
-                            status: pendingStudentAction.type === "deactivate" ? "Inactive" : "Active",
-                          });
-                          setFeedback({ message: `${[targetStudent.firstName, targetStudent.lastName].filter(Boolean).join(" ")} status updated.`, tone: "success" });
-                        }
+                        await updateUser(targetStudent.id, {
+                          status: pendingStudentAction.type === "deactivate" ? "Inactive" : "Active",
+                        });
+                        setFeedback({ message: `${[targetStudent.firstName, targetStudent.lastName].filter(Boolean).join(" ")} status updated.`, tone: "success" });
 
                         setPendingStudentAction(null);
                       }}
-                      className={clsx(
-                        "rounded-2xl px-5 py-3.5 text-sm font-semibold",
-                        pendingStudentAction.type === "archive"
-                          ? "btn btn-danger"
-                          : "btn btn-secondary",
-                      )}
+                      className="rounded-2xl px-5 py-3.5 text-sm font-semibold btn btn-secondary"
                     >
                       Confirm
                     </button>
