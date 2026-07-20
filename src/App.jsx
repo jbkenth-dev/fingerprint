@@ -1784,15 +1784,19 @@ function AdminDepartmentPage() {
           <table className="min-w-full border-separate border-spacing-y-3">
             <thead>
               <tr className="text-left text-xs uppercase tracking-[0.18em] text-gray-500">
+                <th className="w-16 px-4 py-2 font-semibold">No.</th>
                 <th className="px-4 py-2 font-semibold">Department Name</th>
                 <th className="px-4 py-2 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {paginated.length > 0 ? (
-                paginated.map((dept) => (
+                paginated.map((dept, idx) => (
                   <tr key={dept.id} className="group rounded-xl bg-gray-50/80 transition hover:bg-gray-100/80">
-                    <td className="whitespace-nowrap rounded-l-xl px-4 py-3 text-sm font-medium text-gray-800">
+                    <td className="whitespace-nowrap rounded-l-xl px-4 py-3 text-sm text-gray-500">
+                      {(safePage - 1) * Number(pageSize) + idx + 1}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-800">
                       {editId === dept.id ? (
                         <input
                           autoFocus
@@ -1829,7 +1833,7 @@ function AdminDepartmentPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={2} className="px-4 py-6 text-center text-gray-500">
+                  <td colSpan={3} className="px-4 py-6 text-center text-gray-500">
                     {search.trim() ? "No matching departments found." : "No departments found."}
                   </td>
                 </tr>
