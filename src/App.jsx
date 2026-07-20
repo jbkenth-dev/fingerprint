@@ -1909,9 +1909,8 @@ function AdminArchivePage() {
   const archivedStudents = React.useMemo(
     () =>
       users.filter((user) => {
-        if (user.role !== "student") return false;
         if (user.status !== "Archived") return false;
-        const haystack = `${user.idNumber ?? ""} ${user.firstName} ${user.middleName ?? ""} ${user.lastName} ${user.username ?? ""} ${user.email ?? ""}`.toLowerCase();
+        const haystack = `${user.idNumber ?? ""} ${user.firstName} ${user.middleName ?? ""} ${user.lastName} ${user.username ?? ""} ${user.email ?? ""} ${user.role ?? ""}`.toLowerCase();
         return haystack.includes(search.toLowerCase());
       }),
     [search, users],
@@ -1929,7 +1928,7 @@ function AdminArchivePage() {
 
   return (
     <div className="space-y-6">
-      <HeaderBlock title="Archived" description="Archived student accounts can be restored at any time." />
+      <HeaderBlock title="Archived" description="Archived accounts can be restored at any time." />
 
       {feedback.message ? (
         <FeedbackModal message={feedback.message} tone={feedback.tone} onClose={() => setFeedback({ message: "", tone: "success" })} />
@@ -1944,7 +1943,7 @@ function AdminArchivePage() {
             placeholder="Search archived students..."
             className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-500/20 sm:max-w-xs"
           />
-          <div className="text-sm text-gray-500">{archivedStudents.length} archived student{archivedStudents.length === 1 ? "" : "s"}</div>
+          <div className="text-sm text-gray-500">{archivedStudents.length} archived account{archivedStudents.length === 1 ? "" : "s"}</div>
         </div>
 
         <div className="overflow-x-auto">
@@ -1953,6 +1952,7 @@ function AdminArchivePage() {
               <tr className="border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500">
                 <th className="px-5 py-4 font-medium">No.</th>
                 <th className="px-5 py-4 font-medium">Name</th>
+                <th className="px-5 py-4 font-medium">Role</th>
                 <th className="px-5 py-4 font-medium">ID Number</th>
                 <th className="px-5 py-4 font-medium">Department</th>
                 <th className="px-5 py-4 font-medium text-right">Action</th>
@@ -1961,13 +1961,14 @@ function AdminArchivePage() {
             <tbody>
               {paginatedStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-5 py-10 text-center text-gray-400">No archived students found.</td>
+                  <td colSpan={6} className="px-5 py-10 text-center text-gray-400">No archived accounts found.</td>
                 </tr>
               ) : (
                 paginatedStudents.map((student, index) => (
                   <tr key={student.id} className="border-b border-gray-50 transition hover:bg-gray-50/60">
                     <td className="px-5 py-3.5 text-gray-500">{(page - 1) * Number(pageSize) + index + 1}</td>
                     <td className="px-5 py-3.5 font-medium text-gray-800">{[student.firstName, student.middleName, student.lastName].filter(Boolean).join(" ")}</td>
+                    <td className="px-5 py-3.5 text-gray-600 capitalize">{student.role ?? "—"}</td>
                     <td className="px-5 py-3.5 text-gray-600">{student.idNumber ?? "—"}</td>
                     <td className="px-5 py-3.5 text-gray-600">{student.department ?? "—"}</td>
                     <td className="px-5 py-3.5 text-right">
@@ -2047,6 +2048,7 @@ function AdminAccountPage() {
   const [feedback, setFeedback] = React.useState({ message: "", tone: "success" });
   const [archiveRedirect, setArchiveRedirect] = React.useState(false);
   const [closeStudentModal, setCloseStudentModal] = React.useState(false);
+  const [closeFacultyModal, setCloseFacultyModal] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [selectedAccountView, setSelectedAccountView] = React.useState("my");
   const [isAddUserModalOpen, setIsAddUserModalOpen] = React.useState(false);
@@ -2106,6 +2108,7 @@ function AdminAccountPage() {
     () =>
       users.filter((user) => {
         if (user.role !== "faculty") return false;
+        if (user.status === "Archived") return false;
         const haystack = `${user.idNumber ?? ""} ${user.firstName} ${user.middleName ?? ""} ${user.lastName} ${user.username ?? ""} ${user.email ?? ""} ${user.status ?? ""}`.toLowerCase();
         return haystack.includes(search.toLowerCase());
       }),
@@ -2372,6 +2375,10 @@ function AdminAccountPage() {
           if (closeStudentModal) {
             setCloseStudentModal(false);
             setViewedStudent(null);
+          }
+          if (closeFacultyModal) {
+            setCloseFacultyModal(false);
+            setViewedFaculty(null);
           }
         }}
       />
@@ -2802,16 +2809,16 @@ function AdminAccountPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={async () => {
+                      onClick={() => {
                         setPendingFacultyAction({
-                          type: "delete",
+                          type: "archive",
                           facultyId: activeFaculty.id,
                         });
                         setOpenFacultyActionsMenu(null);
                       }}
-                      className="mt-1 flex w-full items-center rounded-lg px-3 py-2.5 text-left text-sm text-red-600 transition hover:bg-red-50"
+                      className="mt-1 flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-orange-600 transition hover:bg-orange-50"
                     >
-                      Delete
+                      Archive
                     </button>
                   </>
                 );
@@ -2886,11 +2893,11 @@ function AdminAccountPage() {
             <div className="modal-overlay">
               <div className="my-auto w-full max-w-md">
                 <FormCard
-                  title={`${pendingFacultyAction.type === "delete" ? "Delete" : pendingFacultyAction.type === "deactivate" ? "Deactivate" : "Activate"} Faculty Account`}
+                  title={pendingFacultyAction.type === "archive" ? "Archive Faculty Account" : `${pendingFacultyAction.type === "deactivate" ? "Deactivate" : "Activate"} Faculty Account`}
                   subtitle={(() => {
                     const targetFaculty = users.find((user) => user.id === pendingFacultyAction.facultyId);
                     const fullName = targetFaculty ? [targetFaculty.firstName, targetFaculty.lastName].filter(Boolean).join(" ") : "this faculty member";
-                    if (pendingFacultyAction.type === "delete") return `Are you sure you want to delete ${fullName}?`;
+                    if (pendingFacultyAction.type === "archive") return `Are you sure you want to archive ${fullName}? They will be hidden from the faculty list.`;
                     if (pendingFacultyAction.type === "deactivate") return `Are you sure you want to deactivate ${fullName}?`;
                     return `Are you sure you want to activate ${fullName}?`;
                   })()}
@@ -2901,7 +2908,7 @@ function AdminAccountPage() {
                       onClick={() => setPendingFacultyAction(null)}
                       className="btn btn-secondary"
                     >
-                      Cancel
+                      No
                     </button>
                     <button
                       type="button"
@@ -2912,12 +2919,11 @@ function AdminAccountPage() {
                           return;
                         }
 
-                        if (pendingFacultyAction.type === "delete") {
-                          await deleteUser(targetFaculty.id);
-                          if (viewedFaculty?.id === targetFaculty.id) {
-                            setViewedFaculty(null);
-                          }
-                          setFeedback({ message: `${[targetFaculty.firstName, targetFaculty.lastName].filter(Boolean).join(" ")} deleted.`, tone: "success" });
+                        if (pendingFacultyAction.type === "archive") {
+                          await updateUser(targetFaculty.id, { status: "Archived" });
+                          setFeedback({ message: `${[targetFaculty.firstName, targetFaculty.lastName].filter(Boolean).join(" ")} has been archived successfully.`, tone: "success" });
+                          setPendingFacultyAction(null);
+                          setArchiveRedirect(true);
                         } else {
                           const updatedFaculty = await updateUser(targetFaculty.id, {
                             status: pendingFacultyAction.type === "deactivate" ? "Inactive" : "Active",
@@ -2926,18 +2932,17 @@ function AdminAccountPage() {
                             setViewedFaculty(updatedFaculty);
                           }
                           setFeedback({ message: `${[targetFaculty.firstName, targetFaculty.lastName].filter(Boolean).join(" ")} status updated.`, tone: "success" });
+                          setPendingFacultyAction(null);
                         }
-
-                        setPendingFacultyAction(null);
                       }}
                       className={clsx(
                         "rounded-2xl px-5 py-3.5 text-sm font-semibold",
-                        pendingFacultyAction.type === "delete"
-                          ? "btn btn-danger"
+                        pendingFacultyAction.type === "archive"
+                          ? "btn btn-primary"
                           : "btn btn-secondary",
                       )}
                     >
-                      Confirm
+                      Yes
                     </button>
                   </div>
                 </FormCard>
@@ -3011,7 +3016,7 @@ function AdminAccountPage() {
       {viewedFaculty
         ? createPortal(
             <div className="modal-overlay">
-              <div className="my-auto w-full max-w-2xl">
+              <div className="my-auto w-full max-w-3xl max-h-[calc(100dvh-2rem)] overflow-y-auto overflow-x-hidden px-1 sm:max-h-[calc(100dvh-3rem)] sm:px-0">
                 <FormCard title="Faculty Account Details">
                   {facultyEditForm ? (
                     <form
@@ -3026,7 +3031,6 @@ function AdminAccountPage() {
                         try {
                           const updatedFaculty = await updateUser(facultyEditForm.id, {
                             role: "faculty",
-                            status: facultyEditForm.status,
                             idNumber: facultyEditForm.idNumber,
                             department: facultyEditForm.department,
                             firstName: facultyEditForm.firstName,
@@ -3035,10 +3039,10 @@ function AdminAccountPage() {
                             username: facultyEditForm.username,
                             email: facultyEditForm.email,
                             phone: facultyEditForm.phone,
-                            password: facultyEditForm.password,
                           });
                           setViewedFaculty(updatedFaculty);
                           setFeedback({ message: "Faculty account updated successfully.", tone: "success" });
+                          setCloseFacultyModal(true);
                         } catch (submissionError) {
                           setFeedback({ message: submissionError.message || "Failed to update the faculty account.", tone: "error" });
                         }
@@ -3050,11 +3054,9 @@ function AdminAccountPage() {
                       <Field required label="First Name" placeholder="Enter first name" value={facultyEditForm.firstName} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, firstName: value }))} />
                       <Field label="Middle Name" placeholder="Enter middle name (optional)" value={facultyEditForm.middleName} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, middleName: value }))} />
                       <Field required label="Last Name" placeholder="Enter last name" value={facultyEditForm.lastName} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, lastName: value }))} />
-                      <Field required label="Email" placeholder="Enter email address" value={facultyEditForm.email} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, email: value }))} />
+                      <Field required label="Email" type="email" placeholder="Enter email address" value={facultyEditForm.email} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, email: value }))} />
                       <Field required label="Phone" placeholder="09xxxxxxxxx" value={facultyEditForm.phone} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, phone: value }))} />
-                      <Field required label="Department / Section" placeholder="Enter department or section" value={facultyEditForm.department} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, department: value }))} />
-                      <Field required label="Password" type="password" placeholder="Enter password" allowVisibilityToggle value={facultyEditForm.password} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, password: value }))} />
-                      <Field required label="Confirm Password" type="password" placeholder="Confirm password" allowVisibilityToggle value={facultyEditForm.confirmPassword} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, confirmPassword: value }))} />
+                      <Field required label="Department" placeholder="Enter department" value={facultyEditForm.department} onChange={(value) => setFacultyEditForm((prev) => ({ ...prev, department: value }))} />
                       <div className="md:col-span-2 flex flex-col gap-3 sm:flex-row sm:justify-end">
                         <button
                           type="button"
