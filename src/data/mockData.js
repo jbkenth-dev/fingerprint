@@ -15,6 +15,7 @@ export const routeConfig = {
     { label: "Reports", path: "/admin/reports" },
     { label: "Department", path: "/admin/department" },
     { label: "Account", path: "/admin/account" },
+    { label: "Archive", path: "/admin/archive" },
   ],
   faculty: [
     { label: "Dashboard & Monitoring", path: "/faculty/dashboard" },

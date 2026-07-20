@@ -2,7 +2,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import clsx from "clsx";
-import { Activity, Asterisk, BadgeCheck, BookOpenText, Building2, CalendarRange, ChevronDown, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, LayoutDashboard, LockKeyhole, LogOut, Menu, RefreshCw, ShieldUser, UserCog, UserRound, Users, X } from "lucide-react";
+import { Activity, Archive, Asterisk, BadgeCheck, BookOpenText, Building2, CalendarRange, ChevronDown, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, LayoutDashboard, LockKeyhole, LogOut, Menu, RefreshCw, ShieldUser, UserCog, UserRound, Users, X } from "lucide-react";
 import { panelContent, roleLabels, roles, routeConfig, sampleAttendance } from "./data/mockData";
 import { useMockLoading } from "./hooks/useMockLoading";
 import { useManilaClock } from "./hooks/useManilaClock";
@@ -19,6 +19,7 @@ const navIcons = {
   Reports: FileBarChart,
   Department: Building2,
   Account: UserCog,
+  Archive: Archive,
 };
 
 const emptyClassSubjectForm = {
@@ -67,6 +68,7 @@ export default function App() {
           <Route path="reports" element={<RolePanel pageKey="reports" role="admin" />} />
           <Route path="department" element={<AdminDepartmentPage />} />
           <Route path="account" element={<AdminAccountPage />} />
+          <Route path="archive" element={<AdminArchivePage />} />
         </Route>
         <Route path="/faculty" element={<ProtectedLayout allowedRole="faculty" />}>
           <Route index element={<Navigate to="/faculty/dashboard" replace />} />
@@ -1896,6 +1898,149 @@ function AdminDepartmentPage() {
   );
 }
 
+function AdminArchivePage() {
+  const { users, updateUser } = useAuth();
+  const [feedback, setFeedback] = React.useState({ message: "", tone: "success" });
+  const [search, setSearch] = React.useState("");
+  const [pageSize, setPageSize] = React.useState("10");
+  const [page, setPage] = React.useState(1);
+  const [pendingRestore, setPendingRestore] = React.useState(null);
+
+  const archivedStudents = React.useMemo(
+    () =>
+      users.filter((user) => {
+        if (user.role !== "student") return false;
+        if (user.status !== "Inactive") return false;
+        const haystack = `${user.idNumber ?? ""} ${user.firstName} ${user.middleName ?? ""} ${user.lastName} ${user.username ?? ""} ${user.email ?? ""}`.toLowerCase();
+        return haystack.includes(search.toLowerCase());
+      }),
+    [search, users],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(archivedStudents.length / Number(pageSize)));
+  const paginatedStudents = React.useMemo(() => {
+    const size = Number(pageSize);
+    const startIndex = (page - 1) * size;
+    return archivedStudents.slice(startIndex, startIndex + size);
+  }, [page, pageSize, archivedStudents]);
+
+  React.useEffect(() => { setPage(1); }, [search, pageSize]);
+  React.useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+
+  return (
+    <div className="space-y-6">
+      <HeaderBlock title="Archive" description="Archived student accounts can be restored at any time." />
+
+      {feedback.message ? (
+        <FeedbackModal message={feedback.message} tone={feedback.tone} onClose={() => setFeedback({ message: "", tone: "success" })} />
+      ) : null}
+
+      <section className="card p-0 overflow-hidden">
+        <div className="flex flex-col gap-4 border-b border-gray-100 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <input
+            type="text"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search archived students..."
+            className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none transition focus:border-green-500 focus:ring-2 focus:ring-green-500/20 sm:max-w-xs"
+          />
+          <div className="text-sm text-gray-500">{archivedStudents.length} archived student{archivedStudents.length === 1 ? "" : "s"}</div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500">
+                <th className="px-5 py-4 font-medium">No.</th>
+                <th className="px-5 py-4 font-medium">Name</th>
+                <th className="px-5 py-4 font-medium">ID Number</th>
+                <th className="px-5 py-4 font-medium">Department</th>
+                <th className="px-5 py-4 font-medium text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedStudents.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-5 py-10 text-center text-gray-400">No archived students found.</td>
+                </tr>
+              ) : (
+                paginatedStudents.map((student, index) => (
+                  <tr key={student.id} className="border-b border-gray-50 transition hover:bg-gray-50/60">
+                    <td className="px-5 py-3.5 text-gray-500">{(page - 1) * Number(pageSize) + index + 1}</td>
+                    <td className="px-5 py-3.5 font-medium text-gray-800">{[student.firstName, student.middleName, student.lastName].filter(Boolean).join(" ")}</td>
+                    <td className="px-5 py-3.5 text-gray-600">{student.idNumber ?? "—"}</td>
+                    <td className="px-5 py-3.5 text-gray-600">{student.department ?? "—"}</td>
+                    <td className="px-5 py-3.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setPendingRestore(student)}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 transition hover:bg-green-100"
+                      >
+                        <RefreshCw size={13} />
+                        Restore
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex flex-col items-center justify-between gap-3 border-t border-gray-100 px-5 py-4 sm:flex-row">
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <span>Show</span>
+            <select
+              value={pageSize}
+              onChange={(event) => setPageSize(event.target.value)}
+              className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm outline-none"
+            >
+              {["5", "10", "25", "50"].map((size) => (
+                <option key={size} value={size}>{size}</option>
+              ))}
+            </select>
+            <span>entries</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button type="button" disabled={page <= 1} onClick={() => setPage((prev) => Math.max(1, prev - 1))} className="btn btn-secondary px-3 py-2 text-xs disabled:opacity-40">Prev</button>
+            <span className="px-3 text-sm text-gray-600">Page {page} of {totalPages}</span>
+            <button type="button" disabled={page >= totalPages} onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))} className="btn btn-secondary px-3 py-2 text-xs disabled:opacity-40">Next</button>
+          </div>
+        </div>
+      </section>
+
+      {pendingRestore
+        ? createPortal(
+            <div className="modal-overlay">
+              <div className="my-auto w-full max-w-md">
+                <FormCard
+                  title="Restore Student Account"
+                  subtitle={`Are you sure you want to restore ${[pendingRestore.firstName, pendingRestore.lastName].filter(Boolean).join(" ")}? They will appear in the student list again.`}
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                    <button type="button" onClick={() => setPendingRestore(null)} className="btn btn-secondary">Cancel</button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await updateUser(pendingRestore.id, { status: "Active" });
+                        setFeedback({ message: `${[pendingRestore.firstName, pendingRestore.lastName].filter(Boolean).join(" ")} restored.`, tone: "success" });
+                        setPendingRestore(null);
+                      }}
+                      className="btn btn-primary"
+                    >
+                      Confirm
+                    </button>
+                  </div>
+                </FormCard>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </div>
+  );
+}
+
 function AdminAccountPage() {
   const { currentUser, users, updateOwnAccount, addUser, updateUser, deleteUser } = useAuth();
   const [feedback, setFeedback] = React.useState({ message: "", tone: "success" });
@@ -1975,6 +2120,7 @@ function AdminAccountPage() {
     () =>
       users.filter((user) => {
         if (user.role !== "student") return false;
+        if (user.status === "Inactive") return false;
         const haystack = `${user.idNumber ?? ""} ${user.firstName} ${user.middleName ?? ""} ${user.lastName} ${user.username ?? ""} ${user.email ?? ""} ${user.status ?? ""}`.toLowerCase();
         return haystack.includes(search.toLowerCase());
       }),
@@ -2705,14 +2851,14 @@ function AdminAccountPage() {
                       type="button"
                       onClick={async () => {
                         setPendingStudentAction({
-                          type: "delete",
+                          type: "archive",
                           studentId: activeStudent.id,
                         });
                         setOpenStudentActionsMenu(null);
                       }}
-                      className="mt-1 flex w-full items-center rounded-lg px-3 py-2.5 text-left text-sm text-red-600 transition hover:bg-red-50"
+                      className="mt-1 flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm text-orange-600 transition hover:bg-orange-50"
                     >
-                      Delete
+                      Archive
                     </button>
                   </>
                 );
@@ -2793,11 +2939,11 @@ function AdminAccountPage() {
             <div className="modal-overlay">
               <div className="my-auto w-full max-w-md">
                 <FormCard
-                  title={`${pendingStudentAction.type === "delete" ? "Delete" : pendingStudentAction.type === "deactivate" ? "Deactivate" : "Activate"} Student Account`}
+                  title={`${pendingStudentAction.type === "archive" ? "Archive" : pendingStudentAction.type === "deactivate" ? "Deactivate" : "Activate"} Student Account`}
                   subtitle={(() => {
                     const targetStudent = users.find((user) => user.id === pendingStudentAction.studentId);
                     const fullName = targetStudent ? [targetStudent.firstName, targetStudent.lastName].filter(Boolean).join(" ") : "this student";
-                    if (pendingStudentAction.type === "delete") return `Are you sure you want to delete ${fullName}?`;
+                    if (pendingStudentAction.type === "archive") return `Are you sure you want to archive ${fullName}? They will be hidden from the student list.`;
                     if (pendingStudentAction.type === "deactivate") return `Are you sure you want to deactivate ${fullName}?`;
                     return `Are you sure you want to activate ${fullName}?`;
                   })()}
@@ -2819,9 +2965,9 @@ function AdminAccountPage() {
                           return;
                         }
 
-                        if (pendingStudentAction.type === "delete") {
-                          await deleteUser(targetStudent.id);
-                          setFeedback({ message: `${[targetStudent.firstName, targetStudent.lastName].filter(Boolean).join(" ")} deleted.`, tone: "success" });
+                        if (pendingStudentAction.type === "archive") {
+                          await updateUser(targetStudent.id, { status: "Inactive" });
+                          setFeedback({ message: `${[targetStudent.firstName, targetStudent.lastName].filter(Boolean).join(" ")} archived.`, tone: "success" });
                         } else {
                           await updateUser(targetStudent.id, {
                             status: pendingStudentAction.type === "deactivate" ? "Inactive" : "Active",
@@ -2833,7 +2979,7 @@ function AdminAccountPage() {
                       }}
                       className={clsx(
                         "rounded-2xl px-5 py-3.5 text-sm font-semibold",
-                        pendingStudentAction.type === "delete"
+                        pendingStudentAction.type === "archive"
                           ? "btn btn-danger"
                           : "btn btn-secondary",
                       )}
@@ -2960,16 +3106,6 @@ function AdminAccountPage() {
                         onChange={() => {}}
                         disabled
                         options={[{ label: "Student", value: "student" }]}
-                      />
-                      <SelectField
-                        label="Status"
-                        value={studentEditForm.status}
-                        onChange={(value) => setStudentEditForm((prev) => ({ ...prev, status: value }))}
-                        required
-                        options={[
-                          { label: "Active", value: "Active" },
-                          { label: "Inactive", value: "Inactive" },
-                        ]}
                       />
                       <SelectField
                         label="Year Level"
