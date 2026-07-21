@@ -200,7 +200,7 @@ function SignInPage() {
               label="Role"
               value={form.role}
               onChange={(value) => setForm((prev) => ({ ...prev, role: value }))}
-              options={roles.map((role) => ({ label: roleLabels[role], value: role }))}
+              options={[{ label: "Administrator", value: "admin" }]}
               icon={ShieldUser}
               variant="signin"
             />
