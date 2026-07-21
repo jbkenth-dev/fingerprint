@@ -397,9 +397,11 @@ function AdminDashboardPage() {
   const { users } = useAuth();
   const [todayLogs, setTodayLogs] = React.useState([]);
   const [weekLogs, setWeekLogs] = React.useState({});
-  const [departments, setDepartments] = React.useState([]);
+  const [scheduleRows, setScheduleRows] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
+
+  const dayNameMap = { 0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday" };
 
   function getManilaDate(daysAgo = 0) {
     const d = new Date();
@@ -407,10 +409,33 @@ function AdminDashboardPage() {
     return d.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
   }
 
+  function getManilaDayName() {
+    const now = new Date();
+    const dayNum = parseInt(now.toLocaleDateString("en-US", { timeZone: "Asia/Manila", weekday: "numeric" }), 10);
+    return dayNameMap[dayNum] || "";
+  }
+
   function formatTime(logTime) {
     if (!logTime || !/^\d{2}:\d{2}/.test(logTime)) return "—";
     const [h, m] = logTime.slice(0, 5).split(":").map(Number);
-    return `${h % 12 || 12}:${m} ${h >= 12 ? "PM" : "AM"}`;
+    return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+  }
+
+  function timeToMinutes(timeStr) {
+    if (!timeStr) return null;
+    const match = String(timeStr).match(/^(\d{1,2}):(\d{2})/);
+    if (!match) return null;
+    return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+  }
+
+  function parseStudentDept(dept) {
+    if (!dept) return null;
+    const match = dept.match(/(\d)\s*([A-E])$/i);
+    if (!match) return null;
+    const yearNum = parseInt(match[1], 10);
+    const section = match[2].toUpperCase();
+    const yearMap = { 1: "1st Year", 2: "2nd Year", 3: "3rd Year", 4: "4th Year" };
+    return { yearLevel: yearMap[yearNum] || null, section };
   }
 
   React.useEffect(() => {
@@ -420,16 +445,16 @@ function AdminDashboardPage() {
       setError("");
       try {
         const today = getManilaDate(0);
-        const [todayRes, deptRes, ...weekResults] = await Promise.allSettled([
+        const [todayRes, schedulesRes, ...weekResults] = await Promise.allSettled([
           apiFetch(`/attendance.php?date=${today}&limit=500&offset=0`),
-          apiFetch("/departments.php"),
+          apiFetch("/class-schedules.php"),
           ...Array.from({ length: 7 }, (_, i) =>
             apiFetch(`/attendance.php?date=${getManilaDate(6 - i)}&limit=500&offset=0`)
           ),
         ]);
         if (cancelled) return;
         if (todayRes.status === "fulfilled" && todayRes.value?.records) setTodayLogs(todayRes.value.records);
-        if (deptRes.status === "fulfilled" && Array.isArray(deptRes.value)) setDepartments(deptRes.value);
+        if (schedulesRes.status === "fulfilled" && Array.isArray(schedulesRes.value)) setScheduleRows(schedulesRes.value);
         const newWeek = {};
         weekResults.forEach((r, i) => {
           if (r.status === "fulfilled" && r.value?.records) newWeek[getManilaDate(6 - i)] = r.value.records;
@@ -445,36 +470,38 @@ function AdminDashboardPage() {
     return () => { cancelled = true; };
   }, []);
 
-  /* ── Derived metrics ── */
-  const activeUsers = React.useMemo(() => users.filter((u) => u.status === "Active"), [users]);
-  const activeUserIds = React.useMemo(() => new Set(activeUsers.map((u) => u.id)), [activeUsers]);
-  const admins = React.useMemo(() => users.filter((u) => u.role === "admin"), [users]);
-  const faculty = React.useMemo(() => users.filter((u) => u.role === "faculty"), [users]);
-  const students = React.useMemo(() => users.filter((u) => u.role === "student"), [users]);
+  /* ── Derived metrics (students only) ── */
+  const activeStudents = React.useMemo(() => users.filter((u) => u.role === "student" && u.status === "Active"), [users]);
+  const activeStudentIds = React.useMemo(() => new Set(activeStudents.map((u) => u.id)), [activeStudents]);
+  const totalUsers = React.useMemo(() => users.length, [users]);
+  const totalFaculty = React.useMemo(() => users.filter((u) => u.role === "faculty").length, [users]);
+  const totalStudents = React.useMemo(() => users.filter((u) => u.role === "student").length, [users]);
   const smartCardUsers = React.useMemo(() => users.filter((u) => u.smartCardId && u.status !== "Archived"), [users]);
   const fingerprintUsers = React.useMemo(() => users.filter((u) => u.fingerprintId && u.status !== "Archived"), [users]);
 
+  const todayStudentLogs = React.useMemo(
+    () => todayLogs.filter((r) => activeStudentIds.has(r.userId)),
+    [todayLogs, activeStudentIds],
+  );
+
   const userFirstIn = React.useMemo(() => {
     const map = new Map();
-    for (const r of todayLogs) {
+    for (const r of todayStudentLogs) {
       if (r.status === "IN" && !map.has(r.userId)) map.set(r.userId, r);
     }
     return map;
-  }, [todayLogs]);
+  }, [todayStudentLogs]);
 
-  const presentUserIds = React.useMemo(() => new Set(todayLogs.filter((r) => r.status === "IN").map((r) => r.userId)), [todayLogs]);
+  const presentUserIds = React.useMemo(() => new Set([...userFirstIn.keys()]), [userFirstIn]);
+
   const presentUsers = React.useMemo(() => {
     const result = [];
-    const seen = new Set();
-    for (const r of todayLogs) {
-      if (r.status === "IN" && !seen.has(r.userId)) {
-        seen.add(r.userId);
-        const user = users.find((u) => u.id === r.userId);
-        result.push({ ...r, department: user?.department ?? "—" });
-      }
+    for (const [userId, record] of userFirstIn) {
+      const user = users.find((u) => u.id === userId);
+      result.push({ ...record, name: [user?.firstName, user?.middleName, user?.lastName].filter(Boolean).join(" "), department: user?.department ?? "—" });
     }
     return result.sort((a, b) => (a.logTime || "").localeCompare(b.logTime || ""));
-  }, [todayLogs, users]);
+  }, [userFirstIn, users]);
 
   const lateUsers = React.useMemo(() => {
     const result = [];
@@ -482,38 +509,97 @@ function AdminDashboardPage() {
       const [h, m] = (record.logTime || "00:00").split(":").map(Number);
       if (h * 60 + m > 8 * 60) {
         const user = users.find((u) => u.id === userId);
-        result.push({ ...record, department: user?.department ?? "—" });
+        result.push({ ...record, name: [user?.firstName, user?.middleName, user?.lastName].filter(Boolean).join(" "), department: user?.department ?? "—" });
       }
     }
     return result.sort((a, b) => (a.logTime || "").localeCompare(b.logTime || ""));
   }, [userFirstIn, users]);
 
   const absentUsers = React.useMemo(() => {
-    return activeUsers
+    return activeStudents
       .filter((u) => !presentUserIds.has(u.id))
       .map((u) => ({ id: u.id, name: [u.firstName, u.middleName, u.lastName].filter(Boolean).join(" "), role: u.role, department: u.department ?? "—" }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [activeUsers, presentUserIds]);
+  }, [activeStudents, presentUserIds]);
 
-  const departmentStats = React.useMemo(() => {
-    const stats = new Map();
-    for (const user of activeUsers) {
-      const dept = user.department || "Unassigned";
-      if (!stats.has(dept)) stats.set(dept, { department: dept, total: 0, present: 0, late: 0, absent: 0 });
-      stats.get(dept).total++;
-    }
+  const totalIn = React.useMemo(() => todayStudentLogs.filter((r) => r.status === "IN").length, [todayStudentLogs]);
+  const totalOut = React.useMemo(() => todayStudentLogs.filter((r) => r.status === "OUT").length, [todayStudentLogs]);
+
+  /* ── Attendance by Subject ── */
+  const todayDayName = React.useMemo(() => getManilaDayName(), []);
+
+  const subjectStats = React.useMemo(() => {
+    const todaySchedules = scheduleRows.filter((row) => {
+      const days = Array.isArray(row.days) ? row.days : [];
+      return days.includes(todayDayName);
+    });
+
+    const studentInByUser = new Map();
     for (const [userId, record] of userFirstIn) {
-      const user = users.find((u) => u.id === userId);
-      if (!user) continue;
-      const dept = user.department || "Unassigned";
-      if (!stats.has(dept)) stats.set(dept, { department: dept, total: 0, present: 0, late: 0, absent: 0 });
-      stats.get(dept).present++;
-      const [h, m] = (record.logTime || "00:00").split(":").map(Number);
-      if (h * 60 + m > 8 * 60) stats.get(dept).late++;
+      studentInByUser.set(userId, timeToMinutes(record.logTime));
     }
-    for (const [, s] of stats) s.absent = Math.max(0, s.total - s.present);
-    return Array.from(stats.values()).filter((d) => d.total > 0).sort((a, b) => b.total - a.total);
-  }, [activeUsers, userFirstIn, users]);
+
+    const stats = todaySchedules.map((schedule) => {
+      const scheduleStudents = activeStudents.filter((s) => {
+        const parsed = parseStudentDept(s.department);
+        if (!parsed) return false;
+        return parsed.yearLevel === schedule.yearLevel && parsed.section === schedule.sectionName;
+      });
+
+      const startMin = timeToMinutes(schedule.startTime);
+      const endMin = timeToMinutes(schedule.endTime);
+      const graceStart = startMin != null ? startMin - 15 : null;
+      const graceEnd = startMin != null ? startMin + 15 : null;
+
+      let present = 0;
+      let late = 0;
+      let absent = 0;
+      const presentList = [];
+      const lateList = [];
+      const absentList = [];
+
+      for (const student of scheduleStudents) {
+        const inMin = studentInByUser.get(student.id);
+        if (inMin != null && graceStart != null && graceEnd != null && endMin != null) {
+          if (inMin >= graceStart && inMin <= graceEnd) {
+            present++;
+            const record = userFirstIn.get(student.id);
+            presentList.push({ name: [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" "), time: record?.logTime });
+          } else if (inMin > graceEnd && inMin <= endMin) {
+            late++;
+            const record = userFirstIn.get(student.id);
+            lateList.push({ name: [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" "), time: record?.logTime });
+          } else {
+            absent++;
+            absentList.push({ name: [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" ") });
+          }
+        } else {
+          absent++;
+          absentList.push({ name: [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" ") });
+        }
+      }
+
+      return {
+        id: schedule.id,
+        subjectCode: schedule.subjectCode,
+        subjectName: schedule.subjectName,
+        section: schedule.sectionName,
+        yearLevel: schedule.yearLevel,
+        startTime: schedule.startTime,
+        endTime: schedule.endTime,
+        facultyName: schedule.facultyName || "—",
+        total: scheduleStudents.length,
+        present,
+        late,
+        absent,
+        presentList,
+        lateList,
+        absentList,
+      };
+    });
+
+    return stats.filter((s) => s.total > 0);
+  }, [scheduleRows, todayDayName, activeStudents, userFirstIn]);
 
   const dailyChart = React.useMemo(() => {
     const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -526,49 +612,49 @@ function AdminDashboardPage() {
     });
   }, [weekLogs]);
 
-  const totalIn = React.useMemo(() => todayLogs.filter((r) => r.status === "IN").length, [todayLogs]);
-  const totalOut = React.useMemo(() => todayLogs.filter((r) => r.status === "OUT").length, [todayLogs]);
-
   /* ── Export ── */
   const handleExport = React.useCallback(() => {
-    const rows = [];
+    const csvRows = [];
     const now = new Date();
     const dateStr = getManilaDate(0);
     const ts = now.toLocaleString("en-PH", { timeZone: "Asia/Manila" });
-    rows.push(["Francis Key Dashboard Export"]);
-    rows.push(["Generated", ts]);
-    rows.push([]);
-    rows.push(["=== SYSTEM SUMMARY ==="]);
-    rows.push(["Metric", "Value"]);
-    rows.push(["Total Users", users.length]);
-    rows.push(["Active Users", activeUsers.length]);
-    rows.push(["Faculty", faculty.length]);
-    rows.push(["Students", students.length]);
-    rows.push(["Today's Attendance Records", todayLogs.length]);
-    rows.push([]);
-    rows.push(["=== ATTENDANCE STATISTICS ==="]);
-    rows.push(["Present", presentUsers.length]);
-    rows.push(["Late", lateUsers.length]);
-    rows.push(["Absent", absentUsers.length]);
-    rows.push(["Total IN", totalIn]);
-    rows.push(["Total OUT", totalOut]);
-    rows.push([]);
-    rows.push(["=== ATTENDANCE BY DEPARTMENT ==="]);
-    rows.push(["Department", "Total", "Present", "Late", "Absent"]);
-    departmentStats.forEach((d) => rows.push([d.department, d.total, d.present, d.late, d.absent]));
-    rows.push([]);
-    rows.push(["=== PRESENT USERS ==="]);
-    rows.push(["Name", "Role", "Department", "Time In"]);
-    presentUsers.forEach((u) => rows.push([u.name, u.role, u.department, formatTime(u.logTime)]));
-    rows.push([]);
-    rows.push(["=== LATE USERS ==="]);
-    rows.push(["Name", "Role", "Department", "Time In"]);
-    lateUsers.forEach((u) => rows.push([u.name, u.role, u.department, formatTime(u.logTime)]));
-    rows.push([]);
-    rows.push(["=== ABSENT USERS ==="]);
-    rows.push(["Name", "Role", "Department"]);
-    absentUsers.forEach((u) => rows.push([u.name, u.role, u.department]));
-    const csv = rows.map((row) => row.map((c) => { const s = String(c ?? ""); return s.includes(",") || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s; }).join(",")).join("\n");
+    csvRows.push(["Francis Key Dashboard Export"]);
+    csvRows.push(["Generated", ts]);
+    csvRows.push([]);
+    csvRows.push(["=== SYSTEM SUMMARY ==="]);
+    csvRows.push(["Metric", "Value"]);
+    csvRows.push(["Total Users", totalUsers]);
+    csvRows.push(["Faculty", totalFaculty]);
+    csvRows.push(["Students", totalStudents]);
+    csvRows.push([]);
+    csvRows.push(["=== ATTENDANCE STATISTICS ==="]);
+    csvRows.push(["Present", presentUsers.length]);
+    csvRows.push(["Late", lateUsers.length]);
+    csvRows.push(["Absent", absentUsers.length]);
+    csvRows.push(["Total IN", totalIn]);
+    csvRows.push(["Total OUT", totalOut]);
+    csvRows.push([]);
+    csvRows.push(["=== ATTENDANCE BY SUBJECT ==="]);
+    csvRows.push(["Subject", "Section", "Time", "Faculty", "Total", "Present", "Late", "Absent"]);
+    subjectStats.forEach((s) => csvRows.push([
+      `${s.subjectCode} - ${s.subjectName}`,
+      `${s.yearLevel} (${s.section})`,
+      `${formatTime(s.startTime)} - ${formatTime(s.endTime)}`,
+      s.facultyName, s.total, s.present, s.late, s.absent,
+    ]));
+    csvRows.push([]);
+    csvRows.push(["=== PRESENT USERS ==="]);
+    csvRows.push(["Name", "Department", "Time In"]);
+    presentUsers.forEach((u) => csvRows.push([u.name, u.department, formatTime(u.logTime)]));
+    csvRows.push([]);
+    csvRows.push(["=== LATE USERS ==="]);
+    csvRows.push(["Name", "Department", "Time In"]);
+    lateUsers.forEach((u) => csvRows.push([u.name, u.department, formatTime(u.logTime)]));
+    csvRows.push([]);
+    csvRows.push(["=== ABSENT USERS ==="]);
+    csvRows.push(["Name", "Department"]);
+    absentUsers.forEach((u) => csvRows.push([u.name, u.department]));
+    const csv = csvRows.map((row) => row.map((c) => { const s = String(c ?? ""); return s.includes(",") || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s; }).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -578,7 +664,9 @@ function AdminDashboardPage() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [users, activeUsers, faculty, students, todayLogs, presentUsers, lateUsers, absentUsers, totalIn, totalOut, departmentStats]);
+  }, [totalUsers, totalFaculty, totalStudents, presentUsers, lateUsers, absentUsers, totalIn, totalOut, subjectStats]);
+
+  const [expandedSubject, setExpandedSubject] = React.useState(null);
 
   if (loading) return <DashboardSkeleton />;
 
@@ -605,15 +693,14 @@ function AdminDashboardPage() {
       {/* Section 1: System Dashboard */}
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: "Total Users", value: users.length, hint: `${activeUsers.length} active`, color: "green" },
-          { label: "Faculty Members", value: faculty.length, hint: `${faculty.filter((u) => u.status === "Active").length} active`, color: "blue" },
-          { label: "Students", value: students.length, hint: `${students.filter((u) => u.status === "Active").length} active`, color: "purple" },
-          { label: "Today's Attendance", value: todayLogs.length, hint: `${presentUsers.length} present`, color: "amber" },
+          { label: "Total Users", value: totalUsers },
+          { label: "Faculty Members", value: totalFaculty },
+          { label: "Students", value: totalStudents },
+          { label: "Today's Attendance", value: totalIn },
         ].map((m) => (
           <article key={m.label} className="card-elevated p-5">
             <div className="text-xs font-medium uppercase tracking-wider text-gray-500">{m.label}</div>
             <div className="mt-3 text-2xl font-bold text-gray-800">{m.value}</div>
-            <div className="mt-1.5 text-sm text-gray-500">{m.hint}</div>
           </article>
         ))}
       </section>
@@ -622,7 +709,7 @@ function AdminDashboardPage() {
       <section className="grid gap-4 lg:grid-cols-2">
         <article className="card-elevated p-5">
           <h2 className="text-lg font-semibold text-gray-800">Attendance Statistics</h2>
-          <p className="mt-1 text-sm text-gray-500">Today's attendance breakdown.</p>
+          <p className="mt-1 text-sm text-gray-500">Today's student attendance breakdown.</p>
           <div className="mt-4 grid grid-cols-3 gap-3">
             {[
               { label: "Present", value: presentUsers.length, color: "text-green-600 bg-green-50" },
@@ -643,36 +730,38 @@ function AdminDashboardPage() {
 
         <article className="card-elevated p-5">
           <h2 className="text-lg font-semibold text-gray-800">User Activity Summary</h2>
-          <p className="mt-1 text-sm text-gray-500">Active users who logged attendance today.</p>
+          <p className="mt-1 text-sm text-gray-500">Active students who logged attendance today.</p>
           <div className="mt-6 flex items-end gap-6">
             <div>
               <div className="text-4xl font-bold text-green-600">{presentUsers.length}</div>
               <div className="mt-1 text-sm text-gray-500">Logged in today</div>
             </div>
-            <div className="mb-1 text-sm text-gray-500">of <strong className="text-gray-700">{activeUsers.length}</strong> active users</div>
+            <div className="mb-1 text-sm text-gray-500">of <strong className="text-gray-700">{activeStudents.length}</strong> active students</div>
           </div>
           <div className="mt-4 h-3 w-full overflow-hidden rounded-full bg-gray-100">
             <div
               className="h-full rounded-full bg-green-500 transition-all"
-              style={{ width: `${activeUsers.length ? Math.round((presentUsers.length / activeUsers.length) * 100) : 0}%` }}
+              style={{ width: `${activeStudents.length ? Math.round((presentUsers.length / activeStudents.length) * 100) : 0}%` }}
             />
           </div>
           <div className="mt-2 text-xs text-gray-500">
-            {activeUsers.length ? Math.round((presentUsers.length / activeUsers.length) * 100) : 0}% attendance rate
+            {activeStudents.length ? Math.round((presentUsers.length / activeStudents.length) * 100) : 0}% attendance rate
           </div>
         </article>
       </section>
 
-      {/* Section 4: Attendance by Department */}
+      {/* Section 4: Attendance by Subject */}
       <article className="card-elevated p-5">
-        <h2 className="text-lg font-semibold text-gray-800">Attendance by Department</h2>
-        <p className="mt-1 text-sm text-gray-500">Attendance breakdown per department for today.</p>
+        <h2 className="text-lg font-semibold text-gray-800">Attendance by Subject</h2>
+        <p className="mt-1 text-sm text-gray-500">Subject-based attendance for today ({todayDayName}). Click a row to expand.</p>
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead>
               <tr className="border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500">
-                <th className="px-4 py-3 font-medium">Department</th>
-                <th className="px-4 py-3 font-medium text-center">Total</th>
+                <th className="px-4 py-3 font-medium">Subject</th>
+                <th className="px-4 py-3 font-medium">Section</th>
+                <th className="px-4 py-3 font-medium">Time</th>
+                <th className="px-4 py-3 font-medium">Faculty</th>
                 <th className="px-4 py-3 font-medium text-center">Present</th>
                 <th className="px-4 py-3 font-medium text-center">Late</th>
                 <th className="px-4 py-3 font-medium text-center">Absent</th>
@@ -680,17 +769,47 @@ function AdminDashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {departmentStats.length ? departmentStats.map((row) => (
-                <tr key={row.department} className="border-b border-gray-50 transition hover:bg-gray-50/60">
-                  <td className="px-4 py-3 font-medium text-gray-800">{row.department}</td>
-                  <td className="px-4 py-3 text-center text-gray-600">{row.total}</td>
-                  <td className="px-4 py-3 text-center"><span className="rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">{row.present}</span></td>
-                  <td className="px-4 py-3 text-center"><span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">{row.late}</span></td>
-                  <td className="px-4 py-3 text-center"><span className="rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700">{row.absent}</span></td>
-                  <td className="px-4 py-3 text-center font-medium text-gray-700">{row.total ? Math.round((row.present / row.total) * 100) : 0}%</td>
-                </tr>
+              {subjectStats.length ? subjectStats.map((row) => (
+                <React.Fragment key={row.id}>
+                  <tr className="border-b border-gray-50 transition hover:bg-gray-50/60 cursor-pointer" onClick={() => setExpandedSubject(expandedSubject === row.id ? null : row.id)}>
+                    <td className="px-4 py-3 font-medium text-gray-800">{row.subjectCode} — {row.subjectName}</td>
+                    <td className="px-4 py-3 text-gray-600">{row.yearLevel} ({row.section})</td>
+                    <td className="px-4 py-3 text-gray-600">{formatTime(row.startTime)} – {formatTime(row.endTime)}</td>
+                    <td className="px-4 py-3 text-gray-600">{row.facultyName}</td>
+                    <td className="px-4 py-3 text-center"><span className="rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">{row.present}</span></td>
+                    <td className="px-4 py-3 text-center"><span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">{row.late}</span></td>
+                    <td className="px-4 py-3 text-center"><span className="rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700">{row.absent}</span></td>
+                    <td className="px-4 py-3 text-center font-medium text-gray-700">{row.total ? Math.round((row.present / row.total) * 100) : 0}%</td>
+                  </tr>
+                  {expandedSubject === row.id ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-3 bg-gray-50/80">
+                        <div className="grid gap-4 sm:grid-cols-3">
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-wider text-green-600 mb-2">Present ({row.presentList.length})</div>
+                            {row.presentList.length ? row.presentList.map((s, i) => (
+                              <div key={i} className="text-xs text-gray-700 py-0.5">{s.name} <span className="text-gray-400">— {formatTime(s.time)}</span></div>
+                            )) : <div className="text-xs text-gray-400">None</div>}
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-wider text-amber-600 mb-2">Late ({row.lateList.length})</div>
+                            {row.lateList.length ? row.lateList.map((s, i) => (
+                              <div key={i} className="text-xs text-gray-700 py-0.5">{s.name} <span className="text-gray-400">— {formatTime(s.time)}</span></div>
+                            )) : <div className="text-xs text-gray-400">None</div>}
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-wider text-red-600 mb-2">Absent ({row.absentList.length})</div>
+                            {row.absentList.length ? row.absentList.map((s, i) => (
+                              <div key={i} className="text-xs text-gray-700 py-0.5">{s.name}</div>
+                            )) : <div className="text-xs text-gray-400">None</div>}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null}
+                </React.Fragment>
               )) : (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No department data available.</td></tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No scheduled subjects for today ({todayDayName}).</td></tr>
               )}
             </tbody>
           </table>
@@ -700,7 +819,7 @@ function AdminDashboardPage() {
       {/* Section 5: Daily Attendance Summary — Chart */}
       <article className="card-elevated p-5">
         <h2 className="text-lg font-semibold text-gray-800">Daily Attendance Summary</h2>
-        <p className="mt-1 text-sm text-gray-500">Unique attendees over the past 7 days.</p>
+        <p className="mt-1 text-sm text-gray-500">Unique student attendees over the past 7 days.</p>
         <div className="mt-4" style={{ height: 300 }}>
           {dailyChart.some((d) => d.present > 0) ? (
             <ResponsiveContainer width="100%" height="100%">
@@ -722,12 +841,12 @@ function AdminDashboardPage() {
         </div>
       </article>
 
-      {/* Section 6, 7, 8: Present / Late / Absent Users */}
+      {/* Sections 6, 7, 8: Present / Late / Absent Students */}
       <section className="grid gap-4 lg:grid-cols-3">
         {[
-          { title: "Present Users", data: presentUsers, badge: "badge-green", empty: "No users have clocked in today." },
-          { title: "Late Users", data: lateUsers, badge: "badge", empty: "No users arrived late today." },
-          { title: "Absent Users", data: absentUsers, badge: "badge", empty: "All active users are present today." },
+          { title: "Present Students", data: presentUsers, badge: "badge-green", empty: "No students have clocked in today." },
+          { title: "Late Students", data: lateUsers, badge: "badge", empty: "No students arrived late today." },
+          { title: "Absent Students", data: absentUsers, badge: "badge", empty: "All active students are present today." },
         ].map((section) => (
           <article key={section.title} className="card-elevated p-5">
             <div className="flex items-center justify-between">
@@ -741,7 +860,7 @@ function AdminDashboardPage() {
                     <th className="px-3 py-2 font-medium">#</th>
                     <th className="px-3 py-2 font-medium">Name</th>
                     <th className="px-3 py-2 font-medium">Dept</th>
-                    {section.title !== "Absent Users" && <th className="px-3 py-2 font-medium">Time</th>}
+                    {section.title !== "Absent Students" && <th className="px-3 py-2 font-medium">Time</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -750,12 +869,12 @@ function AdminDashboardPage() {
                       <td className="px-3 py-2 text-gray-500">{i + 1}</td>
                       <td className="px-3 py-2 font-medium text-gray-800">{u.name}</td>
                       <td className="px-3 py-2 text-gray-600">{u.department ?? "—"}</td>
-                      {section.title !== "Absent Users" && (
+                      {section.title !== "Absent Students" && (
                         <td className="px-3 py-2"><span className="rounded-full bg-green-50 px-2 py-0.5 text-[0.65rem] font-medium text-green-700">{formatTime(u.logTime)}</span></td>
                       )}
                     </tr>
                   )) : (
-                    <tr><td colSpan={section.title !== "Absent Users" ? 4 : 3} className="px-3 py-6 text-center text-gray-400">{section.empty}</td></tr>
+                    <tr><td colSpan={section.title !== "Absent Students" ? 4 : 3} className="px-3 py-6 text-center text-gray-400">{section.empty}</td></tr>
                   )}
                 </tbody>
               </table>
@@ -801,14 +920,6 @@ function AdminDashboardPage() {
             </div>
           </article>
         ))}
-      </section>
-
-      {/* Section 11: Export (button in header already, secondary trigger here) */}
-      <section className="flex justify-end">
-        <button onClick={handleExport} className="btn btn-primary inline-flex items-center gap-2 text-sm">
-          <FileBarChart size={16} />
-          Export Dashboard Data (CSV)
-        </button>
       </section>
     </div>
   );
