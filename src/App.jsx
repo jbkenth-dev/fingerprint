@@ -288,6 +288,20 @@ function ProtectedLayout({ allowedRole }) {
           <nav className="space-y-1 px-5">
             {routeConfig[allowedRole].map((item) => {
               const Icon = navIcons[item.label];
+              if (item.disabled) {
+                return (
+                  <div
+                    key={item.path}
+                    className="sidebar-nav-item opacity-40 cursor-not-allowed pointer-events-none"
+                  >
+                    <span className="sidebar-nav-icon">
+                      <Icon size={16} />
+                    </span>
+                    <span className="flex-1">{item.label}</span>
+                    <span className="text-[0.6rem] rounded-full bg-white/10 px-1.5 py-0.5 text-white/50 whitespace-nowrap">Soon</span>
+                  </div>
+                );
+              }
               return (
                 <NavLink
                   key={item.path}
@@ -348,6 +362,20 @@ function ProtectedLayout({ allowedRole }) {
             <nav className="mt-6 space-y-1">
               {routeConfig[allowedRole].map((item) => {
                 const Icon = navIcons[item.label];
+                if (item.disabled) {
+                  return (
+                    <div
+                      key={item.path}
+                      className="sidebar-nav-item opacity-40 cursor-not-allowed pointer-events-none"
+                    >
+                      <span className="sidebar-nav-icon">
+                        <Icon size={16} />
+                      </span>
+                      <span className="flex-1">{item.label}</span>
+                      <span className="text-[0.6rem] rounded-full bg-white/10 px-1.5 py-0.5 text-white/50 whitespace-nowrap">Soon</span>
+                    </div>
+                  );
+                }
                 return (
                   <NavLink
                     key={item.path}
