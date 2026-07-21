@@ -87,8 +87,19 @@ export default function App() {
           <Route path="attendance" element={<RolePanel pageKey="attendance" role="student" />} />
           <Route path="account" element={<SelfAccountPage role="student" />} />
         </Route>
+        <Route path="/how-to-use" element={<HowToUsePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+  );
+}
+
+function HowToUsePage() {
+  return (
+    <iframe
+      src="/how-to-use.html"
+      title="How to Use — Francis Key Device"
+      style={{ width: "100%", height: "100vh", border: "none" }}
+    />
   );
 }
 
