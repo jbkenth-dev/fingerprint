@@ -824,7 +824,7 @@ function AdminDashboardPage() {
                 <React.Fragment key={row.id}>
                   <tr className="border-b border-gray-50 transition hover:bg-gray-50/60 cursor-pointer" onClick={() => setExpandedSubject(expandedSubject === row.id ? null : row.id)}>
                     <td className="px-4 py-3 font-medium text-gray-800">{row.subjectCode} — {row.subjectName}</td>
-                    <td className="px-4 py-3 text-gray-600">{row.yearLevel} ({row.section})</td>
+                    <td className="px-4 py-3 text-gray-600">{row.yearLevel.charAt(0)}-{row.section}</td>
                     <td className="px-4 py-3 text-gray-600">{formatTime(row.startTime)} – {formatTime(row.endTime)}</td>
                     <td className="px-4 py-3 text-gray-600">{row.facultyName}</td>
                     <td className="px-4 py-3 text-center"><span className="rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">{row.present}</span></td>
