@@ -563,21 +563,22 @@ function AdminDashboardPage() {
         if (inMin != null && graceStart != null && graceEnd != null && lateEnd != null) {
           const fullName = [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" ");
           const dept = student.department ?? "—";
+          const subjectInfo = { subjectCode: schedule.subjectCode, subjectName: schedule.subjectName, startTime: schedule.startTime, endTime: schedule.endTime, section: schedule.section };
           if (inMin >= graceStart && inMin <= graceEnd) {
             present++;
             presentIds.add(student.id);
-            presentList.push({ name: fullName, department: dept, time: userFirstIn.get(student.id)?.logTime });
+            presentList.push({ name: fullName, department: dept, time: userFirstIn.get(student.id)?.logTime, ...subjectInfo });
           } else if (inMin > graceEnd && inMin <= lateEnd) {
             late++;
             lateIds.add(student.id);
-            lateList.push({ name: fullName, department: dept, time: userFirstIn.get(student.id)?.logTime });
+            lateList.push({ name: fullName, department: dept, time: userFirstIn.get(student.id)?.logTime, ...subjectInfo });
           }
         }
       }
 
       const absentList = scheduleStudents
         .filter((s) => !presentIds.has(s.id) && !lateIds.has(s.id))
-        .map((s) => ({ name: [s.firstName, s.middleName, s.lastName].filter(Boolean).join(" "), department: s.department ?? "—" }));
+        .map((s) => ({ name: [s.firstName, s.middleName, s.lastName].filter(Boolean).join(" "), department: s.department ?? "—", subjectCode: schedule.subjectCode, subjectName: schedule.subjectName, startTime: schedule.startTime, endTime: schedule.endTime, section: schedule.section }));
       const absent = absentList.length;
 
       return {
@@ -928,7 +929,7 @@ function AdminDashboardPage() {
       </article>
 
       {/* Sections 6, 7, 8: Present / Late / Absent Students */}
-      <section className="grid gap-4 lg:grid-cols-3">
+      <section className="space-y-4">
         {[
           { title: "Present Students", data: presentUsers, badge: "badge-green", empty: "No students have clocked in today." },
           { title: "Late Students", data: lateUsers, badge: "badge", empty: "No students arrived late today." },
@@ -945,22 +946,26 @@ function AdminDashboardPage() {
                   <tr className="border-b border-gray-100 text-[0.65rem] uppercase tracking-wider text-gray-500">
                     <th className="px-3 py-2 font-medium">#</th>
                     <th className="px-3 py-2 font-medium">Name</th>
-                    <th className="px-3 py-2 font-medium">Dept</th>
-                    {section.title !== "Absent Students" && <th className="px-3 py-2 font-medium">Time</th>}
+                    <th className="px-3 py-2 font-medium">Section</th>
+                    {section.title !== "Absent Students" && <th className="px-3 py-2 font-medium">Time IN</th>}
+                    <th className="px-3 py-2 font-medium">Subject</th>
+                    <th className="px-3 py-2 font-medium">Scheduled Time</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {section.data.length ? section.data.slice(0, 15).map((u, i) => (
+                  {section.data.length ? section.data.map((u, i) => (
                     <tr key={u.userId || u.id || i} className="border-b border-gray-50">
                       <td className="px-3 py-2 text-gray-500">{i + 1}</td>
                       <td className="px-3 py-2 font-medium text-gray-800">{u.name}</td>
-                      <td className="px-3 py-2 text-gray-600">{u.department ?? "—"}</td>
+                      <td className="px-3 py-2 text-gray-600">{u.section ? `${u.department ? u.department.charAt(0) : ''}-${u.section}` : (u.department ?? "—")}</td>
                       {section.title !== "Absent Students" && (
-                        <td className="px-3 py-2"><span className="rounded-full bg-green-50 px-2 py-0.5 text-[0.65rem] font-medium text-green-700">{formatTime(u.logTime)}</span></td>
+                        <td className="px-3 py-2"><span className="rounded-full bg-green-50 px-2 py-0.5 text-[0.65rem] font-medium text-green-700">{formatTime(u.time)}</span></td>
                       )}
+                      <td className="px-3 py-2 text-gray-600">{u.subjectCode ? `${u.subjectCode} — ${u.subjectName}` : "—"}</td>
+                      <td className="px-3 py-2 text-gray-600">{u.startTime && u.endTime ? `${formatTime(u.startTime)} – ${formatTime(u.endTime)}` : "—"}</td>
                     </tr>
                   )) : (
-                    <tr><td colSpan={section.title !== "Absent Students" ? 4 : 3} className="px-3 py-6 text-center text-gray-400">{section.empty}</td></tr>
+                    <tr><td colSpan={section.title !== "Absent Students" ? 6 : 5} className="px-3 py-6 text-center text-gray-400">{section.empty}</td></tr>
                   )}
                 </tbody>
               </table>
