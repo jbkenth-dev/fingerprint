@@ -410,9 +410,8 @@ function AdminDashboardPage() {
   }
 
   function getManilaDayName() {
-    const now = new Date();
-    const dayNum = parseInt(now.toLocaleDateString("en-US", { timeZone: "Asia/Manila", weekday: "numeric" }), 10);
-    return dayNameMap[dayNum] || "";
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+    return dayNameMap[now.getDay()] || "";
   }
 
   function formatTime(logTime) {
