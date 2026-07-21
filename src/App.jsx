@@ -518,15 +518,12 @@ function AdminDashboardPage() {
 
       let present = 0;
       let late = 0;
-      let absent = 0;
       const presentList = [];
       const lateList = [];
-      const absentList = [];
 
       for (const student of scheduleStudents) {
         const inMin = studentInByUser.get(student.id);
         if (inMin != null && graceStart != null && graceEnd != null && endMin != null) {
-          const user = users.find((u) => u.id === student.id);
           const fullName = [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" ");
           const dept = student.department ?? "—";
           if (inMin >= graceStart && inMin <= graceEnd) {
@@ -535,15 +532,14 @@ function AdminDashboardPage() {
           } else if (inMin > graceEnd && inMin <= endMin) {
             late++;
             lateList.push({ name: fullName, department: dept, time: userFirstIn.get(student.id)?.logTime });
-          } else {
-            absent++;
-            absentList.push({ name: fullName, department: dept });
           }
-        } else {
-          absent++;
-          absentList.push({ name: [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" "), department: student.department ?? "—" });
         }
       }
+
+      const absent = scheduleStudents.length - present - late;
+      const absentList = scheduleStudents
+        .filter((s) => !presentList.some((p) => p.name === [s.firstName, s.middleName, s.lastName].filter(Boolean).join(" ")) && !lateList.some((l) => l.name === [s.firstName, s.middleName, s.lastName].filter(Boolean).join(" ")))
+        .map((s) => ({ name: [s.firstName, s.middleName, s.lastName].filter(Boolean).join(" "), department: s.department ?? "—" }));
 
       return {
         id: schedule.id,
