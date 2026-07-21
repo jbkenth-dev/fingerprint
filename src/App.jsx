@@ -458,12 +458,12 @@ function AdminDashboardPage() {
   function parseStudentDept(dept) {
     if (!dept) return null;
     const yearMap = { 1: "1st Year", 2: "2nd Year", 3: "3rd Year", 4: "4th Year" };
-    // Try "1st Year - C" format
-    const fullMatch = dept.match(/(\d)\w*\s*-\s*([A-E])$/i);
+    // Try "1st Year - C" format (digit, anything, dash, letter at end)
+    const fullMatch = dept.match(/(\d)[^-]*-\s*([A-E])$/i);
     if (fullMatch) {
       return { yearLevel: yearMap[parseInt(fullMatch[1], 10)] || null, section: fullMatch[2].toUpperCase() };
     }
-    // Try "BSIT 3A" format
+    // Try "BSIT 3A" format (digit immediately before letter at end)
     const shortMatch = dept.match(/(\d)\s*([A-E])$/i);
     if (shortMatch) {
       return { yearLevel: yearMap[parseInt(shortMatch[1], 10)] || null, section: shortMatch[2].toUpperCase() };
@@ -542,13 +542,14 @@ function AdminDashboardPage() {
       const scheduleStudents = activeStudents.filter((s) => {
         const parsed = parseStudentDept(s.department);
         if (!parsed) return false;
-        return parsed.yearLevel === schedule.yearLevel && parsed.section === schedule.sectionName;
+        return parsed.yearLevel === schedule.yearLevel && parsed.section === schedule.section;
       });
 
       const startMin = timeToMinutes(schedule.startTime);
       const endMin = timeToMinutes(schedule.endTime);
       const graceStart = startMin != null ? startMin - 15 : null;
       const graceEnd = startMin != null ? startMin + 15 : null;
+      const lateEnd = endMin != null ? endMin - 15 : null;
 
       let present = 0;
       let late = 0;
@@ -559,14 +560,14 @@ function AdminDashboardPage() {
 
       for (const student of scheduleStudents) {
         const inMin = studentInByUser.get(student.id);
-        if (inMin != null && graceStart != null && graceEnd != null && endMin != null) {
+        if (inMin != null && graceStart != null && graceEnd != null && lateEnd != null) {
           const fullName = [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" ");
           const dept = student.department ?? "—";
           if (inMin >= graceStart && inMin <= graceEnd) {
             present++;
             presentIds.add(student.id);
             presentList.push({ name: fullName, department: dept, time: userFirstIn.get(student.id)?.logTime });
-          } else if (inMin > graceEnd && inMin <= endMin) {
+          } else if (inMin > graceEnd && inMin <= lateEnd) {
             late++;
             lateIds.add(student.id);
             lateList.push({ name: fullName, department: dept, time: userFirstIn.get(student.id)?.logTime });
