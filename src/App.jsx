@@ -518,6 +518,8 @@ function AdminDashboardPage() {
 
       let present = 0;
       let late = 0;
+      const presentIds = new Set();
+      const lateIds = new Set();
       const presentList = [];
       const lateList = [];
 
@@ -528,18 +530,20 @@ function AdminDashboardPage() {
           const dept = student.department ?? "—";
           if (inMin >= graceStart && inMin <= graceEnd) {
             present++;
+            presentIds.add(student.id);
             presentList.push({ name: fullName, department: dept, time: userFirstIn.get(student.id)?.logTime });
           } else if (inMin > graceEnd && inMin <= endMin) {
             late++;
+            lateIds.add(student.id);
             lateList.push({ name: fullName, department: dept, time: userFirstIn.get(student.id)?.logTime });
           }
         }
       }
 
-      const absent = scheduleStudents.length - present - late;
       const absentList = scheduleStudents
-        .filter((s) => !presentList.some((p) => p.name === [s.firstName, s.middleName, s.lastName].filter(Boolean).join(" ")) && !lateList.some((l) => l.name === [s.firstName, s.middleName, s.lastName].filter(Boolean).join(" ")))
+        .filter((s) => !presentIds.has(s.id) && !lateIds.has(s.id))
         .map((s) => ({ name: [s.firstName, s.middleName, s.lastName].filter(Boolean).join(" "), department: s.department ?? "—" }));
+      const absent = absentList.length;
 
       return {
         id: schedule.id,
