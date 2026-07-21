@@ -471,7 +471,6 @@ function AdminDashboardPage() {
 
   /* ── Derived metrics (students only) ── */
   const activeStudents = React.useMemo(() => users.filter((u) => u.role === "student" && u.status === "Active"), [users]);
-  const activeStudentIds = React.useMemo(() => new Set(activeStudents.map((u) => u.id)), [activeStudents]);
   const totalUsers = React.useMemo(() => users.length, [users]);
   const totalFaculty = React.useMemo(() => users.filter((u) => u.role === "faculty").length, [users]);
   const totalStudents = React.useMemo(() => users.filter((u) => u.role === "student").length, [users]);
@@ -479,8 +478,8 @@ function AdminDashboardPage() {
   const fingerprintUsers = React.useMemo(() => users.filter((u) => u.fingerprintId && u.status !== "Archived"), [users]);
 
   const todayStudentLogs = React.useMemo(
-    () => todayLogs.filter((r) => activeStudentIds.has(r.userId)),
-    [todayLogs, activeStudentIds],
+    () => todayLogs.filter((r) => activeStudents.some((s) => s.id === r.userId)),
+    [todayLogs, activeStudents],
   );
 
   const userFirstIn = React.useMemo(() => {
@@ -491,40 +490,7 @@ function AdminDashboardPage() {
     return map;
   }, [todayStudentLogs]);
 
-  const presentUserIds = React.useMemo(() => new Set([...userFirstIn.keys()]), [userFirstIn]);
-
-  const presentUsers = React.useMemo(() => {
-    const result = [];
-    for (const [userId, record] of userFirstIn) {
-      const user = users.find((u) => u.id === userId);
-      result.push({ ...record, name: [user?.firstName, user?.middleName, user?.lastName].filter(Boolean).join(" "), department: user?.department ?? "—" });
-    }
-    return result.sort((a, b) => (a.logTime || "").localeCompare(b.logTime || ""));
-  }, [userFirstIn, users]);
-
-  const lateUsers = React.useMemo(() => {
-    const result = [];
-    for (const [userId, record] of userFirstIn) {
-      const [h, m] = (record.logTime || "00:00").split(":").map(Number);
-      if (h * 60 + m > 8 * 60) {
-        const user = users.find((u) => u.id === userId);
-        result.push({ ...record, name: [user?.firstName, user?.middleName, user?.lastName].filter(Boolean).join(" "), department: user?.department ?? "—" });
-      }
-    }
-    return result.sort((a, b) => (a.logTime || "").localeCompare(b.logTime || ""));
-  }, [userFirstIn, users]);
-
-  const absentUsers = React.useMemo(() => {
-    return activeStudents
-      .filter((u) => !presentUserIds.has(u.id))
-      .map((u) => ({ id: u.id, name: [u.firstName, u.middleName, u.lastName].filter(Boolean).join(" "), role: u.role, department: u.department ?? "—" }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [activeStudents, presentUserIds]);
-
-  const totalIn = React.useMemo(() => todayStudentLogs.filter((r) => r.status === "IN").length, [todayStudentLogs]);
-  const totalOut = React.useMemo(() => todayStudentLogs.filter((r) => r.status === "OUT").length, [todayStudentLogs]);
-
-  /* ── Attendance by Subject ── */
+  /* ── Attendance by Subject (all other metrics derive from this) ── */
   const todayDayName = React.useMemo(() => getManilaDayName(), []);
 
   const subjectStats = React.useMemo(() => {
@@ -538,7 +504,7 @@ function AdminDashboardPage() {
       studentInByUser.set(userId, timeToMinutes(record.logTime));
     }
 
-    const stats = todaySchedules.map((schedule) => {
+    return todaySchedules.map((schedule) => {
       const scheduleStudents = activeStudents.filter((s) => {
         const parsed = parseStudentDept(s.department);
         if (!parsed) return false;
@@ -560,21 +526,22 @@ function AdminDashboardPage() {
       for (const student of scheduleStudents) {
         const inMin = studentInByUser.get(student.id);
         if (inMin != null && graceStart != null && graceEnd != null && endMin != null) {
+          const user = users.find((u) => u.id === student.id);
+          const fullName = [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" ");
+          const dept = student.department ?? "—";
           if (inMin >= graceStart && inMin <= graceEnd) {
             present++;
-            const record = userFirstIn.get(student.id);
-            presentList.push({ name: [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" "), time: record?.logTime });
+            presentList.push({ name: fullName, department: dept, time: userFirstIn.get(student.id)?.logTime });
           } else if (inMin > graceEnd && inMin <= endMin) {
             late++;
-            const record = userFirstIn.get(student.id);
-            lateList.push({ name: [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" "), time: record?.logTime });
+            lateList.push({ name: fullName, department: dept, time: userFirstIn.get(student.id)?.logTime });
           } else {
             absent++;
-            absentList.push({ name: [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" ") });
+            absentList.push({ name: fullName, department: dept });
           }
         } else {
           absent++;
-          absentList.push({ name: [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" ") });
+          absentList.push({ name: [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" "), department: student.department ?? "—" });
         }
       }
 
@@ -596,9 +563,85 @@ function AdminDashboardPage() {
         absentList,
       };
     });
+  }, [scheduleRows, todayDayName, activeStudents, userFirstIn, users]);
 
-    return stats.filter((s) => s.total > 0);
-  }, [scheduleRows, todayDayName, activeStudents, userFirstIn]);
+  const hasScheduleToday = subjectStats.length > 0;
+
+  const presentUsers = React.useMemo(() => {
+    const result = [];
+    const seen = new Set();
+    for (const sub of subjectStats) {
+      for (const entry of sub.presentList) {
+        if (!seen.has(entry.name)) {
+          seen.add(entry.name);
+          result.push(entry);
+        }
+      }
+    }
+    return result.sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+  }, [subjectStats]);
+
+  const lateUsers = React.useMemo(() => {
+    const result = [];
+    const seen = new Set();
+    for (const sub of subjectStats) {
+      for (const entry of sub.lateList) {
+        if (!seen.has(entry.name)) {
+          seen.add(entry.name);
+          result.push(entry);
+        }
+      }
+    }
+    return result.sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+  }, [subjectStats]);
+
+  const absentUsers = React.useMemo(() => {
+    const enrolledIds = new Set();
+    const enrolledNames = new Map();
+    for (const sub of subjectStats) {
+      for (const entry of [...sub.presentList, ...sub.lateList, ...sub.absentList]) {
+        if (!enrolledIds.has(entry.name)) {
+          enrolledIds.add(entry.name);
+          enrolledNames.set(entry.name, entry);
+        }
+      }
+    }
+    const result = [];
+    const seen = new Set();
+    for (const sub of subjectStats) {
+      for (const entry of sub.absentList) {
+        if (!seen.has(entry.name)) {
+          seen.add(entry.name);
+          result.push(entry);
+        }
+      }
+    }
+    return result.sort((a, b) => a.name.localeCompare(b.name));
+  }, [subjectStats]);
+
+  const totalIn = React.useMemo(() => {
+    const count = new Set();
+    for (const sub of subjectStats) {
+      for (const entry of [...sub.presentList, ...sub.lateList]) count.add(entry.name);
+    }
+    return count.size;
+  }, [subjectStats]);
+
+  const totalOut = React.useMemo(() => {
+    const enrolledNames = new Set();
+    for (const sub of subjectStats) {
+      for (const entry of [...sub.presentList, ...sub.lateList, ...sub.absentList]) enrolledNames.add(entry.name);
+    }
+    const count = new Set();
+    for (const r of todayStudentLogs) {
+      if (r.status === "OUT") {
+        const user = users.find((u) => u.id === r.userId);
+        const name = [user?.firstName, user?.middleName, user?.lastName].filter(Boolean).join(" ");
+        if (enrolledNames.has(name)) count.add(name);
+      }
+    }
+    return count.size;
+  }, [subjectStats, todayStudentLogs, users]);
 
   const dailyChart = React.useMemo(() => {
     const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -689,6 +732,13 @@ function AdminDashboardPage() {
         </div>
       ) : null}
 
+      {!hasScheduleToday ? (
+        <div className="card-elevated p-8 text-center">
+          <div className="text-lg font-semibold text-gray-700">No classes scheduled for today ({todayDayName})</div>
+          <p className="mt-2 text-sm text-gray-500">There are no class schedules on this day. Attendance data will appear when classes are scheduled.</p>
+        </div>
+      ) : null}
+
       {/* Section 1: System Dashboard */}
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[
@@ -704,6 +754,8 @@ function AdminDashboardPage() {
         ))}
       </section>
 
+      {hasScheduleToday ? (
+      <>
       {/* Sections 2 & 3: Attendance Statistics + User Activity */}
       <section className="grid gap-4 lg:grid-cols-2">
         <article className="card-elevated p-5">
@@ -881,6 +933,8 @@ function AdminDashboardPage() {
           </article>
         ))}
       </section>
+      </>
+      ) : null}
 
       {/* Sections 9 & 10: Smart Cards & Fingerprints */}
       <section className="grid gap-4 lg:grid-cols-2">
