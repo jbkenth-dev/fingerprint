@@ -429,12 +429,18 @@ function AdminDashboardPage() {
 
   function parseStudentDept(dept) {
     if (!dept) return null;
-    const match = dept.match(/(\d)\s*([A-E])$/i);
-    if (!match) return null;
-    const yearNum = parseInt(match[1], 10);
-    const section = match[2].toUpperCase();
     const yearMap = { 1: "1st Year", 2: "2nd Year", 3: "3rd Year", 4: "4th Year" };
-    return { yearLevel: yearMap[yearNum] || null, section };
+    // Try "1st Year - C" format
+    const fullMatch = dept.match(/(\d)\w*\s*-\s*([A-E])$/i);
+    if (fullMatch) {
+      return { yearLevel: yearMap[parseInt(fullMatch[1], 10)] || null, section: fullMatch[2].toUpperCase() };
+    }
+    // Try "BSIT 3A" format
+    const shortMatch = dept.match(/(\d)\s*([A-E])$/i);
+    if (shortMatch) {
+      return { yearLevel: yearMap[parseInt(shortMatch[1], 10)] || null, section: shortMatch[2].toUpperCase() };
+    }
+    return null;
   }
 
   React.useEffect(() => {
