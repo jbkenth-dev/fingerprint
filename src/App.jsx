@@ -816,7 +816,7 @@ function AdminDashboardPage() {
                 <th className="px-4 py-3 font-medium text-center">Present</th>
                 <th className="px-4 py-3 font-medium text-center">Late</th>
                 <th className="px-4 py-3 font-medium text-center">Absent</th>
-                <th className="px-4 py-3 font-medium text-center">Rate</th>
+                <th className="px-4 py-3 font-medium text-center">Total</th>
               </tr>
             </thead>
             <tbody>
@@ -830,7 +830,7 @@ function AdminDashboardPage() {
                     <td className="px-4 py-3 text-center"><span className="rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">{row.present}</span></td>
                     <td className="px-4 py-3 text-center"><span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">{row.late}</span></td>
                     <td className="px-4 py-3 text-center"><span className="rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700">{row.absent}</span></td>
-                    <td className="px-4 py-3 text-center font-medium text-gray-700">{row.total ? Math.round((row.present / row.total) * 100) : 0}%</td>
+                    <td className="px-4 py-3 text-center font-medium text-gray-700">{row.total}</td>
                   </tr>
                   {expandedSubject === row.id ? (
                     <tr>
