@@ -1,0 +1,1485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How to Use — Francis Key Attendance Device</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════
+   ROOT & RESET
+   ═══════════════════════════════════════════ */
+:root {
+  --bg:#0a0f14; --bg2:#0e151c; --panel:#131d26; --panel2:#1a2733;
+  --line:#284150; --text:#f0f7fa; --muted:#7a99a8;
+  --brand:#0f9f94; --brand2:#7ce4dc; --brand-bg:rgba(15,159,148,.1);
+  --good:#16a34a; --good-bg:rgba(22,163,74,.1);
+  --warn:#eab308; --warn-bg:rgba(234,179,8,.1);
+  --bad:#ef4444; --bad-bg:rgba(239,68,68,.1);
+  --blue:#3b82f6; --blue-bg:rgba(59,130,246,.1);
+  --step-size:56px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;-webkit-font-smoothing:antialiased}
+
+/* ═══════════════════════════════════════════
+   HERO HEADER
+   ═══════════════════════════════════════════ */
+.hero{background:linear-gradient(160deg,#060d13,#0f1e2a 60%,#0a1520);border-bottom:1px solid var(--line);padding:56px 24px 48px;text-align:center;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-60%;left:50%;transform:translateX(-50%);width:600px;height:600px;background:radial-gradient(circle,rgba(15,159,148,.08) 0%,transparent 70%);pointer-events:none}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:var(--brand-bg);border:1px solid rgba(15,159,148,.3);border-radius:999px;padding:6px 16px;font-size:12px;font-weight:700;color:var(--brand2);letter-spacing:.1em;text-transform:uppercase;margin-bottom:18px}
+.hero-badge .dot{width:7px;height:7px;border-radius:50%;background:var(--brand);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.hero h1{font-size:clamp(30px,5vw,48px);font-weight:900;margin-bottom:12px;letter-spacing:-.02em}
+.hero h1 span{color:var(--brand)}
+.hero>p,.hero-sub{color:var(--muted);font-size:17px;max-width:620px;margin:0 auto;line-height:1.6}
+
+/* ═══════════════════════════════════════════
+   TABLE OF CONTENTS
+   ═══════════════════════════════════════════ */
+.toc-wrap{max-width:860px;margin:40px auto 0;padding:0 20px}
+.toc{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:28px}
+.toc h2{font-size:18px;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.toc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px}
+.toc a{color:var(--muted);text-decoration:none;font-size:14px;padding:6px 10px;border-radius:6px;display:flex;align-items:center;gap:8px;transition:.15s}
+.toc a:hover{background:var(--brand-bg);color:var(--brand2)}
+.toc a .n{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--brand-bg);color:var(--brand);font-size:11px;font-weight:700;flex-shrink:0}
+
+/* ═══════════════════════════════════════════
+   STEP LAYOUT
+   ═══════════════════════════════════════════ */
+.steps{max-width:860px;margin:0 auto;padding:20px 20px 80px}
+.step{margin-top:56px;scroll-margin-top:24px}
+.step-head{display:flex;align-items:flex-start;gap:18px;margin-bottom:20px}
+.step-num{width:var(--step-size);height:var(--step-size);min-width:var(--step-size);border-radius:16px;background:linear-gradient(135deg,var(--brand),#0abfaa);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;color:#061e1a;box-shadow:0 4px 20px rgba(15,159,148,.3)}
+.step-title{font-size:clamp(22px,3vw,28px);font-weight:800;line-height:1.3;padding-top:6px}
+.step-desc{color:var(--muted);font-size:15px;margin:-10px 0 20px 0;max-width:640px}
+
+/* ═══════════════════════════════════════════
+   VISUAL CONTAINER
+   ═══════════════════════════════════════════ */
+.visual{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:28px;margin-bottom:20px;display:flex;flex-direction:column;align-items:center;gap:16px;overflow:hidden}
+
+/* ═══════════════════════════════════════════
+   DEVICE HARDWARE MOCKUP
+   ═══════════════════════════════════════════ */
+.device-body{width:340px;background:#1a1a2e;border-radius:16px;border:3px solid #2a2a40;padding:20px;box-shadow:0 12px 40px rgba(0,0,0,.5);position:relative}
+.device-label{text-align:center;font-size:11px;color:#666;letter-spacing:.12em;text-transform:uppercase;margin-bottom:12px;font-weight:600}
+.device-tft{width:100%;aspect-ratio:320/240;background:#000;border-radius:4px;border:2px solid #333;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px;margin-bottom:14px;position:relative}
+.device-tft.tft-home{justify-content:flex-start;padding:0}
+.device-ports{display:flex;justify-content:space-between;align-items:center;padding:0 8px}
+.device-port{display:flex;align-items:center;gap:6px;font-size:10px;color:#666}
+.device-port .hole{width:12px;height:12px;border-radius:50%;border:1.5px solid #444;background:#111}
+.device-port .usb{width:20px;height:9px;border-radius:2px;border:1.5px solid #444;background:#111}
+.device-leds{display:flex;gap:6px;justify-content:center;margin-top:10px}
+.device-led{width:10px;height:10px;border-radius:50%;background:#1a1a2e;border:1.5px solid #333}
+.device-led.on-green{background:var(--good);border-color:var(--good);box-shadow:0 0 8px var(--good)}
+.device-led.on-blue{background:var(--blue);border-color:var(--blue);box-shadow:0 0 8px var(--blue)}
+.device-led.on-yellow{background:var(--warn);border-color:var(--warn);box-shadow:0 0 8px var(--warn)}
+.device-led.on-red{background:var(--bad);border-color:var(--bad);box-shadow:0 0 8px var(--bad)}
+.device-sensor-area{display:flex;justify-content:space-around;margin-top:12px}
+.device-fp-sensor{width:60px;height:60px;border-radius:50%;background:#0d1117;border:2px solid #2a2a40;display:flex;align-items:center;justify-content:center;font-size:9px;color:#444;text-transform:uppercase;letter-spacing:.05em}
+.device-nfc-area{width:60px;height:60px;border-radius:8px;background:#0d1117;border:2px solid #2a2a40;display:flex;align-items:center;justify-content:center;font-size:9px;color:#444;text-transform:uppercase;letter-spacing:.05em;text-align:center}
+
+/* ═══════════════════════════════════════════
+   TFT SCREEN STYLES
+   ═══════════════════════════════════════════ */
+.tft{font-family:'JetBrains Mono',monospace}
+.tft-header{width:100%;padding:6px 10px;font-size:13px;font-weight:700;text-align:left}
+.tft-header.green{background:#22c55e;color:#000}
+.tft-header.blue{background:#3b82f6;color:#fff}
+.tft-header.yellow{background:#eab308;color:#000}
+.tft-header.red{background:#ef4444;color:#fff}
+.tft-header.cyan{background:var(--brand);color:#000}
+.tft-body{width:100%;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px;text-align:center}
+.tft-line{font-size:11px;line-height:1.6}
+.tft-line.white{color:#fff}
+.tft-line.brand{color:var(--brand2)}
+.tft-line.grey{color:#999}
+.tft-line.big{font-size:22px;font-weight:700;color:var(--brand2)}
+.tft-line.huge{font-size:32px;font-weight:900;color:var(--brand2)}
+.tft-line.red{color:var(--bad)}
+.tft-line.green{color:var(--good)}
+.tft-line.yellow{color:var(--warn)}
+.tft-footer{width:100%;padding:4px 8px;background:#001133;display:flex;gap:16px;font-size:9px}
+.tft-footer span{display:flex;align-items:center;gap:3px}
+.tft-footer .ok{color:var(--good)}
+.tft-footer .off{color:var(--bad)}
+
+/* ═══════════════════════════════════════════
+   PHONE MOCKUP
+   ═══════════════════════════════════════════ */
+.phone{width:300px;background:#1c1c1e;border-radius:32px;padding:12px;box-shadow:0 12px 40px rgba(0,0,0,.5);border:2px solid #333}
+.phone-screen{background:#000;border-radius:22px;overflow:hidden;min-height:400px}
+.phone-statusbar{background:#1c1c1e;padding:6px 16px;display:flex;justify-content:space-between;font-size:10px;color:#fff;font-weight:600}
+.phone-statusbar .time{font-weight:700}
+.phone-content{padding:0;min-height:340px}
+
+/* WiFi Settings Style */
+.wifi-page{background:#000;min-height:100%}
+.wifi-page .nav-title{padding:12px 16px 8px;font-size:22px;font-weight:700;color:#fff}
+.wifi-page .section-label{padding:20px 16px 8px;font-size:12px;color:#8e8e93;text-transform:uppercase;font-weight:600}
+.wifi-page .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:.5px solid #38383a}
+.wifi-page .toggle-label{color:#fff;font-size:15px}
+.wifi-toggle{width:51px;height:31px;border-radius:16px;background:#30d158;position:relative}
+.wifi-toggle::after{content:'';position:absolute;width:27px;height:27px;border-radius:50%;background:#fff;top:2px;right:2px}
+.wifi-net{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:.5px solid #38383a;cursor:pointer;transition:.15s}
+.wifi-net:hover,.wifi-net.highlight{background:rgba(15,159,148,.15)}
+.wifi-net.highlight{border:1.5px solid var(--brand);border-radius:10px;margin:2px 8px}
+.wifi-net .name{color:#fff;font-size:15px}
+.wifi-net .icon{color:#8e8e93;font-size:18px}
+.wifi-net .check{color:var(--brand);font-size:16px}
+
+/* ═══════════════════════════════════════════
+   BROWSER MOCKUP
+   ═══════════════════════════════════════════ */
+.browser{width:100%;max-width:700px;background:#1e1e2e;border-radius:12px;border:2px solid #333;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.browser-bar{background:#2a2a3e;padding:10px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #38383a}
+.browser-dots{display:flex;gap:6px}
+.browser-dots span{width:12px;height:12px;border-radius:50%}
+.browser-dots .r{background:#ff5f57}.browser-dots .y{background:#febc2e}.browser-dots .g{background:#28c840}
+.browser-url{flex:1;background:#1a1a2e;border-radius:6px;padding:6px 12px;color:#ccc;font-size:13px;font-family:'JetBrains Mono',monospace;border:1px solid #444;display:flex;align-items:center;gap:6px}
+.browser-url .lock{color:var(--brand)}
+.browser-body{background:#000;min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}
+
+/* ═══════════════════════════════════════════
+   LOGIN PAGE MOCKUP
+   ═══════════════════════════════════════════ */
+.login-mock{width:100%;max-width:380px;background:linear-gradient(145deg,#071017,#101d26);border:1px solid var(--line);border-radius:12px;padding:28px;display:grid;gap:0}
+.login-mock .lm-brand{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--brand);font-weight:800;margin-bottom:4px}
+.login-mock h3{font-size:24px;margin-bottom:16px}
+.login-mock label{display:block;margin:12px 0 4px;color:#dbe8ed;font-size:12px;font-weight:700}
+.login-mock .input-mock{width:100%;border-radius:8px;border:1px solid var(--line);padding:10px 12px;background:#0d151d;color:var(--text);font-size:14px}
+.login-mock .btn-mock{width:100%;border-radius:8px;border:0;padding:12px;background:var(--brand);color:#061e1a;font-weight:800;font-size:14px;text-align:center;margin-top:16px;cursor:pointer}
+
+/* ═══════════════════════════════════════════
+   WEB APP MOCKUP
+   ═══════════════════════════════════════════ */
+.app-mock{width:100%;display:flex;background:var(--bg);border-radius:10px;overflow:hidden;border:1px solid var(--line);min-height:320px}
+.app-sidebar{width:180px;background:#0c1820;padding:14px;border-right:1px solid var(--line);flex-shrink:0}
+.app-sidebar .brand-m{display:flex;align-items:center;gap:8px;margin-bottom:16px}
+.app-sidebar .brand-m .mk{width:30px;height:30px;border-radius:6px;background:linear-gradient(135deg,var(--brand),#79e5dc);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#06201e}
+.app-sidebar .brand-m b{font-size:14px;color:#fff}
+.app-sidebar .nav-item{padding:8px 10px;border-radius:6px;color:#8aa8b5;font-size:13px;margin-bottom:2px;cursor:pointer;display:flex;align-items:center;gap:8px}
+.app-sidebar .nav-item.active{background:rgba(121,229,220,.12);color:#fff}
+.app-sidebar .nav-item:hover{background:rgba(121,229,220,.08)}
+.app-main{flex:1;padding:16px;overflow:hidden}
+.app-topbar{display:flex;align-items:center;gap:8px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.app-topbar .title{font-weight:800;font-size:16px}
+.app-topbar .sub{color:var(--muted);font-size:11px}
+
+/* Dashboard Cards */
+.dash-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.dash-card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}
+.dash-card .dc-label{font-size:11px;color:var(--muted);margin-bottom:4px}
+.dash-card .dc-val{font-size:20px;font-weight:800}
+.dash-card .dc-val.ok{color:var(--good)}.dash-card .dc-val.off{color:var(--bad)}
+
+/* Table Mockup */
+.table-mock{width:100%;border-collapse:collapse;font-size:12px}
+.table-mock th{background:var(--panel2);color:#445b68;padding:8px 10px;text-align:left;font-size:11px;font-weight:700;border-bottom:1px solid var(--line)}
+.table-mock td{padding:8px 10px;border-bottom:1px solid var(--line);color:var(--text)}
+.table-mock .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700}
+.table-mock .badge.in{background:var(--good-bg);color:var(--good)}
+.table-mock .badge.out{background:var(--blue-bg);color:var(--blue)}
+
+/* ═══════════════════════════════════════════
+   CALLOUT BOXES
+   ═══════════════════════════════════════════ */
+.callout{border-radius:10px;padding:16px 20px;display:flex;gap:12px;align-items:flex-start;font-size:14px;line-height:1.5;margin:16px 0}
+.callout .icon{font-size:18px;flex-shrink:0;margin-top:1px}
+.callout.info{background:var(--brand-bg);border:1px solid rgba(15,159,148,.3);color:var(--brand2)}
+.callout.warn{background:var(--warn-bg);border:1px solid rgba(234,179,8,.3);color:#fde047}
+.callout.tip{background:var(--blue-bg);border:1px solid rgba(59,130,246,.3);color:#93c5fd}
+.callout.danger{background:var(--bad-bg);border:1px solid rgba(239,68,68,.3);color:#fca5a5}
+.callout code{background:rgba(255,255,255,.1);padding:1px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:13px}
+
+/* ═══════════════════════════════════════════
+   CREDENTIAL BOX
+   ═══════════════════════════════════════════ */
+.creds{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 20px;display:inline-flex;flex-wrap:wrap;gap:12px 24px;margin:12px 0}
+.creds .cred{display:flex;flex-direction:column;gap:2px}
+.creds .cred-label{font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:600;letter-spacing:.05em}
+.creds .cred-val{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600;color:var(--brand2);background:rgba(15,159,148,.1);padding:3px 10px;border-radius:6px}
+
+/* ═══════════════════════════════════════════
+   FINGER ANIMATION
+   ═══════════════════════════════════════════ */
+.finger-vis{display:flex;flex-direction:column;align-items:center;gap:8px}
+.finger-vis .finger{font-size:48px;animation:tap 1.5s ease-in-out infinite}
+@keyframes tap{0%,100%{transform:translateY(0)}50%{transform:translateY(8px)}}
+.finger-vis .sensor-ring{width:80px;height:80px;border-radius:50%;border:3px solid var(--brand);display:flex;align-items:center;justify-content:center;animation:glow 1.5s ease-in-out infinite}
+@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(15,159,148,0)}50%{box-shadow:0 0 0 12px rgba(15,159,148,.15)}}
+
+/* ═══════════════════════════════════════════
+   CARD TAP ANIMATION
+   ═══════════════════════════════════════════ */
+.rfid-vis{display:flex;flex-direction:column;align-items:center;gap:8px}
+.rfid-vis .card-icon{width:80px;height:50px;border-radius:8px;background:linear-gradient(135deg,#4a5568,#718096);border:2px solid #a0aec0;display:flex;align-items:center;justify-content:center;font-size:24px;color:#e2e8f0;animation:tapCard 1.5s ease-in-out infinite;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+@keyframes tapCard{0%,100%{transform:translateY(0)}50%{transform:translateY(6px)}}
+.rfid-vis .nfc-ring{width:70px;height:70px;border-radius:50%;border:3px dashed var(--warn);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--warn);text-transform:uppercase;font-weight:700;animation:glowY 1.5s ease-in-out infinite}
+@keyframes glowY{0%,100%{box-shadow:0 0 0 0 rgba(234,179,8,0)}50%{box-shadow:0 0 0 12px rgba(234,179,8,.12)}}
+
+/* ═══════════════════════════════════════════
+   SEQUENTIAL SCREENS
+   ═══════════════════════════════════════════ */
+.seq-screens{display:flex;gap:16px;overflow-x:auto;padding:4px 0;width:100%;justify-content:center;flex-wrap:wrap}
+.seq-screen{min-width:200px;max-width:240px}
+.seq-screen .seq-label{text-align:center;font-size:11px;color:var(--muted);margin-bottom:6px;font-weight:600}
+.seq-screen .mini-tft{width:100%;aspect-ratio:320/240;background:#000;border-radius:6px;border:2px solid #333;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+.seq-arrow{display:flex;align-items:center;color:var(--brand);font-size:24px;flex-shrink:0}
+
+/* ═══════════════════════════════════════════
+   HIGHLIGHT PULSE
+   ═══════════════════════════════════════════ */
+.highlight-pulse{animation:hpulse 2s ease-in-out infinite;border-radius:6px}
+@keyframes hpulse{0%,100%{box-shadow:0 0 0 0 rgba(15,159,148,0)}50%{box-shadow:0 0 0 6px rgba(15,159,148,.25)}}
+.highlight-click{position:relative}
+.highlight-click::after{content:'CLICK';position:absolute;top:-8px;right:-8px;background:var(--brand);color:#061e1a;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;letter-spacing:.06em;animation:hpulse 2s ease-in-out infinite}
+
+/* ═══════════════════════════════════════════
+   MODAL MOCKUP
+   ═══════════════════════════════════════════ */
+.modal-mock{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;max-width:360px;width:100%;box-shadow:0 16px 48px rgba(0,0,0,.4)}
+.modal-mock h4{font-size:16px;margin-bottom:12px}
+.modal-mock .field{margin-bottom:10px}
+.modal-mock .field-label{font-size:11px;color:var(--muted);font-weight:700;margin-bottom:2px}
+.modal-mock .field-val{background:var(--panel2);padding:8px 10px;border-radius:6px;font-size:14px;border:1px solid var(--line)}
+.modal-mock .btns{display:flex;gap:8px;margin-top:14px}
+.modal-mock .btn-m{flex:1;padding:10px;border-radius:8px;border:0;font-weight:700;font-size:13px;cursor:pointer;text-align:center}
+.modal-mock .btn-m.primary{background:var(--brand);color:#061e1a}
+.modal-mock .btn-m.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+
+/* ═══════════════════════════════════════════
+   SCROLL PROGRESS
+   ═══════════════════════════════════════════ */
+.progress-bar{position:fixed;top:0;left:0;width:100%;height:3px;background:rgba(255,255,255,.05);z-index:100}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--brand),var(--brand2));width:0%;transition:width .2s}
+
+/* ═══════════════════════════════════════════
+   BACK TO TOP
+   ═══════════════════════════════════════════ */
+.btt{position:fixed;bottom:24px;right:24px;width:44px;height:44px;border-radius:50%;background:var(--brand);color:#061e1a;border:0;font-size:20px;cursor:pointer;box-shadow:0 4px 16px rgba(15,159,148,.4);display:none;z-index:90;transition:.2s}
+.btt:hover{transform:translateY(-2px);box-shadow:0 6px 24px rgba(15,159,148,.5)}
+.btt.show{display:flex;align-items:center;justify-content:center}
+
+/* ═══════════════════════════════════════════
+   TROUBLESHOOT
+   ═══════════════════════════════════════════ */
+.trouble{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;margin-top:12px}
+.trouble h4{color:var(--warn);font-size:15px;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.trouble p{color:var(--muted);font-size:14px;margin-bottom:4px}
+.trouble code{background:rgba(255,255,255,.08);padding:2px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--brand2)}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════ */
+@media(max-width:700px){
+  .app-sidebar{display:none}
+  .dash-cards{grid-template-columns:1fr}
+  .seq-screens{flex-direction:column;align-items:center}
+  .seq-arrow{transform:rotate(90deg)}
+  .toc-grid{grid-template-columns:1fr}
+  .phone{width:100%;max-width:300px}
+  .browser{max-width:100%}
+}
+</style>
+</head>
+<body>
+
+<!-- Progress Bar -->
+<div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+
+<!-- ═══════════════════════════════════════════
+     HERO
+     ═══════════════════════════════════════════ -->
+<header class="hero">
+  <div class="hero-badge"><span class="dot"></span> Francis Key Device</div>
+  <h1>How to <span>Use</span> Your Device</h1>
+  <p class="hero-sub">A complete step-by-step guide to setting up, registering students, and taking attendance with your Francis Key Attendance Device.</p>
+</header>
+
+<!-- ═══════════════════════════════════════════
+     TABLE OF CONTENTS
+     ═══════════════════════════════════════════ -->
+<div class="toc-wrap">
+<nav class="toc">
+  <h2>📑 Contents</h2>
+  <div class="toc-grid">
+    <a href="#s1"><span class="n">1</span> Plug In the Device</a>
+    <a href="#s2"><span class="n">2</span> Wait for Boot-Up</a>
+    <a href="#s3"><span class="n">3</span> Open WiFi Settings</a>
+    <a href="#s4"><span class="n">4</span> Connect to FRANCIS_KEY</a>
+    <a href="#s5"><span class="n">5</span> Open Your Browser</a>
+    <a href="#s6"><span class="n">6</span> Login to Admin Portal</a>
+    <a href="#s7"><span class="n">7</span> Dashboard Overview</a>
+    <a href="#s8"><span class="n">8</span> Connect Home WiFi</a>
+    <a href="#s9"><span class="n">9</span> Verify Device Online</a>
+    <a href="#s10"><span class="n">10</span> Register a Student</a>
+    <a href="#s11"><span class="n">11</span> Scan Fingerprint (×3)</a>
+    <a href="#s12"><span class="n">12</span> Scan RFID Card (×2)</a>
+    <a href="#s13"><span class="n">13</span> Registration Complete</a>
+    <a href="#s14"><span class="n">14</span> Take Attendance — Fingerprint</a>
+    <a href="#s15"><span class="n">15</span> Take Attendance — RFID Card</a>
+    <a href="#s16"><span class="n">16</span> View Attendance Logs</a>
+    <a href="#s17"><span class="n">17</span> Manage Registered Users</a>
+    <a href="#s18"><span class="n">18</span> Backup &amp; Restore</a>
+    <a href="#s19"><span class="n">19</span> Attendance Rules</a>
+    <a href="#s20"><span class="n">20</span> Troubleshooting</a>
+  </div>
+</nav>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     STEPS
+     ═══════════════════════════════════════════ -->
+<div class="steps">
+
+<!-- ─── STEP 1 ─── -->
+<div class="step" id="s1">
+  <div class="step-head">
+    <div class="step-num">1</div>
+    <div class="step-title">Plug In the Device</div>
+  </div>
+  <p class="step-desc">Connect the power adapter to the USB port on the device. The device needs a steady 5V power supply — use the included adapter or any standard USB power source.</p>
+
+  <div class="visual">
+    <div class="device-body">
+      <div class="device-label">Francis Key Attendance Device</div>
+      <div class="device-tft">
+        <div class="tft-body" style="padding:8px">
+          <div class="tft-line brand" style="font-size:16px;font-weight:800">FRANCIS KEY</div>
+          <div class="tft-line white" style="margin-top:8px">Starting Device</div>
+          <div class="tft-line grey" style="margin-top:4px">Please wait</div>
+        </div>
+      </div>
+      <div class="device-ports">
+        <div class="device-port"><span class="usb"></span> USB Power</div>
+        <div class="device-port"><span class="hole"></span> Buzzer</div>
+      </div>
+      <div class="device-leds">
+        <div class="device-led"></div>
+        <div class="device-led"></div>
+        <div class="device-led"></div>
+        <div class="device-led"></div>
+      </div>
+      <div class="device-sensor-area">
+        <div class="device-fp-sensor">Fingerprint<br>Sensor</div>
+        <div class="device-nfc-area">RFID<br>Reader</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <span class="icon">💡</span>
+    <div>The device has: a <strong>TFT display</strong> (top), <strong>fingerprint sensor</strong> (left circle), <strong>RFID reader</strong> (right square), <strong>4 LEDs</strong> (blue, yellow, green, red), and a <strong>buzzer</strong>.</div>
+  </div>
+</div>
+
+<!-- ─── STEP 2 ─── -->
+<div class="step" id="s2">
+  <div class="step-head">
+    <div class="step-num">2</div>
+    <div class="step-title">Wait for Boot-Up</div>
+  </div>
+  <p class="step-desc">After plugging in, the device takes about 3-5 seconds to boot. Watch the TFT screen — it will go through the startup sequence and land on the home screen.</p>
+
+  <div class="visual">
+    <div class="seq-screens">
+      <div class="seq-screen">
+        <div class="seq-label">① Starting</div>
+        <div class="mini-tft">
+          <div class="tft-body">
+            <div class="tft-line brand" style="font-size:14px;font-weight:800">FRANCIS KEY</div>
+            <div class="tft-line white" style="margin-top:6px">Starting Device</div>
+            <div class="tft-line grey">Please wait</div>
+          </div>
+        </div>
+      </div>
+      <div class="seq-arrow">→</div>
+      <div class="seq-screen">
+        <div class="seq-label">② WiFi Check</div>
+        <div class="mini-tft">
+          <div class="tft-header blue">WiFi</div>
+          <div class="tft-body">
+            <div class="tft-line white">Connecting...</div>
+            <div class="tft-line grey" style="margin-top:4px">Please wait</div>
+          </div>
+        </div>
+      </div>
+      <div class="seq-arrow">→</div>
+      <div class="seq-screen">
+        <div class="seq-label">③ Home Screen</div>
+        <div class="mini-tft" style="justify-content:flex-start">
+          <div style="padding:4px 10px;border:1.5px solid var(--good);border-radius:4px;margin:6px 8px;text-align:center">
+            <div style="color:var(--good);font-size:11px;font-weight:800">FRANCIS KEY</div>
+          </div>
+          <div style="text-align:center;margin-top:4px">
+            <div class="tft-line white" style="font-size:10px">July 21, 2026</div>
+          </div>
+          <div style="text-align:center;margin-top:4px">
+            <div class="tft-line huge" style="font-size:26px">01:30 PM</div>
+          </div>
+          <div style="text-align:center;margin-top:2px">
+            <div class="tft-line grey" style="font-size:10px">Monday</div>
+          </div>
+          <div class="tft-footer">
+            <span class="off">WiFi:OFF</span>
+            <span class="off">DB:OFF</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <span class="icon">ℹ️</span>
+    <div>If no WiFi is configured, the device stays in <strong>AP mode</strong> — its screen will show "AP Ready" and "192.168.4.1". This is normal for first-time setup.</div>
+  </div>
+</div>
+
+<!-- ─── STEP 3 ─── -->
+<div class="step" id="s3">
+  <div class="step-head">
+    <div class="step-num">3</div>
+    <div class="step-title">Open WiFi Settings on Your Phone</div>
+  </div>
+  <p class="step-desc">On your smartphone or computer, open your WiFi/network settings. You need to connect to the device's own WiFi network first to access its admin portal.</p>
+
+  <div class="visual">
+    <div class="phone">
+      <div class="phone-screen">
+        <div class="phone-statusbar">
+          <span class="time">9:41</span>
+          <span>📶 🔋</span>
+        </div>
+        <div class="wifi-page">
+          <div class="nav-title">Wi-Fi</div>
+          <div class="toggle-row">
+            <span class="toggle-label">Wi-Fi</span>
+            <div class="wifi-toggle"></div>
+          </div>
+          <div class="section-label">Networks</div>
+          <div class="wifi-net">
+            <span class="icon">🔒</span>
+            <span class="name" style="flex:1;margin-left:8px">HomeWiFi</span>
+            <span class="check">✓</span>
+          </div>
+          <div class="wifi-net highlight highlight-pulse">
+            <span class="icon">🔒</span>
+            <span class="name" style="flex:1;margin-left:8px;font-weight:700;color:var(--brand2)">FRANCIS_KEY</span>
+            <span style="font-size:10px;color:var(--muted)">›</span>
+          </div>
+          <div class="wifi-net">
+            <span class="icon">🔒</span>
+            <span class="name" style="flex:1;margin-left:8px">Neighbor_5G</span>
+            <span style="font-size:10px;color:var(--muted)">›</span>
+          </div>
+          <div class="wifi-net">
+            <span class="icon">🔓</span>
+            <span class="name" style="flex:1;margin-left:8px">FreeWiFi</span>
+            <span style="font-size:10px;color:var(--muted)">›</span>
+          </div>
+          <div class="wifi-net">
+            <span class="icon">🔒</span>
+            <span class="name" style="flex:1;margin-left:8px">Office_5G</span>
+            <span style="font-size:10px;color:var(--muted)">›</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout tip">
+    <span class="icon">👆</span>
+    <div>Look for <code>FRANCIS_KEY</code> in the list — it may appear after a few seconds of scanning. <strong>Tap on it</strong> to connect.</div>
+  </div>
+</div>
+
+<!-- ─── STEP 4 ─── -->
+<div class="step" id="s4">
+  <div class="step-head">
+    <div class="step-num">4</div>
+    <div class="step-title">Enter the WiFi Password</div>
+  </div>
+  <p class="step-desc">When prompted, enter the WiFi password for the FRANCIS_KEY network. This is the default password for the device's access point.</p>
+
+  <div class="creds">
+    <div class="cred"><span class="cred-label">Network</span><span class="cred-val">FRANCIS_KEY</span></div>
+    <div class="cred"><span class="cred-label">Password</span><span class="cred-val">12345678</span></div>
+  </div>
+
+  <div class="visual" style="margin-top:16px">
+    <div class="phone">
+      <div class="phone-screen">
+        <div class="phone-statusbar">
+          <span class="time">9:41</span>
+          <span>📶 🔋</span>
+        </div>
+        <div class="wifi-page">
+          <div class="nav-title" style="font-size:18px;padding-top:14px">FRANCIS_KEY</div>
+          <div style="padding:16px">
+            <label style="display:block;font-size:13px;color:#8e8e93;margin-bottom:6px;font-weight:600">Password</label>
+            <div style="background:#1c1c1e;border-radius:10px;border:1px solid #444;padding:12px 14px;display:flex;align-items:center;gap:8px">
+              <span style="color:#fff;font-size:15px;letter-spacing:3px">••••••••</span>
+            </div>
+            <div style="margin-top:6px;font-size:11px;color:var(--muted)">Hint: Default password is 12345678</div>
+            <div class="highlight-click" style="margin-top:20px">
+              <div style="background:var(--brand);border-radius:10px;padding:14px;text-align:center;font-weight:700;color:#061e1a;font-size:16px;cursor:pointer">Join</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout warn">
+    <span class="icon">⚠️</span>
+    <div>After connecting, your phone may show <strong>"No Internet Connection"</strong> — this is normal! The device is not connected to the internet yet. Proceed to the next step.</div>
+  </div>
+</div>
+
+<!-- ─── STEP 5 ─── -->
+<div class="step" id="s5">
+  <div class="step-head">
+    <div class="step-num">5</div>
+    <div class="step-title">Open Your Web Browser</div>
+  </div>
+  <p class="step-desc">Open any web browser (Chrome, Safari, Edge, Firefox) on your phone or computer. Type the device's address into the address bar and press Enter/Go.</p>
+
+  <div class="creds">
+    <div class="cred"><span class="cred-label">Address</span><span class="cred-val">http://192.168.4.1</span></div>
+  </div>
+
+  <div class="visual" style="margin-top:16px">
+    <div class="browser">
+      <div class="browser-bar">
+        <div class="browser-dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+        <div class="browser-url highlight-click">
+          <span style="color:var(--muted)">🔒</span>
+          <span>192.168.4.1</span>
+          <span style="color:var(--muted);margin-left:auto">↩</span>
+        </div>
+      </div>
+      <div class="browser-body" style="min-height:160px;color:var(--muted);font-size:14px">
+        <div style="text-align:center">
+          <div style="font-size:32px;margin-bottom:8px">🔐</div>
+          <div style="font-weight:700;color:var(--text);font-size:16px">Francis Key Login</div>
+          <div style="margin-top:4px;font-size:13px">Connecting to device admin portal...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout danger">
+    <span class="icon">🚫</span>
+    <div><strong>Do NOT</strong> type <code>localhost</code> — that will not work. You must use <code>192.168.4.1</code> (the device's IP address). If using a computer, make sure you're connected to the FRANCIS_KEY WiFi, not your home WiFi.</div>
+  </div>
+</div>
+
+<!-- ─── STEP 6 ─── -->
+<div class="step" id="s6">
+  <div class="step-head">
+    <div class="step-num">6</div>
+    <div class="step-title">Login to the Admin Portal</div>
+  </div>
+  <p class="step-desc">The Francis Key login page will appear. Enter the default admin credentials to access the device dashboard.</p>
+
+  <div class="creds">
+    <div class="cred"><span class="cred-label">Username</span><span class="cred-val">admin</span></div>
+    <div class="cred"><span class="cred-label">Password</span><span class="cred-val">francis123</span></div>
+  </div>
+
+  <div class="visual" style="margin-top:16px">
+    <div class="browser">
+      <div class="browser-bar">
+        <div class="browser-dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+        <div class="browser-url"><span style="color:var(--muted)">🔒</span><span>192.168.4.1</span></div>
+      </div>
+      <div class="browser-body" style="padding:20px">
+        <div class="login-mock">
+          <div class="lm-brand">Admin Login</div>
+          <h3 style="color:var(--text)"></h3>
+          <label>Username</label>
+          <div class="input-mock">admin</div>
+          <label>Password</label>
+          <div class="input-mock">••••••••</div>
+          <div class="highlight-click" style="margin-top:14px">
+            <div class="btn-mock">Login</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout tip">
+    <span class="icon">💡</span>
+    <div>You can change the admin password later from the Settings page. Keep these credentials safe — they give full control over the device.</div>
+  </div>
+</div>
+
+<!-- ─── STEP 7 ─── -->
+<div class="step" id="s7">
+  <div class="step-head">
+    <div class="step-num">7</div>
+    <div class="step-title">Dashboard Overview</div>
+  </div>
+  <p class="step-desc">After login, you'll see the Dashboard. This is your main control center. The left sidebar has all navigation options. The dashboard shows device status at a glance.</p>
+
+  <div class="visual">
+    <div class="browser">
+      <div class="browser-bar">
+        <div class="browser-dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+        <div class="browser-url"><span style="color:var(--muted)">🔒</span><span>192.168.4.1</span></div>
+      </div>
+      <div style="background:var(--bg);min-height:340px">
+        <div class="app-mock" style="border:none;border-radius:0;min-height:340px">
+          <div class="app-sidebar">
+            <div class="brand-m"><div class="mk">FK</div><b>FRANCIS KEY</b></div>
+            <div class="nav-item active">📊 Dashboard</div>
+            <div class="nav-item">📋 Attendance</div>
+            <div class="nav-item">👤 Register User</div>
+            <div class="nav-item">👥 Users</div>
+            <div class="nav-item">📶 WiFi Settings</div>
+            <div class="nav-item">⚙️ Attendance Rules</div>
+            <div class="nav-item">🕐 Date/Time</div>
+            <div class="nav-item">📝 Logs</div>
+            <div class="nav-item" style="color:var(--bad)">🚪 Logout</div>
+          </div>
+          <div class="app-main">
+            <div class="app-topbar">
+              <div>
+                <div class="title">Dashboard</div>
+                <div class="sub">Device Status</div>
+              </div>
+            </div>
+            <div class="dash-cards">
+              <div class="dash-card"><div class="dc-label">WiFi</div><div class="dc-val off">Offline</div></div>
+              <div class="dash-card"><div class="dc-label">Database API</div><div class="dc-val off">Offline</div></div>
+              <div class="dash-card"><div class="dc-label">Device Time</div><div class="dc-val">01:30 PM</div></div>
+              <div class="dash-card"><div class="dc-label">RTC Sensor</div><div class="dc-val ok">Ready</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <span class="icon">📊</span>
+    <div>The dashboard shows 4 key statuses. Right now, <strong>WiFi</strong> and <strong>Database</strong> show "Offline" because the device isn't connected to your home internet yet. Let's fix that in the next step!</div>
+  </div>
+</div>
+
+<!-- ─── STEP 8 ─── -->
+<div class="step" id="s8">
+  <div class="step-head">
+    <div class="step-num">8</div>
+    <div class="step-title">Connect to Your Home WiFi</div>
+  </div>
+  <p class="step-desc">Click <strong>"WiFi Settings"</strong> in the sidebar. Then click <strong>"Scan Networks"</strong> to find your home WiFi. Select your network, enter the password, and click <strong>"Save and Connect"</strong>.</p>
+
+  <div class="visual">
+    <div class="browser">
+      <div class="browser-bar">
+        <div class="browser-dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+        <div class="browser-url"><span style="color:var(--muted)">🔒</span><span>192.168.4.1</span></div>
+      </div>
+      <div style="background:var(--bg)">
+        <div class="app-mock" style="border:none;border-radius:0;min-height:360px">
+          <div class="app-sidebar">
+            <div class="brand-m"><div class="mk">FK</div><b>FRANCIS KEY</b></div>
+            <div class="nav-item">📊 Dashboard</div>
+            <div class="nav-item">📋 Attendance</div>
+            <div class="nav-item">👤 Register User</div>
+            <div class="nav-item">👥 Users</div>
+            <div class="nav-item active">📶 WiFi Settings</div>
+            <div class="nav-item">⚙️ Attendance Rules</div>
+            <div class="nav-item">🕐 Date/Time</div>
+            <div class="nav-item">📝 Logs</div>
+          </div>
+          <div class="app-main">
+            <div class="app-topbar">
+              <div>
+                <div class="title">WiFi Settings</div>
+                <div class="sub">Scan and connect to a network</div>
+              </div>
+            </div>
+            <div style="display:grid;gap:12px">
+              <div style="padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);display:flex;align-items:center;gap:8px">
+                <span style="width:10px;height:10px;border-radius:50%;background:#9ca3af;display:inline-block"></span>
+                <span style="font-size:12px;color:var(--muted);font-weight:700">WiFi Connected:</span>
+                <b style="font-size:13px">Not Connected</b>
+              </div>
+              <div style="display:flex;gap:8px">
+                <div style="flex:1">
+                  <label style="display:block;font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px">Network</label>
+                  <select style="width:100%;border:1px solid var(--line);border-radius:8px;padding:9px;background:var(--panel);color:var(--text);font-size:13px">
+                    <option>HomeWiFi</option>
+                  </select>
+                </div>
+                <div style="flex:1">
+                  <label style="display:block;font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px">Password</label>
+                  <input type="password" placeholder="WiFi password" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:9px;background:var(--panel);color:var(--text);font-size:13px" value="••••••••">
+                </div>
+              </div>
+              <div class="highlight-click" style="display:inline-block">
+                <div style="background:var(--brand);border-radius:8px;padding:11px 20px;font-weight:800;color:#061e1a;font-size:13px;cursor:pointer;text-align:center">Save and Connect</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout warn">
+    <span class="icon">⚠️</span>
+    <div>The device will take about <strong>15-20 seconds</strong> to connect. The TFT screen will show "Connecting..." then "WiFi Connected" with your network name. The AP mode stays active — you can still access the portal.</div>
+  </div>
+</div>
+
+<!-- ─── STEP 9 ─── -->
+<div class="step" id="s9">
+  <div class="step-head">
+    <div class="step-num">9</div>
+    <div class="step-title">Verify the Device is Online</div>
+  </div>
+  <p class="step-desc">After connecting to your home WiFi, go back to the Dashboard. You should now see <strong>WiFi: Online</strong> and <strong>Database: Ready</strong> — meaning the device is fully connected and can sync with the online database.</p>
+
+  <div class="visual">
+    <div class="seq-screens">
+      <div class="seq-screen">
+        <div class="seq-label">Dashboard — Online</div>
+        <div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;display:grid;gap:8px;width:100%">
+          <div style="background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px">
+            <div style="font-size:10px;color:var(--muted)">WiFi</div>
+            <div style="font-size:18px;font-weight:800;color:var(--good)">Online</div>
+          </div>
+          <div style="background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px">
+            <div style="font-size:10px;color:var(--muted)">Database API</div>
+            <div style="font-size:18px;font-weight:800;color:var(--good)">Ready</div>
+          </div>
+          <div style="background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px">
+            <div style="font-size:10px;color:var(--muted)">Device Time</div>
+            <div style="font-size:18px;font-weight:800">01:32 PM</div>
+          </div>
+        </div>
+      </div>
+      <div class="seq-arrow">+</div>
+      <div class="seq-screen">
+        <div class="seq-label">TFT Screen — Online</div>
+        <div class="mini-tft" style="justify-content:flex-start">
+          <div style="padding:4px 10px;border:1.5px solid var(--good);border-radius:4px;margin:6px 8px;text-align:center">
+            <div style="color:var(--good);font-size:11px;font-weight:800">FRANCIS KEY</div>
+          </div>
+          <div style="text-align:center;margin-top:6px">
+            <div class="tft-line white" style="font-size:10px">July 21, 2026</div>
+          </div>
+          <div style="text-align:center;margin-top:4px">
+            <div class="tft-line huge" style="font-size:26px">01:32 PM</div>
+          </div>
+          <div style="text-align:center;margin-top:2px">
+            <div class="tft-line grey" style="font-size:10px">Monday</div>
+          </div>
+          <div class="tft-footer">
+            <span class="ok">WiFi:OK</span>
+            <span class="ok">DB:OK</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout tip">
+    <span class="icon">✅</span>
+    <div><strong>WiFi:OK</strong> + <strong>DB:OK</strong> = Device is fully ready! The device will auto-sync the time from the internet and download the student list from the database.</div>
+  </div>
+</div>
+
+<!-- ─── STEP 10 ─── -->
+<div class="step" id="s10">
+  <div class="step-head">
+    <div class="step-num">10</div>
+    <div class="step-title">Register a Student — Select Student</div>
+  </div>
+  <p class="step-desc">Click <strong>"Register User"</strong> in the sidebar. Search for a student by ID or name. Click on the student you want to register, then click the <strong>"Register"</strong> button in the popup.</p>
+
+  <div class="visual">
+    <div class="browser">
+      <div class="browser-bar">
+        <div class="browser-dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+        <div class="browser-url"><span style="color:var(--muted)">🔒</span><span>192.168.4.1</span></div>
+      </div>
+      <div style="background:var(--bg)">
+        <div class="app-mock" style="border:none;border-radius:0;min-height:360px">
+          <div class="app-sidebar">
+            <div class="brand-m"><div class="mk">FK</div><b>FRANCIS KEY</b></div>
+            <div class="nav-item">📊 Dashboard</div>
+            <div class="nav-item">📋 Attendance</div>
+            <div class="nav-item active">👤 Register User</div>
+            <div class="nav-item">👥 Users</div>
+            <div class="nav-item">📶 WiFi Settings</div>
+          </div>
+          <div class="app-main">
+            <div class="app-topbar"><div><div class="title">Select Student</div></div></div>
+            <div style="margin-bottom:10px;display:flex;gap:6px">
+              <input placeholder="Search by ID or name..." style="flex:1;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel);color:var(--text);font-size:12px" value="Juan">
+              <div style="background:var(--brand);border-radius:8px;padding:8px 14px;font-weight:700;color:#061e1a;font-size:12px;cursor:pointer">Search</div>
+            </div>
+            <div style="display:grid;gap:6px">
+              <div class="highlight-pulse" style="background:var(--panel);border:1.5px solid var(--brand);border-radius:8px;padding:10px;cursor:pointer">
+                <div style="font-size:13px;font-weight:700">2024-001 <span style="color:var(--text);font-weight:400">Juan Dela Cruz</span></div>
+                <div style="font-size:11px;color:var(--muted)">College of Engineering</div>
+              </div>
+              <div style="background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px">
+                <div style="font-size:13px;font-weight:700">2024-015 <span style="color:var(--text);font-weight:400">Juan Santos</span></div>
+                <div style="font-size:11px;color:var(--muted)">College of Computer Studies</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <span class="icon">📋</span>
+    <div>After clicking a student, a confirmation modal appears showing their details. Click <strong>"Register"</strong> to begin the fingerprint + RFID registration process on the device itself.</div>
+  </div>
+</div>
+
+<!-- ─── STEP 11 ─── -->
+<div class="step" id="s11">
+  <div class="step-head">
+    <div class="step-num">11</div>
+    <div class="step-title">Register Fingerprint — Scan 3 Times</div>
+  </div>
+  <p class="step-desc">The device TFT will prompt the student to place their finger on the fingerprint sensor. They must scan the <strong>same finger 3 times</strong> for registration. The blue LED will flash with each successful scan.</p>
+
+  <div class="visual">
+    <div class="seq-screens">
+      <div class="seq-screen">
+        <div class="seq-label">① Scan 1 — Place finger</div>
+        <div class="mini-tft">
+          <div class="tft-header blue">Fingerprint</div>
+          <div class="tft-body">
+            <div class="tft-line white">Please Put Your Finger</div>
+            <div class="tft-line brand" style="margin-top:8px">Scan 1 of 3</div>
+          </div>
+        </div>
+      </div>
+      <div class="seq-arrow">→</div>
+      <div class="seq-screen">
+        <div class="seq-label">② Scan 1 — Accepted ✓</div>
+        <div class="mini-tft">
+          <div class="tft-header blue">Fingerprint</div>
+          <div class="tft-body">
+            <div class="tft-line green">Scan 1 of 3</div>
+            <div class="tft-line green" style="margin-top:2px">Accepted</div>
+            <div class="tft-line grey" style="margin-top:8px">Remove finger</div>
+          </div>
+        </div>
+      </div>
+      <div class="seq-arrow">→</div>
+      <div class="seq-screen">
+        <div class="seq-label">③ Scan 2 — Same finger</div>
+        <div class="mini-tft">
+          <div class="tft-header blue">Fingerprint</div>
+          <div class="tft-body">
+            <div class="tft-line white">Same Finger Again</div>
+            <div class="tft-line brand" style="margin-top:8px">Scan 2 of 3</div>
+          </div>
+        </div>
+      </div>
+      <div class="seq-arrow">→</div>
+      <div class="seq-screen">
+        <div class="seq-label">④ Scan 3 — Verify</div>
+        <div class="mini-tft">
+          <div class="tft-header blue">Fingerprint</div>
+          <div class="tft-body">
+            <div class="tft-line white">Same Finger Again</div>
+            <div class="tft-line brand" style="margin-top:8px">Scan 3 of 3</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="visual" style="margin-top:8px">
+    <div class="finger-vis">
+      <div style="font-size:13px;color:var(--muted);font-weight:600;margin-bottom:4px">Place finger on sensor</div>
+      <div style="display:flex;align-items:flex-end;gap:8px">
+        <div style="font-size:42px">👆</div>
+        <div class="sensor-ring">
+          <div style="width:40px;height:40px;border-radius:50%;background:radial-gradient(circle,#1a3a2a,#0a1a12);display:flex;align-items:center;justify-content:center">
+            <div style="width:16px;height:20px;border-radius:8px;background:rgba(15,159,148,.2);border:1px solid rgba(15,159,148,.3)"></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:4px">
+        <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)">
+          <div style="width:8px;height:8px;border-radius:50%;background:var(--blue);box-shadow:0 0 6px var(--blue)"></div> Blue LED blinks on each scan
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout warn">
+    <span class="icon">⚠️</span>
+    <div><strong>Important:</strong> The student must use the <strong>exact same finger</strong> for all 3 scans. If the prints don't match, they'll see "Fingerprint Mismatch" and must start over. Remove finger completely between each scan.</div>
+  </div>
+</div>
+
+<!-- ─── STEP 12 ─── -->
+<div class="step" id="s12">
+  <div class="step-head">
+    <div class="step-num">12</div>
+    <div class="step-title">Register RFID Card — Scan 2 Times</div>
+  </div>
+  <p class="step-desc">After the fingerprint is registered, the device immediately asks for the RFID card. The student must tap their <strong>same RFID card twice</strong> on the reader. The yellow LED will flash with each scan.</p>
+
+  <div class="visual">
+    <div class="seq-screens">
+      <div class="seq-screen">
+        <div class="seq-label">① Fingerprint OK → RFID next</div>
+        <div class="mini-tft">
+          <div class="tft-header green">Fingerprint</div>
+          <div class="tft-body">
+            <div class="tft-line green">Fingerprint Registered</div>
+            <div class="tft-line white" style="margin-top:4px">Scan ID Card Next</div>
+          </div>
+        </div>
+      </div>
+      <div class="seq-arrow">→</div>
+      <div class="seq-screen">
+        <div class="seq-label">② Scan RFID — 1 of 2</div>
+        <div class="mini-tft">
+          <div class="tft-header yellow">RFID Registration</div>
+          <div class="tft-body">
+            <div class="tft-line white">Please Scan Your ID Card</div>
+            <div class="tft-line brand" style="margin-top:8px">Scan 1 of 2</div>
+          </div>
+        </div>
+      </div>
+      <div class="seq-arrow">→</div>
+      <div class="seq-screen">
+        <div class="seq-label">③ Scan RFID — 2 of 2</div>
+        <div class="mini-tft">
+          <div class="tft-header yellow">RFID Registration</div>
+          <div class="tft-body">
+            <div class="tft-line white">Please Scan Your ID Card</div>
+            <div class="tft-line brand" style="margin-top:8px">Scan 2 of 2</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="visual" style="margin-top:8px">
+    <div class="rfid-vis">
+      <div style="font-size:13px;color:var(--muted);font-weight:600;margin-bottom:4px">Tap RFID card on reader</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="nfc-ring">NFC</div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+          <div class="card-icon">🪪</div>
+          <div style="font-size:10px;color:var(--muted)">RFID Card</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:4px">
+        <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)">
+          <div style="width:8px;height:8px;border-radius:50%;background:var(--warn);box-shadow:0 0 6px var(--warn)"></div> Yellow LED blinks on each scan
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <span class="icon">🪪</span>
+    <div>The student must tap the <strong>same RFID card</strong> both times. If the card IDs don't match, registration fails and the fingerprint template is automatically removed to keep data consistent.</div>
+  </div>
+</div>
+
+<!-- ─── STEP 13 ─── -->
+<div class="step" id="s13">
+  <div class="step-head">
+    <div class="step-num">13</div>
+    <div class="step-title">Registration Complete!</div>
+  </div>
+  <p class="step-desc">After both fingerprint and RFID are successfully registered, the device saves the credentials online (or locally if offline). The screen shows "Registration Complete" and the green LED lights up with a double beep.</p>
+
+  <div class="visual">
+    <div class="seq-screens">
+      <div class="seq-screen" style="min-width:260px;max-width:280px">
+        <div class="seq-label">✅ Success Screen</div>
+        <div class="mini-tft">
+          <div class="tft-header green">Registration Complete</div>
+          <div class="tft-body">
+            <div class="tft-line white">ID: 2024-001</div>
+            <div class="tft-line brand" style="margin-top:4px">Juan Dela Cruz</div>
+            <div class="tft-line green" style="margin-top:8px">Saved</div>
+          </div>
+        </div>
+      </div>
+      <div class="seq-arrow">+</div>
+      <div class="seq-screen" style="min-width:260px;max-width:280px">
+        <div class="seq-label">🔁 Repeat for each student</div>
+        <div style="background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;text-align:center;width:100%">
+          <div style="font-size:32px;margin-bottom:6px">🔄</div>
+          <div style="font-size:14px;font-weight:700;margin-bottom:4px">Register More Students</div>
+          <div style="font-size:12px;color:var(--muted)">Go back to Step 10 and repeat for each student in your class.</div>
+          <div style="margin-top:10px;font-size:20px">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--good);color:#fff;font-weight:800;font-size:12px;margin:0 2px">1</span>
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--good);color:#fff;font-weight:800;font-size:12px;margin:0 2px">2</span>
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--good);color:#fff;font-weight:800;font-size:12px;margin:0 2px">3</span>
+            <span style="color:var(--muted);font-size:12px">...done!</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="visual">
+    <div class="device-body" style="width:280px">
+      <div class="device-label">Device — Ready for Attendance</div>
+      <div class="device-tft" style="justify-content:flex-start">
+        <div style="padding:4px 10px;border:1.5px solid var(--good);border-radius:4px;margin:6px 8px;text-align:center">
+          <div style="color:var(--good);font-size:11px;font-weight:800">FRANCIS KEY</div>
+        </div>
+        <div style="text-align:center;margin-top:6px">
+          <div class="tft-line white" style="font-size:10px">July 21, 2026</div>
+        </div>
+        <div style="text-align:center;margin-top:4px">
+          <div class="tft-line huge" style="font-size:26px">01:35 PM</div>
+        </div>
+        <div style="text-align:center;margin-top:2px">
+          <div class="tft-line grey" style="font-size:10px">Monday</div>
+        </div>
+        <div class="tft-footer">
+          <span class="ok">WiFi:OK</span>
+          <span class="ok">DB:OK</span>
+        </div>
+      </div>
+      <div class="device-leds">
+        <div class="device-led"></div>
+        <div class="device-led"></div>
+        <div class="device-led on-green"></div>
+        <div class="device-led"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <span class="icon">✅</span>
+    <div>The device is now <strong>ready for attendance</strong>. It stays on the home screen showing the current time. Students can walk up and scan their fingerprint + tap their RFID card to record attendance.</div>
+  </div>
+</div>
+
+<!-- ─── STEP 14 ─── -->
+<div class="step" id="s14">
+  <div class="step-head">
+    <div class="step-num">14</div>
+    <div class="step-title">Take Attendance — Scan Fingerprint First</div>
+  </div>
+  <p class="step-desc">When a student wants to clock in, they place their <strong>registered finger</strong> on the fingerprint sensor. The device recognizes them and immediately asks for the RFID card to verify identity.</p>
+
+  <div class="visual">
+    <div class="seq-screens">
+      <div class="seq-screen">
+        <div class="seq-label">① Home — Ready</div>
+        <div class="mini-tft" style="justify-content:flex-start">
+          <div style="padding:4px 10px;border:1.5px solid var(--good);border-radius:4px;margin:6px 8px;text-align:center">
+            <div style="color:var(--good);font-size:11px;font-weight:800">FRANCIS KEY</div>
+          </div>
+          <div style="text-align:center;margin-top:8px">
+            <div class="tft-line huge" style="font-size:26px">01:36 PM</div>
+          </div>
+          <div class="tft-footer">
+            <span class="ok">WiFi:OK</span>
+            <span class="ok">DB:OK</span>
+          </div>
+        </div>
+      </div>
+      <div class="seq-arrow">👆</div>
+      <div class="seq-screen">
+        <div class="seq-label">② Fingerprint recognized</div>
+        <div class="mini-tft">
+          <div class="tft-header blue">Attendance</div>
+          <div class="tft-body">
+            <div class="tft-line white">Please Tap ID Card</div>
+            <div class="tft-line brand" style="margin-top:6px">Verifying...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="visual" style="margin-top:8px">
+    <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;justify-content:center">
+      <div class="finger-vis">
+        <div style="font-size:42px">👆</div>
+        <div class="sensor-ring">
+          <div style="width:36px;height:36px;border-radius:50%;background:radial-gradient(circle,#1a3a2a,#0a1a12);display:flex;align-items:center;justify-content:center">
+            <div style="width:14px;height:18px;border-radius:7px;background:rgba(15,159,148,.2);border:1px solid rgba(15,159,148,.3)"></div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--brand);font-weight:700">Step 1: Finger</div>
+      </div>
+      <div style="font-size:28px;color:var(--muted)">→</div>
+      <div class="rfid-vis">
+        <div class="nfc-ring" style="width:60px;height:60px">
+          <div style="font-size:9px">NFC</div>
+        </div>
+        <div class="card-icon" style="width:64px;height:40px;font-size:20px">🪪</div>
+        <div style="font-size:12px;color:var(--warn);font-weight:700">Step 2: Card</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <span class="icon">🔑</span>
+    <div><strong>Attendance requires BOTH fingerprint AND RFID card</strong> — this prevents fraud. The student must first scan their finger, then immediately tap their ID card within 15 seconds.</div>
+  </div>
+</div>
+
+<!-- ─── STEP 15 ─── -->
+<div class="step" id="s15">
+  <div class="step-head">
+    <div class="step-num">15</div>
+    <div class="step-title">Take Attendance — Tap RFID Card</div>
+  </div>
+  <p class="step-desc">After the fingerprint is recognized, the student taps their RFID card. The device verifies both match the same student. On success, the green LED flashes and a double beep plays. The status shows <strong>IN</strong> (first scan) or <strong>OUT</strong> (subsequent scan).</p>
+
+  <div class="visual">
+    <div class="seq-screens">
+      <div class="seq-screen" style="min-width:220px;max-width:240px">
+        <div class="seq-label">✅ Attendance IN — Success</div>
+        <div class="mini-tft">
+          <div class="tft-header green">Attendance Success</div>
+          <div class="tft-body">
+            <div class="tft-line white">ID: 2024-001</div>
+            <div class="tft-line brand" style="margin-top:4px">Juan Dela Cruz</div>
+            <div class="tft-line green" style="margin-top:8px;font-weight:700">Status: IN</div>
+          </div>
+        </div>
+      </div>
+      <div class="seq-arrow" style="flex-direction:column;align-items:center;gap:2px">
+        <div style="font-size:11px;color:var(--muted);white-space:nowrap">Later that day...</div>
+        <div style="font-size:24px;color:var(--brand)">→</div>
+      </div>
+      <div class="seq-screen" style="min-width:220px;max-width:240px">
+        <div class="seq-label">✅ Attendance OUT — Clock Out</div>
+        <div class="mini-tft">
+          <div class="tft-header green">Attendance Success</div>
+          <div class="tft-body">
+            <div class="tft-line white">ID: 2024-001</div>
+            <div class="tft-line brand" style="margin-top:4px">Juan Dela Cruz</div>
+            <div class="tft-line green" style="margin-top:8px;font-weight:700">Status: OUT</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <span class="icon">🕐</span>
+    <div><strong>IN vs OUT Logic:</strong> The first scan of the day records <strong>IN</strong>. To clock out, the student scans again after the configured delay period (default: 1 minute). The system automatically detects and records <strong>OUT</strong>.</div>
+  </div>
+
+  <div class="callout warn">
+    <span class="icon">⏱️</span>
+    <div><strong>Too Soon Error:</strong> If a student tries to clock out before the delay period has passed, they'll see "Try Again in Xm Ys" — they need to wait before the second scan is accepted.</div>
+  </div>
+</div>
+
+<!-- ─── STEP 16 ─── -->
+<div class="step" id="s16">
+  <div class="step-head">
+    <div class="step-num">16</div>
+    <div class="step-title">View Attendance Logs</div>
+  </div>
+  <p class="step-desc">Click <strong>"Attendance"</strong> in the sidebar to view all locally recorded attendance. The table shows date, time, student ID, name, and status (IN/OUT).</p>
+
+  <div class="visual">
+    <div class="browser">
+      <div class="browser-bar">
+        <div class="browser-dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+        <div class="browser-url"><span style="color:var(--muted)">🔒</span><span>192.168.4.1</span></div>
+      </div>
+      <div style="background:var(--bg)">
+        <div class="app-mock" style="border:none;border-radius:0;min-height:320px">
+          <div class="app-sidebar">
+            <div class="brand-m"><div class="mk">FK</div><b>FRANCIS KEY</b></div>
+            <div class="nav-item">📊 Dashboard</div>
+            <div class="nav-item active">📋 Attendance</div>
+            <div class="nav-item">👤 Register User</div>
+            <div class="nav-item">👥 Users</div>
+          </div>
+          <div class="app-main">
+            <div class="app-topbar"><div><div class="title">Recent Attendance</div></div></div>
+            <div style="border:1px solid var(--line);border-radius:8px;overflow:hidden">
+              <table class="table-mock">
+                <thead><tr><th>Date</th><th>Time</th><th>ID</th><th>Name</th><th>Status</th></tr></thead>
+                <tbody>
+                  <tr><td>Jul 21, 2026</td><td>08:02 AM</td><td>2024-001</td><td>Juan Dela Cruz</td><td><span class="badge in">IN</span></td></tr>
+                  <tr><td>Jul 21, 2026</td><td>08:03 AM</td><td>2024-002</td><td>Maria Reyes</td><td><span class="badge in">IN</span></td></tr>
+                  <tr><td>Jul 21, 2026</td><td>08:04 AM</td><td>2024-003</td><td>Pedro Santos</td><td><span class="badge in">IN</span></td></tr>
+                  <tr><td>Jul 21, 2026</td><td>05:01 PM</td><td>2024-001</td><td>Juan Dela Cruz</td><td><span class="badge out">OUT</span></td></tr>
+                  <tr><td>Jul 21, 2026</td><td>05:02 PM</td><td>2024-002</td><td>Maria Reyes</td><td><span class="badge out">OUT</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── STEP 17 ─── -->
+<div class="step" id="s17">
+  <div class="step-head">
+    <div class="step-num">17</div>
+    <div class="step-title">Manage Registered Users</div>
+  </div>
+  <p class="step-desc">Click <strong>"Users"</strong> to see all registered students. You can deactivate users (prevents attendance), reactivate them, or delete their credentials (fingerprint + RFID) if needed.</p>
+
+  <div class="visual">
+    <div class="browser">
+      <div class="browser-bar">
+        <div class="browser-dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+        <div class="browser-url"><span style="color:var(--muted)">🔒</span><span>192.168.4.1</span></div>
+      </div>
+      <div style="background:var(--bg)">
+        <div class="app-mock" style="border:none;border-radius:0;min-height:300px">
+          <div class="app-sidebar">
+            <div class="brand-m"><div class="mk">FK</div><b>FRANCIS KEY</b></div>
+            <div class="nav-item">📊 Dashboard</div>
+            <div class="nav-item">📋 Attendance</div>
+            <div class="nav-item">👤 Register User</div>
+            <div class="nav-item active">👥 Users</div>
+          </div>
+          <div class="app-main">
+            <div class="app-topbar"><div><div class="title">Registered Students</div></div></div>
+            <div style="border:1px solid var(--line);border-radius:8px;overflow:hidden">
+              <table class="table-mock">
+                <thead><tr><th>ID</th><th>Name</th><th>Fingerprint</th><th>RFID</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td>2024-001</td><td>Juan Dela Cruz</td><td>1</td><td>04A3B1</td>
+                    <td><span class="badge in">Active</span></td>
+                    <td><select style="background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:3px 6px;font-size:10px"><option>-- Action --</option><option>Deactivate</option><option>Delete Credentials</option></select></td>
+                  </tr>
+                  <tr>
+                    <td>2024-002</td><td>Maria Reyes</td><td>2</td><td>04C7D2</td>
+                    <td><span class="badge in">Active</span></td>
+                    <td><select style="background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:3px 6px;font-size:10px"><option>-- Action --</option><option>Deactivate</option><option>Delete Credentials</option></select></td>
+                  </tr>
+                  <tr>
+                    <td>2024-003</td><td>Pedro Santos</td><td>—</td><td>—</td>
+                    <td><span class="badge" style="background:var(--bad-bg);color:var(--bad)">Inactive</span></td>
+                    <td><select style="background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:3px 6px;font-size:10px"><option>-- Action --</option><option>Activate</option></select></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout warn">
+    <span class="icon">⚠️</span>
+    <div><strong>Deactivate</strong> = user can't clock in/out but credentials are preserved. <strong>Delete Credentials</strong> = fingerprint template is erased from the sensor and RFID is freed — the student slot can be reused for a different student.</div>
+  </div>
+</div>
+
+<!-- ─── STEP 18 ─── -->
+<div class="step" id="s18">
+  <div class="step-head">
+    <div class="step-num">18</div>
+    <div class="step-title">Backup &amp; Restore Settings</div>
+  </div>
+  <p class="step-desc">Click <strong>"Logs"</strong> in the sidebar to access Backup &amp; Restore. You can download device settings, attendance records, and logs. You can also restore settings from a JSON backup file.</p>
+
+  <div class="visual">
+    <div class="browser">
+      <div class="browser-bar">
+        <div class="browser-dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+        <div class="browser-url"><span style="color:var(--muted)">🔒</span><span>192.168.4.1</span></div>
+      </div>
+      <div style="background:var(--bg)">
+        <div class="app-mock" style="border:none;border-radius:0;min-height:320px">
+          <div class="app-sidebar">
+            <div class="brand-m"><div class="mk">FK</div><b>FRANCIS KEY</b></div>
+            <div class="nav-item">📊 Dashboard</div>
+            <div class="nav-item">📋 Attendance</div>
+            <div class="nav-item">👤 Register User</div>
+            <div class="nav-item">👥 Users</div>
+            <div class="nav-item">📝 Logs</div>
+          </div>
+          <div class="app-main">
+            <div class="app-topbar"><div><div class="title">Backup</div></div></div>
+            <div style="display:grid;gap:14px">
+              <div style="background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px">
+                <div style="font-size:15px;font-weight:800;margin-bottom:10px">Backup</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <div style="background:var(--brand);border-radius:8px;padding:9px 14px;font-weight:700;color:#061e1a;font-size:12px;cursor:pointer">Settings</div>
+                  <div style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 14px;font-weight:600;color:var(--text);font-size:12px;cursor:pointer">Attendance</div>
+                  <div style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 14px;font-weight:600;color:var(--text);font-size:12px;cursor:pointer">Users</div>
+                  <div style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 14px;font-weight:600;color:var(--text);font-size:12px;cursor:pointer">Logs</div>
+                </div>
+              </div>
+              <div style="background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px">
+                <div style="font-size:15px;font-weight:800;margin-bottom:10px">Clear All Cache</div>
+                <div style="font-size:12px;color:var(--muted);margin-bottom:10px">⚠ Erases all fingerprint templates and cached data. This cannot be undone.</div>
+                <div style="background:var(--bad);border-radius:8px;padding:9px 14px;font-weight:700;color:#fff;font-size:12px;cursor:pointer;display:inline-block">Clear All Cache</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── STEP 19 ─── -->
+<div class="step" id="s19">
+  <div class="step-head">
+    <div class="step-num">19</div>
+    <div class="step-title">Attendance Rules — OUT Delay</div>
+  </div>
+  <p class="step-desc">Click <strong>"Attendance Rules"</strong> to configure how long a student must wait before they can clock OUT after clocking IN. This prevents accidental immediate OUT scans.</p>
+
+  <div class="visual">
+    <div class="browser">
+      <div class="browser-bar">
+        <div class="browser-dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+        <div class="browser-url"><span style="color:var(--muted)">🔒</span><span>192.168.4.1</span></div>
+      </div>
+      <div style="background:var(--bg)">
+        <div class="app-mock" style="border:none;border-radius:0;min-height:280px">
+          <div class="app-sidebar">
+            <div class="brand-m"><div class="mk">FK</div><b>FRANCIS KEY</b></div>
+            <div class="nav-item">📊 Dashboard</div>
+            <div class="nav-item active">⚙️ Attendance Rules</div>
+            <div class="nav-item">📶 WiFi Settings</div>
+          </div>
+          <div class="app-main">
+            <div class="app-topbar"><div><div class="title">Attendance Rules</div></div></div>
+            <div style="background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;max-width:400px">
+              <div style="font-size:15px;font-weight:800;margin-bottom:12px">Attendance Rules</div>
+              <div style="margin-bottom:12px">
+                <label style="display:block;font-size:12px;color:var(--muted);font-weight:700;margin-bottom:6px">Student OUT Allowed After</label>
+                <select style="width:100%;border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--panel2);color:var(--text);font-size:14px">
+                  <option>1 minute</option>
+                  <option>5 minutes</option>
+                  <option>10 minutes</option>
+                  <option selected>15 minutes</option>
+                  <option>30 minutes</option>
+                  <option>60 minutes</option>
+                </select>
+              </div>
+              <div class="highlight-click" style="display:inline-block">
+                <div style="background:var(--brand);border-radius:8px;padding:11px 24px;font-weight:800;color:#061e1a;font-size:13px;cursor:pointer;text-align:center">Save Rules</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout tip">
+    <span class="icon">💡</span>
+    <div><strong>Recommended:</strong> Set to <code>1 minute</code> for quick testing, or <code>15 minutes</code> for real classroom use. Available options: 1, 5, 10, 15, 30, or 60 minutes.</div>
+  </div>
+</div>
+
+<!-- ─── STEP 20 ─── -->
+<div class="step" id="s20">
+  <div class="step-head">
+    <div class="step-num">20</div>
+    <div class="step-title">Troubleshooting</div>
+  </div>
+  <p class="step-desc">Common issues and how to fix them.</p>
+
+  <div class="trouble">
+    <h4>❌ Device WiFi won't show up in my phone</h4>
+    <p>Make sure the device is plugged in and the TFT shows "AP Ready". If it shows "WiFi Connected" instead, the device may have auto-connected to a saved network. Press the device reset button or clear WiFi via the admin portal at <code>192.168.4.1</code>.</p>
+  </div>
+
+  <div class="trouble" style="margin-top:12px">
+    <h4>❌ "Fingerprint Not Recognized" during attendance</h4>
+    <p>The student's finger may not be registered, or their fingerprint has changed (dirty/wet finger). Make sure the finger is clean and dry. If persistent, re-register the student from "Register User".</p>
+  </div>
+
+  <div class="trouble" style="margin-top:12px">
+    <h4>❌ "Already Registered" during fingerprint enrollment</h4>
+    <p>This fingerprint is already assigned to another student. You must first delete that student's credentials from the "Users" page before re-enrolling them.</p>
+  </div>
+
+  <div class="trouble" style="margin-top:12px">
+    <h4>❌ "Fingerprint Mismatch" during enrollment</h4>
+    <p>The student used different fingers for the 3 scans. All 3 scans must be the <strong>same finger</strong>. Start the registration over and use the same finger each time.</p>
+  </div>
+
+  <div class="trouble" style="margin-top:12px">
+    <h4>❌ "RFID Mismatch" during attendance</h4>
+    <p>The fingerprint and RFID card don't belong to the same student. The device matched the fingerprint to Student A, but the RFID card belongs to Student B. This is a security check — both must match.</p>
+  </div>
+
+  <div class="trouble" style="margin-top:12px">
+    <h4>❌ Dashboard shows "DB:OFF" (Database Offline)</h4>
+    <p>The device cannot reach the online database server. Check: (1) Is the device connected to WiFi? Go to WiFi Settings. (2) Is the server running? (3) Try clicking "Scan Networks" and reconnecting.</p>
+  </div>
+
+  <div class="trouble" style="margin-top:12px">
+    <h4>❌ "Try Again in Xm Ys" error during attendance</h4>
+    <p>The student is trying to clock OUT too soon after clocking IN. They must wait for the configured delay period (check Attendance Rules). For example, if set to 15 minutes, they must wait 15 minutes before OUT is accepted.</p>
+  </div>
+
+  <div class="trouble" style="margin-top:12px">
+    <h4>❌ Device shows "Offline Mode" on the TFT screen</h4>
+    <p>WiFi is not connected. The device still works in AP mode — you can access the admin portal, register students, and take attendance (saved locally). Once WiFi is restored, unsent attendance records will auto-sync to the online database.</p>
+  </div>
+
+  <div class="trouble" style="margin-top:12px">
+    <h4>❌ Can't access 192.168.4.1</h4>
+    <p>Make sure you're connected to the <code>FRANCIS_KEY</code> WiFi network. Do not use a VPN. Try opening a new browser tab. If using a computer, make sure you're not also connected to another WiFi network simultaneously.</p>
+  </div>
+
+  <div class="trouble" style="margin-top:12px">
+    <h4>❌ "ID Card Already Registered" during RFID enrollment</h4>
+    <p>This RFID card is already assigned to another student. Delete that student's credentials from "Users" first, then re-register the card to the new student.</p>
+  </div>
+</div>
+
+</div><!-- end .steps -->
+
+<!-- ═══════════════════════════════════════════
+     FOOTER
+     ═══════════════════════════════════════════ -->
+<footer style="text-align:center;padding:40px 20px;border-top:1px solid var(--line);color:var(--muted);font-size:13px">
+  <div style="font-weight:700;color:var(--brand);margin-bottom:4px">FRANCIS KEY Attendance Device</div>
+  <div>Complete Setup &amp; Usage Guide</div>
+  <div style="margin-top:8px;font-size:11px">Default credentials: WiFi <code style="background:rgba(255,255,255,.08);padding:1px 5px;border-radius:3px;font-family:monospace">12345678</code> · Admin <code style="background:rgba(255,255,255,.08);padding:1px 5px;border-radius:3px;font-family:monospace">admin / francis123</code></div>
+</footer>
+
+<!-- Back to Top -->
+<button class="btt" id="btt" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+
+<script>
+// Progress bar
+window.addEventListener('scroll', () => {
+  const h = document.documentElement;
+  const pct = (h.scrollTop / (h.scrollHeight - h.clientHeight)) * 100;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('btt').classList.toggle('show', h.scrollTop > 600);
+});
+</script>
+</body>
+</html>
