@@ -549,7 +549,7 @@ function AdminDashboardPage() {
         id: schedule.id,
         subjectCode: schedule.subjectCode,
         subjectName: schedule.subjectName,
-        section: schedule.sectionName,
+        section: schedule.section,
         yearLevel: schedule.yearLevel,
         startTime: schedule.startTime,
         endTime: schedule.endTime,
