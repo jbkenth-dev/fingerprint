@@ -29,6 +29,18 @@ const emptyClassSubjectForm = {
   yearLevel: "",
   semester: "",
 };
+const emptyAdminForm = {
+  idNumber: "",
+  username: "",
+  firstName: "",
+  middleName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  password: "",
+  confirmPassword: "",
+  department: "",
+};
 const yearLevelOrder = {
   "1st Year": 1,
   "2nd Year": 2,
@@ -58,6 +70,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/signin" element={<SignInPage />} />
+        <Route path="/admin-create-account" element={<AdminCreateAccountPage />} />
         <Route path="/admin" element={<ProtectedLayout allowedRole="admin" />}>
           <Route index element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboardPage />} />
@@ -219,6 +232,241 @@ function SignInPage() {
               {submitting ? "Signing In..." : "Sign In"}
             </button>
           </form>
+        </section>
+      </div>
+      <FeedbackModal
+        message={feedback.message}
+        tone={feedback.tone}
+        onClose={() => setFeedback((prev) => ({ ...prev, message: "" }))}
+      />
+    </main>
+  );
+}
+
+function AdminCreateAccountPage() {
+  const { users } = useAuth();
+  const navigate = useNavigate();
+  const [unlocked, setUnlocked] = React.useState(false);
+  const [setupPassword, setSetupPassword] = React.useState("");
+  const [setupError, setSetupError] = React.useState("");
+  const [form, setForm] = React.useState(emptyAdminForm);
+  const [feedback, setFeedback] = React.useState({ message: "", tone: "success" });
+  const [saving, setSaving] = React.useState(false);
+
+  const setupEnvPassword = import.meta.env.VITE_ADMIN_SETUP_PASSWORD ?? "";
+  const setupEnvConfigured = setupEnvPassword !== "";
+
+  const handleUnlock = (event) => {
+    event.preventDefault();
+    if (!setupEnvConfigured) {
+      setSetupError(
+        "The admin setup password is not configured. Add VITE_ADMIN_SETUP_PASSWORD to your .env / Vercel environment and restart the dev server.",
+      );
+      return;
+    }
+    if (setupPassword === setupEnvPassword) {
+      setUnlocked(true);
+      setSetupError("");
+    } else {
+      setSetupError("Incorrect setup password. Please try again.");
+    }
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setFeedback({ message: "", tone: "success" });
+
+    const payload = {
+      role: "admin",
+      status: "Active",
+      idNumber: form.idNumber,
+      username: form.username,
+      firstName: form.firstName,
+      middleName: form.middleName,
+      lastName: form.lastName,
+      email: form.email,
+      phone: form.phone,
+      password: form.password,
+      confirmPassword: form.confirmPassword,
+      department: form.department,
+    };
+
+    const validationError = validateNewUserAccount(payload, users);
+    if (validationError) {
+      setFeedback({ message: validationError, tone: "error" });
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await apiFetch("/create-admin.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ setupPassword, ...payload }),
+      });
+      navigate("/admin/account");
+    } catch (error) {
+      setFeedback({ message: error.message || "Failed to create admin account.", tone: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resetForm = () => {
+    setForm(emptyAdminForm);
+    setSetupPassword("");
+  };
+
+  return (
+    <main className="app-shell min-h-dvh">
+      <div className="relative flex min-h-dvh items-center justify-center px-4 py-6 sm:px-6">
+        <section className="animate-fade-up w-full max-w-3xl">
+          {unlocked ? (
+            <div className="space-y-4">
+              <HeaderBlock
+                title="Create Admin Account"
+                description="Create a new administrator account. It will be active immediately and can sign in at the Sign In page with the Administrator role."
+                rightContent={(
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetForm();
+                      setUnlocked(false);
+                    }}
+                    className="btn btn-secondary whitespace-nowrap"
+                  >
+                    Lock Page
+                  </button>
+                )}
+              />
+              <FormCard title="Admin Account Details">
+                <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
+                  <Field
+                    label="ID Number"
+                    value={form.idNumber}
+                    onChange={(value) => setForm((prev) => ({ ...prev, idNumber: value }))}
+                    placeholder="e.g. ADM-0002"
+                    required
+                  />
+                  <Field
+                    label="Username"
+                    value={form.username}
+                    onChange={(value) => setForm((prev) => ({ ...prev, username: value }))}
+                    placeholder="At least 6 characters"
+                    required
+                  />
+                  <Field
+                    label="First Name"
+                    value={form.firstName}
+                    onChange={(value) => setForm((prev) => ({ ...prev, firstName: value }))}
+                    placeholder="Enter first name"
+                    required
+                  />
+                  <Field
+                    label="Middle Name"
+                    value={form.middleName}
+                    onChange={(value) => setForm((prev) => ({ ...prev, middleName: value }))}
+                    placeholder="Optional"
+                  />
+                  <Field
+                    label="Last Name"
+                    value={form.lastName}
+                    onChange={(value) => setForm((prev) => ({ ...prev, lastName: value }))}
+                    placeholder="Enter last name"
+                    required
+                  />
+                  <Field
+                    label="Email"
+                    value={form.email}
+                    onChange={(value) => setForm((prev) => ({ ...prev, email: value }))}
+                    placeholder="name@franciskey.local"
+                    type="email"
+                    required
+                  />
+                  <Field
+                    label="Phone"
+                    value={form.phone}
+                    onChange={(value) => setForm((prev) => ({ ...prev, phone: value }))}
+                    placeholder="09xxxxxxxxx"
+                    required
+                  />
+                  <Field
+                    label="Department"
+                    value={form.department}
+                    onChange={(value) => setForm((prev) => ({ ...prev, department: value }))}
+                    placeholder="e.g. System Administration"
+                    required
+                  />
+                  <Field
+                    label="Password"
+                    value={form.password}
+                    onChange={(value) => setForm((prev) => ({ ...prev, password: value }))}
+                    placeholder="At least 6 characters"
+                    type="password"
+                    allowVisibilityToggle
+                    required
+                  />
+                  <Field
+                    label="Confirm Password"
+                    value={form.confirmPassword}
+                    onChange={(value) => setForm((prev) => ({ ...prev, confirmPassword: value }))}
+                    placeholder="Re-enter password"
+                    type="password"
+                    allowVisibilityToggle
+                    required
+                  />
+                  <div className="flex flex-wrap gap-3 md:col-span-2">
+                    <button type="submit" disabled={saving} className="btn btn-primary">
+                      {saving ? "Creating..." : "Create Admin Account"}
+                    </button>
+                    <button type="button" onClick={() => navigate("/")} className="btn btn-secondary">
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </FormCard>
+            </div>
+          ) : (
+            <section className="signin-card px-6 pb-7 pt-8 sm:px-8 sm:pb-8 sm:pt-10">
+              <div className="flex justify-center">
+                <img
+                  src="/sfcg-logo.jpeg"
+                  alt="Saint Francis College logo"
+                  className="signin-logo h-18 w-18 rounded-full object-cover sm:h-20 sm:w-20"
+                />
+              </div>
+
+              <h1 className="mt-6 text-center text-2xl font-semibold text-gray-800 sm:text-[1.75rem]">Admin Account Setup</h1>
+              <p className="mt-2 text-center text-sm text-gray-500">Enter the setup password to create an administrator account.</p>
+
+              <form onSubmit={handleUnlock} className="mt-8 space-y-5">
+                <Field
+                  label="Setup Password"
+                  value={setupPassword}
+                  onChange={setSetupPassword}
+                  placeholder="Enter setup password"
+                  type="password"
+                  allowVisibilityToggle
+                  icon={LockKeyhole}
+                  variant="signin"
+                />
+                {setupError ? <div className="alert alert-error text-sm">{setupError}</div> : null}
+                <button type="submit" className="signin-submit">
+                  Unlock
+                </button>
+              </form>
+
+              <div className="mt-5 text-center">
+                <button
+                  type="button"
+                  onClick={() => navigate("/")}
+                  className="text-sm font-medium text-green-600 transition hover:text-green-700"
+                >
+                  ← Back to home
+                </button>
+              </div>
+            </section>
+          )}
         </section>
       </div>
       <FeedbackModal
