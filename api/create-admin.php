@@ -5,7 +5,7 @@
  * Unlike users.php (which requires an authenticated admin session), this
  * endpoint is the bootstrap path used by the standalone /admin-create-account
  * page. Access is gated by a setup password configured in the environment
- * (ADMIN_SETUP_PASSWORD in the project .env / Awardspace / Vercel env vars).
+ * (VITE_ADMIN_SETUP_PASSWORD in the project .env / Awardspace / Vercel env vars).
  *
  * Request body (JSON):
  *   {
@@ -36,10 +36,18 @@ if (!is_array($input)) {
     exit;
 }
 
-// Verify the setup password from the environment.
+// Verify the setup password from the environment. The frontend gate reads the
+// same VITE_ADMIN_SETUP_PASSWORD value, so a single variable stays in sync on
+// both sides (db.php loads it from .env; on Awardspace it comes from the
+// hosting control panel / server environment).
 $setupPassword = (string) ($input['setupPassword'] ?? '');
-$expectedPassword = (string) (getenv('ADMIN_SETUP_PASSWORD') ?: '');
-if ($expectedPassword === '' || $setupPassword === '' || !hash_equals($expectedPassword, $setupPassword)) {
+$expectedPassword = (string) (getenv('VITE_ADMIN_SETUP_PASSWORD') ?: '');
+if ($expectedPassword === '') {
+    http_response_code(500);
+    echo json_encode(["error" => "Admin setup password is not configured on this server. Set VITE_ADMIN_SETUP_PASSWORD in your environment."]);
+    exit;
+}
+if ($setupPassword === '' || !hash_equals($expectedPassword, $setupPassword)) {
     http_response_code(401);
     echo json_encode(["error" => "Invalid or missing setup password."]);
     exit;
