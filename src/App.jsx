@@ -1855,7 +1855,7 @@ function StudentDashboardPage() {
                     {onTimeWindow && (
                       <p className="mt-3 flex items-start gap-1.5 border-t border-gray-100 pt-3 text-xs leading-relaxed text-gray-400">
                         <Info size={13} className="mt-0.5 shrink-0 text-gray-300" />
-                        Please check in between {formatTime(onTimeWindow.start)} and {formatTime(onTimeWindow.end)} to be marked Present — otherwise you'll be marked Late or Absent.
+                        Please check in between {formatTime(onTimeWindow.start)} to {formatTime(onTimeWindow.end)} to be marked Present, otherwise you'll be marked Late or Absent.
                       </p>
                     )}
                   </div>
