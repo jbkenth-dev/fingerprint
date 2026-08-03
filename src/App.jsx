@@ -1818,11 +1818,9 @@ function StudentDashboardPage() {
                       </span>
                     </div>
 
-                    <div className="mt-2 text-xs text-gray-400">
-                      {entry.facultyName ? `Faculty: ${entry.facultyName}` : ""}
-                      {entry.facultyName && entry.semester ? " · " : ""}
-                      {entry.semester || ""}
-                    </div>
+                    {entry.facultyName ? (
+                      <div className="mt-2 text-xs text-gray-400">Instructor: {entry.facultyName}</div>
+                    ) : null}
 
                     {attendanceError ? (
                       <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
