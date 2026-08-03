@@ -1638,17 +1638,13 @@ function StudentDashboardPage() {
 
   const todayDayName = React.useMemo(() => getManilaDayName(), []);
 
-  const groupedByDay = React.useMemo(
+  // Daily view: only today's classes — never other days of the week.
+  const todaysSchedule = React.useMemo(
     () =>
-      scheduleDayOptions
-        .map((day) => ({
-          day,
-          entries: mySchedule
-            .filter((row) => Array.isArray(row.days) && row.days.includes(day))
-            .sort((a, b) => (timeToMinutes(a.startTime) ?? 0) - (timeToMinutes(b.startTime) ?? 0)),
-        }))
-        .filter((group) => group.entries.length > 0),
-    [mySchedule],
+      mySchedule
+        .filter((row) => Array.isArray(row.days) && row.days.includes(todayDayName))
+        .sort((a, b) => (timeToMinutes(a.startTime) ?? 0) - (timeToMinutes(b.startTime) ?? 0)),
+    [mySchedule, todayDayName],
   );
 
   return (
@@ -1673,11 +1669,11 @@ function StudentDashboardPage() {
         <article className="card-elevated p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-gray-800">Subject Schedule</h2>
+              <h2 className="text-lg font-semibold text-gray-800">Today's Schedule</h2>
               <p className="mt-1 text-sm text-gray-500">
                 {parsedSection
-                  ? `${currentUser?.department ?? "Your section"} · ${parsedSection.yearLevel} · Section ${parsedSection.section}`
-                  : "Your weekly class schedule"}
+                  ? `${todayDayName} · ${currentUser?.department ?? "Your section"} · ${parsedSection.yearLevel} · Section ${parsedSection.section}`
+                  : `${todayDayName} · Your daily class schedule`}
               </p>
             </div>
             {!loading && (
@@ -1713,37 +1709,27 @@ function StudentDashboardPage() {
               We couldn't detect a class section on your account. Ask an administrator to set your section (e.g. BSIT 3A)
               on your profile.
             </div>
-          ) : groupedByDay.length === 0 ? (
+          ) : todaysSchedule.length === 0 ? (
             <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
-              No classes scheduled for your section yet.
+              No classes scheduled for {todayDayName} — enjoy your day off!
             </div>
           ) : (
-            <div className="mt-5 grid gap-4 lg:grid-cols-2">
-              {groupedByDay.map((group) => (
-                <article key={group.day} className="rounded-xl border border-gray-200 bg-white p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-sm font-semibold text-gray-800">{group.day}</h3>
-                    {group.day === todayDayName ? <span className="badge badge-green">Today</span> : null}
+            <div className="mt-5 space-y-3">
+              {todaysSchedule.map((entry) => (
+                <div key={entry.id} className="rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-gray-800">{entry.subjectCode}</span>
+                    <span className="text-xs font-medium text-gray-500">
+                      {formatTime(entry.startTime)} – {formatTime(entry.endTime)}
+                    </span>
                   </div>
-                  <div className="mt-3 space-y-3">
-                    {group.entries.map((entry) => (
-                      <div key={entry.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="text-sm font-semibold text-gray-800">{entry.subjectCode}</span>
-                          <span className="text-xs font-medium text-gray-500">
-                            {formatTime(entry.startTime)} – {formatTime(entry.endTime)}
-                          </span>
-                        </div>
-                        <div className="mt-1 text-sm text-gray-600">{entry.subjectName}</div>
-                        <div className="mt-1 text-xs text-gray-400">
-                          {entry.facultyName ? `Faculty: ${entry.facultyName}` : ""}
-                          {entry.facultyName && entry.semester ? " · " : ""}
-                          {entry.semester || ""}
-                        </div>
-                      </div>
-                    ))}
+                  <div className="mt-1 text-sm text-gray-600">{entry.subjectName}</div>
+                  <div className="mt-1 text-xs text-gray-400">
+                    {entry.facultyName ? `Faculty: ${entry.facultyName}` : ""}
+                    {entry.facultyName && entry.semester ? " · " : ""}
+                    {entry.semester || ""}
                   </div>
-                </article>
+                </div>
               ))}
             </div>
           )}
