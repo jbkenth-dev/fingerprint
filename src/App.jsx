@@ -1638,11 +1638,6 @@ function StudentDashboardPage() {
 
   const parsedSection = React.useMemo(() => parseStudentDept(currentUser?.department), [currentUser?.department]);
 
-  const fullName = React.useMemo(
-    () => [currentUser?.firstName, currentUser?.middleName, currentUser?.lastName].filter(Boolean).join(" "),
-    [currentUser],
-  );
-
   const loadSchedule = React.useCallback(async () => {
     setLoading(true);
     setError("");
@@ -1743,18 +1738,11 @@ function StudentDashboardPage() {
   return (
     <div className="animate-fade-up space-y-4">
       {/* Big real-time digital clock */}
-      <section className="hero-card overflow-hidden p-6 text-center sm:p-10">
-        <div className="text-xs font-medium uppercase tracking-[0.3em] text-white/60">Francis Key · Real-Time Clock</div>
-        <div className="mt-4 font-mono text-6xl font-bold leading-none text-white tabular-nums sm:text-8xl">
+      <section className="hero-card overflow-hidden p-5 text-center sm:p-8">
+        <div className="font-mono text-5xl font-bold leading-none text-white tabular-nums sm:text-7xl">
           {clock.time}
         </div>
-        <div className="mt-4 text-sm text-white/70 sm:text-base">{clock.date} · Asia/Manila (PHT)</div>
-        {fullName ? (
-          <div className="mt-5 text-xs text-white/60">
-            Signed in as {fullName}
-            {currentUser?.department ? ` · ${currentUser.department}` : ""}
-          </div>
-        ) : null}
+        <div className="mt-3 text-sm text-white/70 sm:text-base">{clock.date}</div>
       </section>
 
       {/* Subject schedule */}
