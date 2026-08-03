@@ -96,7 +96,7 @@ export default function App() {
         </Route>
         <Route path="/student" element={<ProtectedLayout allowedRole="student" />}>
           <Route index element={<Navigate to="/student/dashboard" replace />} />
-          <Route path="dashboard" element={<RolePanel pageKey="dashboard" role="student" />} />
+          <Route path="dashboard" element={<StudentDashboardPage />} />
           <Route path="attendance" element={<RolePanel pageKey="attendance" role="student" />} />
           <Route path="account" element={<SelfAccountPage role="student" />} />
         </Route>
@@ -1557,6 +1557,198 @@ function RolePanel({ pageKey, role }) {
           </article>
         </section>
       )}
+    </div>
+  );
+}
+
+function StudentDashboardPage() {
+  const { currentUser } = useAuth();
+  const clock = useManilaClock();
+  const [scheduleRows, setScheduleRows] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+
+  const dayNameMap = { 0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday" };
+
+  function getManilaDayName() {
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+    return dayNameMap[now.getDay()] || "";
+  }
+
+  function timeToMinutes(timeStr) {
+    if (!timeStr) return null;
+    const match = String(timeStr).match(/^(\d{1,2}):(\d{2})/);
+    if (!match) return null;
+    return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+  }
+
+  function formatTime(timeStr) {
+    if (!timeStr || !/^\d{2}:\d{2}/.test(timeStr)) return "—";
+    const [h, m] = timeStr.slice(0, 5).split(":").map(Number);
+    return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+  }
+
+  function parseStudentDept(dept) {
+    if (!dept) return null;
+    const yearMap = { 1: "1st Year", 2: "2nd Year", 3: "3rd Year", 4: "4th Year" };
+    // "1st Year - C" style (digit, anything, dash, letter at end)
+    const fullMatch = dept.match(/(\d)[^-]*-\s*([A-E])$/i);
+    if (fullMatch) {
+      return { yearLevel: yearMap[parseInt(fullMatch[1], 10)] || null, section: fullMatch[2].toUpperCase() };
+    }
+    // "BSIT 3A" style (digit immediately before letter at end)
+    const shortMatch = dept.match(/(\d)\s*([A-E])$/i);
+    if (shortMatch) {
+      return { yearLevel: yearMap[parseInt(shortMatch[1], 10)] || null, section: shortMatch[2].toUpperCase() };
+    }
+    return null;
+  }
+
+  const parsedSection = React.useMemo(() => parseStudentDept(currentUser?.department), [currentUser?.department]);
+
+  const fullName = React.useMemo(
+    () => [currentUser?.firstName, currentUser?.middleName, currentUser?.lastName].filter(Boolean).join(" "),
+    [currentUser],
+  );
+
+  const loadSchedule = React.useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await apiFetch("/class-schedules.php");
+      setScheduleRows(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err.message || "Failed to load schedule.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    loadSchedule();
+  }, [loadSchedule]);
+
+  // Only show schedules that belong to the student's detected section + year level.
+  const mySchedule = React.useMemo(() => {
+    if (!parsedSection) return [];
+    return scheduleRows.filter(
+      (row) => row.yearLevel === parsedSection.yearLevel && row.section === parsedSection.section,
+    );
+  }, [scheduleRows, parsedSection]);
+
+  const todayDayName = React.useMemo(() => getManilaDayName(), []);
+
+  const groupedByDay = React.useMemo(
+    () =>
+      scheduleDayOptions
+        .map((day) => ({
+          day,
+          entries: mySchedule
+            .filter((row) => Array.isArray(row.days) && row.days.includes(day))
+            .sort((a, b) => (timeToMinutes(a.startTime) ?? 0) - (timeToMinutes(b.startTime) ?? 0)),
+        }))
+        .filter((group) => group.entries.length > 0),
+    [mySchedule],
+  );
+
+  return (
+    <div className="animate-fade-up space-y-4">
+      {/* Big real-time digital clock */}
+      <section className="hero-card overflow-hidden p-6 text-center sm:p-10">
+        <div className="text-xs font-medium uppercase tracking-[0.3em] text-white/60">Francis Key · Real-Time Clock</div>
+        <div className="mt-4 font-mono text-6xl font-bold leading-none text-white tabular-nums sm:text-8xl">
+          {clock.time}
+        </div>
+        <div className="mt-4 text-sm text-white/70 sm:text-base">{clock.date} · Asia/Manila (PHT)</div>
+        {fullName ? (
+          <div className="mt-5 text-xs text-white/60">
+            Signed in as {fullName}
+            {currentUser?.department ? ` · ${currentUser.department}` : ""}
+          </div>
+        ) : null}
+      </section>
+
+      {/* Subject schedule */}
+      <section>
+        <article className="card-elevated p-5 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800">Subject Schedule</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                {parsedSection
+                  ? `${currentUser?.department ?? "Your section"} · ${parsedSection.yearLevel} · Section ${parsedSection.section}`
+                  : "Your weekly class schedule"}
+              </p>
+            </div>
+            {!loading && (
+              <button
+                type="button"
+                onClick={loadSchedule}
+                className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white p-2 text-gray-600 shadow-sm transition hover:bg-gray-50 hover:text-gray-800"
+                title="Refresh schedule"
+              >
+                <RefreshCw size={16} />
+              </button>
+            )}
+          </div>
+
+          {error ? (
+            <div className="mt-5 alert alert-error text-center">
+              <p className="text-sm font-semibold">Failed to load your schedule</p>
+              <p className="mt-2 text-xs text-gray-500">{error}</p>
+              <button
+                type="button"
+                onClick={loadSchedule}
+                className="btn btn-secondary mt-4 inline-flex items-center px-4 py-2 text-xs font-semibold"
+              >
+                Retry
+              </button>
+            </div>
+          ) : loading ? (
+            <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
+              Loading your schedule...
+            </div>
+          ) : !parsedSection ? (
+            <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
+              We couldn't detect a class section on your account. Ask an administrator to set your section (e.g. BSIT 3A)
+              on your profile.
+            </div>
+          ) : groupedByDay.length === 0 ? (
+            <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
+              No classes scheduled for your section yet.
+            </div>
+          ) : (
+            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+              {groupedByDay.map((group) => (
+                <article key={group.day} className="rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-gray-800">{group.day}</h3>
+                    {group.day === todayDayName ? <span className="badge badge-green">Today</span> : null}
+                  </div>
+                  <div className="mt-3 space-y-3">
+                    {group.entries.map((entry) => (
+                      <div key={entry.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-sm font-semibold text-gray-800">{entry.subjectCode}</span>
+                          <span className="text-xs font-medium text-gray-500">
+                            {formatTime(entry.startTime)} – {formatTime(entry.endTime)}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-sm text-gray-600">{entry.subjectName}</div>
+                        <div className="mt-1 text-xs text-gray-400">
+                          {entry.facultyName ? `Faculty: ${entry.facultyName}` : ""}
+                          {entry.facultyName && entry.semester ? " · " : ""}
+                          {entry.semester || ""}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </article>
+      </section>
     </div>
   );
 }
