@@ -1754,8 +1754,8 @@ function StudentDashboardPage() {
               <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-gray-500">
                 <CalendarDays size={14} className="text-gray-400" />
                 {parsedSection
-                  ? `${todayDayName} · ${parseInt(parsedSection.yearLevel, 10) || parsedSection.yearLevel}-${parsedSection.section}`
-                  : `${todayDayName} · Your daily class schedule`}
+                  ? `${parseInt(parsedSection.yearLevel, 10) || parsedSection.yearLevel}-${parsedSection.section}`
+                  : "Your daily class schedule"}
               </p>
             </div>
             {!loading && (
