@@ -2,7 +2,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import clsx from "clsx";
-import { Activity, Archive, Asterisk, BadgeCheck, BookOpenText, Building2, CalendarRange, ChevronDown, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, LayoutDashboard, LockKeyhole, LogOut, Menu, RefreshCw, UserCog, UserRound, Users, X } from "lucide-react";
+import { Activity, Archive, Asterisk, BadgeCheck, BookOpenText, Building2, CalendarDays, CalendarRange, ChevronDown, CircleCheck, CircleX, Clock, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, LayoutDashboard, LockKeyhole, LogIn, LogOut, Menu, RefreshCw, TriangleAlert, UserCog, UserRound, Users, X } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { panelContent, roleLabels, roles, routeConfig, sampleAttendance } from "./data/mockData";
 import { useMockLoading } from "./hooks/useMockLoading";
@@ -65,6 +65,26 @@ const sectionOptions = ["A", "B", "C", "D", "E"];
 const yearLevelOptions = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
 const semesterOptions = ["1st Sem", "2nd Sem"];
 const scheduleDayOptions = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const attendanceStatusConfig = {
+  present: {
+    label: "Present",
+    Icon: CircleCheck,
+    pill: "border-green-200 bg-green-100 text-green-700",
+    iconCls: "text-green-600",
+  },
+  late: {
+    label: "Late",
+    Icon: TriangleAlert,
+    pill: "border-amber-200 bg-amber-100 text-amber-700",
+    iconCls: "text-amber-500",
+  },
+  absent: {
+    label: "Absent",
+    Icon: CircleX,
+    pill: "border-red-200 bg-red-100 text-red-700",
+    iconCls: "text-red-500",
+  },
+};
 export default function App() {
   return (
       <Routes>
@@ -1567,12 +1587,20 @@ function StudentDashboardPage() {
   const [scheduleRows, setScheduleRows] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
+  const [attendanceRecords, setAttendanceRecords] = React.useState([]);
+  const [attendanceLoading, setAttendanceLoading] = React.useState(true);
+  const [attendanceError, setAttendanceError] = React.useState("");
 
   const dayNameMap = { 0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday" };
 
   function getManilaDayName() {
     const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
     return dayNameMap[now.getDay()] || "";
+  }
+
+  function getManilaDate() {
+    const d = new Date();
+    return d.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
   }
 
   function timeToMinutes(timeStr) {
@@ -1586,6 +1614,10 @@ function StudentDashboardPage() {
     if (!timeStr || !/^\d{2}:\d{2}/.test(timeStr)) return "—";
     const [h, m] = timeStr.slice(0, 5).split(":").map(Number);
     return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+  }
+
+  function displayTime(value) {
+    return value ? formatTime(value) : "--:--";
   }
 
   function parseStudentDept(dept) {
@@ -1647,6 +1679,61 @@ function StudentDashboardPage() {
     [mySchedule, todayDayName],
   );
 
+  // ── Attendance overview ──
+  const todayDate = React.useMemo(() => getManilaDate(), []);
+
+  const loadAttendance = React.useCallback(async () => {
+    setAttendanceLoading(true);
+    setAttendanceError("");
+    try {
+      const result = await apiFetch(`/attendance.php?date=${todayDate}&limit=500&offset=0`);
+      setAttendanceRecords(Array.isArray(result?.records) ? result.records : []);
+    } catch (err) {
+      setAttendanceRecords([]);
+      setAttendanceError(err.message || "Failed to load attendance.");
+    } finally {
+      setAttendanceLoading(false);
+    }
+  }, [todayDate]);
+
+  React.useEffect(() => {
+    loadAttendance();
+  }, [loadAttendance]);
+
+  // Only the signed-in student's own records for today.
+  const myAttendance = React.useMemo(
+    () => attendanceRecords.filter((r) => r.userId === currentUser?.id),
+    [attendanceRecords, currentUser],
+  );
+
+  // Time In = earliest IN record today; Time Out = latest OUT record today.
+  const timeIn = React.useMemo(() => {
+    const ins = myAttendance.filter((r) => r.status === "IN").map((r) => r.logTime).filter(Boolean);
+    return ins.length ? ins.sort()[0] : null;
+  }, [myAttendance]);
+
+  const timeOut = React.useMemo(() => {
+    const outs = myAttendance.filter((r) => r.status === "OUT").map((r) => r.logTime).filter(Boolean);
+    return outs.length ? outs.sort()[outs.length - 1] : null;
+  }, [myAttendance]);
+
+  // Status mirrors the admin dashboard's rules, using today's first class as the reference:
+  // on time (start ± 15 min) = Present, after that but before the last 15 min = Late, else Absent.
+  const attendanceStatus = React.useMemo(() => {
+    if (!timeIn) return "absent";
+    const inMin = timeToMinutes(timeIn);
+    const firstClass = todaysSchedule[0];
+    if (!firstClass || inMin == null) return "present";
+    const startMin = timeToMinutes(firstClass.startTime);
+    const endMin = timeToMinutes(firstClass.endTime);
+    if (startMin == null || endMin == null) return "present";
+    if (inMin >= startMin - 15 && inMin <= startMin + 15) return "present";
+    if (inMin > startMin + 15 && inMin <= endMin - 15) return "late";
+    return "absent";
+  }, [timeIn, todaysSchedule]);
+
+  const currentStatus = attendanceStatusConfig[attendanceStatus];
+
   return (
     <div className="animate-fade-up space-y-4">
       {/* Big real-time digital clock */}
@@ -1662,6 +1749,95 @@ function StudentDashboardPage() {
             {currentUser?.department ? ` · ${currentUser.department}` : ""}
           </div>
         ) : null}
+      </section>
+
+      {/* Attendance overview */}
+      <section>
+        <article className="card-elevated p-5 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800">Attendance</h2>
+              <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-gray-500">
+                <CalendarDays size={14} className="text-gray-400" />
+                {todayDayName} · {todayDate}
+              </p>
+            </div>
+            {!attendanceLoading && (
+              <button
+                type="button"
+                onClick={loadAttendance}
+                className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white p-2 text-gray-600 shadow-sm transition hover:bg-gray-50 hover:text-gray-800"
+                title="Refresh attendance"
+              >
+                <RefreshCw size={16} />
+              </button>
+            )}
+          </div>
+
+          {attendanceError ? (
+            <div className="mt-5 alert alert-error text-center">
+              <p className="text-sm font-semibold">Failed to load attendance</p>
+              <p className="mt-2 text-xs text-gray-500">{attendanceError}</p>
+              <button
+                type="button"
+                onClick={loadAttendance}
+                className="btn btn-secondary mt-4 inline-flex items-center px-4 py-2 text-xs font-semibold"
+              >
+                Retry
+              </button>
+            </div>
+          ) : attendanceLoading ? (
+            <div className="mt-5 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="skeleton h-24" />
+                <div className="skeleton h-24" />
+              </div>
+              <div className="skeleton h-16" />
+            </div>
+          ) : (
+            <>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    <LogIn size={16} className="text-green-600" />
+                    Time In
+                  </div>
+                  <div className="mt-3 text-2xl font-semibold tabular-nums text-gray-800">
+                    {displayTime(timeIn)}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    <LogOut size={16} className="text-amber-500" />
+                    Time Out
+                  </div>
+                  <div className="mt-3 text-2xl font-semibold tabular-nums text-gray-800">
+                    {displayTime(timeOut)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <div className="flex items-center gap-2">
+                  <Clock size={16} className="text-gray-400" />
+                  <span className="text-sm font-semibold text-gray-700">Attendance Status</span>
+                </div>
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-semibold ${currentStatus.pill}`}
+                >
+                  <currentStatus.Icon size={16} className={currentStatus.iconCls} />
+                  {currentStatus.label}
+                </span>
+              </div>
+
+              {!todaysSchedule.length && (
+                <p className="mt-3 text-center text-xs text-gray-400">
+                  No classes scheduled today — your status reflects today's check-in.
+                </p>
+              )}
+            </>
+          )}
+        </article>
       </section>
 
       {/* Subject schedule */}
