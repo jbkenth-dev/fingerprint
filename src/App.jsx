@@ -2,7 +2,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import clsx from "clsx";
-import { Activity, Archive, Asterisk, BadgeCheck, BookOpenText, Building2, CalendarDays, CalendarRange, ChevronDown, CircleCheck, CircleX, Clock, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, LayoutDashboard, LockKeyhole, LogIn, LogOut, Menu, RefreshCw, TriangleAlert, UserCog, UserRound, Users, X } from "lucide-react";
+import { Activity, Archive, Asterisk, BadgeCheck, BookOpenText, Building2, CalendarDays, CalendarRange, ChevronDown, CircleCheck, CircleX, Clock, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, Info, LayoutDashboard, LockKeyhole, LogIn, LogOut, Menu, RefreshCw, TriangleAlert, UserCog, UserRound, Users, X } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { panelContent, roleLabels, roles, routeConfig, sampleAttendance } from "./data/mockData";
 import { useMockLoading } from "./hooks/useMockLoading";
@@ -1728,6 +1728,18 @@ function StudentDashboardPage() {
     return inMin <= startMin + 15 ? "present" : "late";
   }
 
+  // On-time window for a class: start ± 15 minutes (mirrors getClassStatus).
+  function getOnTimeWindow(entry) {
+    const startMin = timeToMinutes(entry.startTime);
+    if (startMin == null) return null;
+    const toHHMM = (mins) => {
+      const h = ((Math.floor(mins / 60) % 24) + 24) % 24;
+      const m = mins % 60;
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    };
+    return { start: toHHMM(startMin - 15), end: toHHMM(startMin + 15) };
+  }
+
   return (
     <div className="animate-fade-up space-y-4">
       {/* Big real-time digital clock */}
@@ -1801,6 +1813,7 @@ function StudentDashboardPage() {
                 const entryStatus = getClassStatus(entry);
                 const statusCfg = attendanceStatusConfig[entryStatus];
                 const StatusIcon = statusCfg.Icon;
+                const onTimeWindow = getOnTimeWindow(entry);
                 return (
                   <div key={entry.id} className="rounded-xl border border-gray-200 bg-white p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1857,6 +1870,12 @@ function StudentDashboardPage() {
                           </span>
                         </div>
                       </div>
+                    )}
+                    {onTimeWindow && (
+                      <p className="mt-3 flex items-start gap-1.5 border-t border-gray-100 pt-3 text-xs leading-relaxed text-gray-400">
+                        <Info size={13} className="mt-0.5 shrink-0 text-gray-300" />
+                        Please check in between {formatTime(onTimeWindow.start)} and {formatTime(onTimeWindow.end)} to be marked Present — otherwise you'll be marked Late or Absent.
+                      </p>
                     )}
                   </div>
                 );
