@@ -1816,14 +1816,21 @@ function StudentDashboardPage() {
                 const onTimeWindow = getOnTimeWindow(entry);
                 return (
                   <div key={entry.id} className="rounded-xl border border-gray-200 bg-white p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-sm font-semibold text-gray-800">{entry.subjectCode}</span>
-                      <span className="text-xs font-medium text-gray-500">
-                        {formatTime(entry.startTime)} – {formatTime(entry.endTime)}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="text-lg font-bold leading-snug text-gray-800">{entry.subjectName}</h3>
+                        <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-green-50 px-2.5 py-1 text-sm font-bold text-green-700">
+                          <Clock size={15} className="shrink-0" />
+                          {formatTime(entry.startTime)} – {formatTime(entry.endTime)}
+                        </div>
+                      </div>
+                      <span className={`mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${statusCfg.pill}`}>
+                        <StatusIcon size={14} className={statusCfg.iconCls} />
+                        {statusCfg.label}
                       </span>
                     </div>
-                    <div className="mt-1 text-sm text-gray-600">{entry.subjectName}</div>
-                    <div className="mt-1 text-xs text-gray-400">
+
+                    <div className="mt-2 text-xs text-gray-400">
                       {entry.facultyName ? `Faculty: ${entry.facultyName}` : ""}
                       {entry.facultyName && entry.semester ? " · " : ""}
                       {entry.semester || ""}
@@ -1842,32 +1849,20 @@ function StudentDashboardPage() {
                         <div className="skeleton h-6" />
                       </div>
                     ) : (
-                      <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <div className="flex items-center gap-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-gray-400">
-                              <LogIn size={12} className="text-green-600" />
-                              Time In
-                            </div>
-                            <div className="mt-1 text-sm font-semibold tabular-nums text-gray-800">{displayTime(timeIn)}</div>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                          <div className="flex items-center gap-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-gray-400">
+                            <LogIn size={12} className="text-green-600" />
+                            Time In
                           </div>
-                          <div>
-                            <div className="flex items-center gap-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-gray-400">
-                              <LogOut size={12} className="text-amber-500" />
-                              Time Out
-                            </div>
-                            <div className="mt-1 text-sm font-semibold tabular-nums text-gray-800">{displayTime(timeOut)}</div>
-                          </div>
+                          <div className="mt-1 text-sm font-semibold tabular-nums text-gray-800">{displayTime(timeIn)}</div>
                         </div>
-                        <div className="mt-2 flex items-center justify-between">
-                          <span className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
-                            <Clock size={12} className="text-gray-400" />
-                            Status
-                          </span>
-                          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${statusCfg.pill}`}>
-                            <StatusIcon size={13} className={statusCfg.iconCls} />
-                            {statusCfg.label}
-                          </span>
+                        <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                          <div className="flex items-center gap-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-gray-400">
+                            <LogOut size={12} className="text-amber-500" />
+                            Time Out
+                          </div>
+                          <div className="mt-1 text-sm font-semibold tabular-nums text-gray-800">{displayTime(timeOut)}</div>
                         </div>
                       </div>
                     )}
