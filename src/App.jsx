@@ -117,7 +117,7 @@ export default function App() {
         <Route path="/student" element={<ProtectedLayout allowedRole="student" />}>
           <Route index element={<Navigate to="/student/dashboard" replace />} />
           <Route path="dashboard" element={<StudentDashboardPage />} />
-          <Route path="attendance" element={<RolePanel pageKey="attendance" role="student" />} />
+          <Route path="attendance" element={<StudentAttendancePage />} />
           <Route path="account" element={<SelfAccountPage role="student" />} />
         </Route>
         <Route path="/how-to-use" element={<HowToUsePage />} />
@@ -1900,6 +1900,254 @@ function StudentDashboardPage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+        </article>
+      </section>
+    </div>
+  );
+}
+
+function StudentAttendancePage() {
+  const { currentUser } = useAuth();
+  const [schedules, setSchedules] = React.useState([]);
+  const [attendance, setAttendance] = React.useState([]);
+  const [selectedDate, setSelectedDate] = React.useState(() => {
+    const d = new Date();
+    return d.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+  });
+  const [scheduleLoading, setScheduleLoading] = React.useState(true);
+  const [scheduleError, setScheduleError] = React.useState("");
+  const [attendanceLoading, setAttendanceLoading] = React.useState(true);
+  const [attendanceError, setAttendanceError] = React.useState("");
+
+  const dayNameMap = { 0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday" };
+
+  function getTodayDate() {
+    const d = new Date();
+    return d.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+  }
+
+  function getDayName(dateStr) {
+    const d = new Date(dateStr + "T12:00:00");
+    return dayNameMap[d.getDay()] || "";
+  }
+
+  function timeToMinutes(timeStr) {
+    if (!timeStr) return null;
+    const match = String(timeStr).match(/^(\d{1,2}):(\d{2})/);
+    if (!match) return null;
+    return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+  }
+
+  function formatTime(timeStr) {
+    if (!timeStr || !/^\d{2}:\d{2}/.test(timeStr)) return "—";
+    const [h, m] = timeStr.slice(0, 5).split(":").map(Number);
+    return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+  }
+
+  function displayTime(value) {
+    return value ? formatTime(value) : "--:--";
+  }
+
+  function parseStudentDept(dept) {
+    if (!dept) return null;
+    const yearMap = { 1: "1st Year", 2: "2nd Year", 3: "3rd Year", 4: "4th Year" };
+    const fullMatch = dept.match(/(\d)[^-]*-\s*([A-E])$/i);
+    if (fullMatch) {
+      return { yearLevel: yearMap[parseInt(fullMatch[1], 10)] || null, section: fullMatch[2].toUpperCase() };
+    }
+    const shortMatch = dept.match(/(\d)\s*([A-E])$/i);
+    if (shortMatch) {
+      return { yearLevel: yearMap[parseInt(shortMatch[1], 10)] || null, section: shortMatch[2].toUpperCase() };
+    }
+    return null;
+  }
+
+  const loadSchedules = React.useCallback(async () => {
+    setScheduleLoading(true);
+    setScheduleError("");
+    try {
+      const data = await apiFetch("/class-schedules.php");
+      setSchedules(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setScheduleError(err.message || "Failed to load schedules.");
+    } finally {
+      setScheduleLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    loadSchedules();
+  }, [loadSchedules]);
+
+  const loadAttendance = React.useCallback(async (date) => {
+    setAttendanceLoading(true);
+    setAttendanceError("");
+    try {
+      const result = await apiFetch(`/attendance.php?date=${date}&limit=500&offset=0`);
+      setAttendance(Array.isArray(result?.records) ? result.records : []);
+    } catch (err) {
+      setAttendance([]);
+      setAttendanceError(err.message || "Failed to load attendance.");
+    } finally {
+      setAttendanceLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    loadAttendance(selectedDate);
+  }, [selectedDate, loadAttendance]);
+
+  const parsedSection = React.useMemo(() => parseStudentDept(currentUser?.department), [currentUser?.department]);
+  const selectedDayName = React.useMemo(() => getDayName(selectedDate), [selectedDate]);
+
+  const myAttendance = React.useMemo(
+    () => attendance.filter((r) => r.userId === currentUser?.id),
+    [attendance, currentUser],
+  );
+
+  // Time In = earliest IN record on the selected date; Time Out = latest OUT record.
+  const timeIn = React.useMemo(() => {
+    const ins = myAttendance.filter((r) => r.status === "IN").map((r) => r.logTime).filter(Boolean);
+    return ins.length ? ins.sort()[0] : null;
+  }, [myAttendance]);
+
+  const timeOut = React.useMemo(() => {
+    const outs = myAttendance.filter((r) => r.status === "OUT").map((r) => r.logTime).filter(Boolean);
+    return outs.length ? outs.sort()[outs.length - 1] : null;
+  }, [myAttendance]);
+
+  // Only the student's section schedules that meet on the selected date, in time order.
+  const rows = React.useMemo(() => {
+    if (!parsedSection) return [];
+    return schedules
+      .filter((s) => {
+        const days = Array.isArray(s.days) ? s.days : [];
+        return (
+          s.yearLevel === parsedSection.yearLevel &&
+          s.section === parsedSection.section &&
+          days.includes(selectedDayName)
+        );
+      })
+      .sort((a, b) => (timeToMinutes(a.startTime) ?? 0) - (timeToMinutes(b.startTime) ?? 0))
+      .map((s) => {
+        let status = "absent";
+        if (timeIn) {
+          const inMin = timeToMinutes(timeIn);
+          const startMin = timeToMinutes(s.startTime);
+          if (inMin != null && startMin != null) status = inMin <= startMin + 15 ? "present" : "late";
+        }
+        return { ...s, status };
+      });
+  }, [schedules, parsedSection, selectedDayName, timeIn]);
+
+  const loading = scheduleLoading || attendanceLoading;
+  const loadError = scheduleError || attendanceError;
+  const handleRetry = () => {
+    loadSchedules();
+    loadAttendance(selectedDate);
+  };
+
+  return (
+    <div className="animate-fade-up space-y-4">
+      <section>
+        <article className="card-elevated p-5 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800">My Attendance</h2>
+              <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-gray-500">
+                <CalendarDays size={14} className="text-gray-400" />
+                {selectedDayName}
+                {parsedSection
+                  ? ` · ${parseInt(parsedSection.yearLevel, 10) || parsedSection.yearLevel}-${parsedSection.section}`
+                  : ""}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={selectedDate}
+                max={getTodayDate()}
+                onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
+                className="form-input min-w-0 flex-1 rounded-lg px-3 py-2 text-sm sm:flex-initial"
+              />
+              <button
+                type="button"
+                onClick={() => loadAttendance(selectedDate)}
+                disabled={attendanceLoading}
+                className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white p-2 text-gray-600 shadow-sm transition hover:bg-gray-50 hover:text-gray-800 disabled:opacity-50"
+                title="Refresh attendance"
+              >
+                <RefreshCw size={16} className={attendanceLoading ? "animate-spin" : ""} />
+              </button>
+            </div>
+          </div>
+
+          {loadError ? (
+            <div className="mt-5 alert alert-error text-center">
+              <p className="text-sm font-semibold">Failed to load attendance</p>
+              <p className="mt-2 text-xs text-gray-500">{loadError}</p>
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="btn btn-secondary mt-4 inline-flex items-center px-4 py-2 text-xs font-semibold"
+              >
+                Retry
+              </button>
+            </div>
+          ) : loading ? (
+            <div className="mt-5 space-y-2">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="skeleton h-12" />
+              ))}
+            </div>
+          ) : !parsedSection ? (
+            <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
+              We couldn't detect a class section on your account. Ask an administrator to set your section (e.g. BSIT 3A)
+              on your profile.
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
+              No classes scheduled for {selectedDayName}. Pick another date to view its attendance.
+            </div>
+          ) : (
+            <div className="mt-5 table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Subject</th>
+                    <th>Faculty</th>
+                    <th>Time In</th>
+                    <th>Time Out</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => {
+                    const statusCfg = attendanceStatusConfig[row.status];
+                    const StatusIcon = statusCfg.Icon;
+                    return (
+                      <tr key={row.id}>
+                        <td className="font-medium text-gray-800">{row.subjectName}</td>
+                        <td>{row.facultyName || "—"}</td>
+                        <td>
+                          <span className="time-in-badge whitespace-nowrap">{displayTime(timeIn)}</span>
+                        </td>
+                        <td>
+                          <span className="time-out-badge whitespace-nowrap">{displayTime(timeOut)}</span>
+                        </td>
+                        <td>
+                          <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusCfg.pill}`}>
+                            <StatusIcon size={13} className={statusCfg.iconCls} />
+                            {statusCfg.label}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </article>
