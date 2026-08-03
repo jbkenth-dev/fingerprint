@@ -61,11 +61,11 @@ export function AuthProvider({ children }) {
     [session, users],
   );
 
-  const login = async ({ identifier, password, role }) => {
+  const login = async ({ identifier, password }) => {
     const { user, token } = await apiFetch("/auth.php", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifier, password, role }),
+      body: JSON.stringify({ identifier, password }),
     });
     const sessionData = { userId: user.id, role: user.role, token };
 

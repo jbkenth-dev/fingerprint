@@ -20,17 +20,17 @@ if (!$input) {
 
 $identifier = normalize_login($input['identifier'] ?? '');
 $password = (string) ($input['password'] ?? '');
-$role = trim($input['role'] ?? '');
 
-if (!$identifier || !$password || !$role) {
+if (!$identifier || !$password) {
     http_response_code(400);
-    echo json_encode(["error" => "Username or email, password, and role are required"]);
+    echo json_encode(["error" => "Username or email and password are required"]);
     exit;
 }
 
 try {
-    $stmt = $pdo->prepare('SELECT * FROM users WHERE (LOWER(email) = ? OR LOWER(username) = ?) AND role = ? AND status = "Active" LIMIT 1');
-    $stmt->execute([$identifier, $identifier, $role]);
+    // Auto-detect the role from the matched account — the client no longer sends one.
+    $stmt = $pdo->prepare('SELECT * FROM users WHERE (LOWER(email) = ? OR LOWER(username) = ?) AND status = "Active" LIMIT 1');
+    $stmt->execute([$identifier, $identifier]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$user) {

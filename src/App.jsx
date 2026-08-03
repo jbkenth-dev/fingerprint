@@ -2,7 +2,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import clsx from "clsx";
-import { Activity, Archive, Asterisk, BadgeCheck, BookOpenText, Building2, CalendarRange, ChevronDown, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, LayoutDashboard, LockKeyhole, LogOut, Menu, RefreshCw, ShieldUser, UserCog, UserRound, Users, X } from "lucide-react";
+import { Activity, Archive, Asterisk, BadgeCheck, BookOpenText, Building2, CalendarRange, ChevronDown, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, LayoutDashboard, LockKeyhole, LogOut, Menu, RefreshCw, UserCog, UserRound, Users, X } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { panelContent, roleLabels, roles, routeConfig, sampleAttendance } from "./data/mockData";
 import { useMockLoading } from "./hooks/useMockLoading";
@@ -155,12 +155,12 @@ function HomePage() {
 function SignInPage() {
   const { login, session } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = React.useState({ identifier: "", password: "", role: "admin" });
+  const [form, setForm] = React.useState({ identifier: "", password: "" });
   const [feedback, setFeedback] = React.useState({ message: "", tone: "error" });
   const [submitting, setSubmitting] = React.useState(false);
 
   React.useEffect(() => {
-    if (session?.role) navigate(`/${session.role}`, { replace: true });
+    if (session?.role) navigate(`/${session.role}/dashboard`, { replace: true });
   }, [session, navigate]);
 
   const handleSubmit = async (event) => {
@@ -178,7 +178,7 @@ function SignInPage() {
     try {
       setSubmitting(true);
       const user = await login(form);
-      navigate(`/${user.role}`, { replace: true });
+      navigate(`/${user.role}/dashboard`, { replace: true });
     } catch (submissionError) {
       setFeedback({ message: submissionError.message, tone: "error" });
     } finally {
@@ -220,14 +220,6 @@ function SignInPage() {
               variant="signin"
             />
 
-            <SelectField
-              label="Role"
-              value={form.role}
-              onChange={(value) => setForm((prev) => ({ ...prev, role: value }))}
-              options={[{ label: "Administrator", value: "admin" }]}
-              icon={ShieldUser}
-              variant="signin"
-            />
             <button type="submit" className="signin-submit" disabled={submitting}>
               {submitting ? "Signing In..." : "Sign In"}
             </button>
