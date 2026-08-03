@@ -691,9 +691,17 @@ function ProtectedLayout({ allowedRole }) {
   );
 }
 
-/* ─── Admin Dashboard ─── */
+/* ─── Dashboard Core (shared by admin & faculty) ─── */
 function AdminDashboardPage() {
-  const { users } = useAuth();
+  return <DashboardCore scope="admin" />;
+}
+
+function FacultyDashboardPage() {
+  return <DashboardCore scope="faculty" />;
+}
+
+function DashboardCore({ scope }) {
+  const { users, currentUser } = useAuth();
   const [todayLogs, setTodayLogs] = React.useState([]);
   const [weekLogs, setWeekLogs] = React.useState({});
   const [scheduleRows, setScheduleRows] = React.useState([]);
@@ -801,7 +809,12 @@ function AdminDashboardPage() {
   const subjectStats = React.useMemo(() => {
     const todaySchedules = scheduleRows.filter((row) => {
       const days = Array.isArray(row.days) ? row.days : [];
-      return days.includes(todayDayName);
+      if (!days.includes(todayDayName)) return false;
+      // Faculty scope: only the classes this faculty member teaches.
+      if (scope === "faculty") {
+        return currentUser ? Number(row.facultyId) === Number(currentUser.id) : false;
+      }
+      return true;
     });
 
     const studentInByUser = new Map();
@@ -870,7 +883,7 @@ function AdminDashboardPage() {
         absentList,
       };
     });
-  }, [scheduleRows, todayDayName, activeStudents, userFirstIn, users]);
+  }, [scheduleRows, todayDayName, activeStudents, userFirstIn, users, scope, currentUser]);
 
   const hasScheduleToday = subjectStats.length > 0;
 
@@ -950,16 +963,42 @@ function AdminDashboardPage() {
     return count.size;
   }, [subjectStats, todayStudentLogs, users]);
 
+  // Faculty scope: sections this faculty member teaches, used to filter the weekly chart.
+  const facultySections = React.useMemo(() => {
+    if (scope !== "faculty") return null;
+    const sections = new Set();
+    for (const row of scheduleRows) {
+      if (currentUser && Number(row.facultyId) === Number(currentUser.id)) {
+        sections.add(`${row.yearLevel}|${row.section}`);
+      }
+    }
+    return sections;
+  }, [scope, scheduleRows, currentUser]);
+
   const dailyChart = React.useMemo(() => {
     const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     return Array.from({ length: 7 }, (_, i) => {
       const dateStr = getManilaDate(6 - i);
       const logs = weekLogs[dateStr] || [];
-      const uniquePresent = new Set(logs.filter((r) => r.status === "IN").map((r) => r.userId)).size;
+      let uniquePresent;
+      if (facultySections) {
+        const ids = new Set();
+        for (const r of logs) {
+          if (r.status !== "IN") continue;
+          const user = users.find((u) => u.id === r.userId);
+          if (!user) continue;
+          const parsed = parseStudentDept(user.department);
+          if (!parsed) continue;
+          if (facultySections.has(`${parsed.yearLevel}|${parsed.section}`)) ids.add(user.id);
+        }
+        uniquePresent = ids.size;
+      } else {
+        uniquePresent = new Set(logs.filter((r) => r.status === "IN").map((r) => r.userId)).size;
+      }
       const d = new Date(dateStr + "T12:00:00");
       return { day: dayNames[d.getDay()], date: dateStr, present: uniquePresent };
     });
-  }, [weekLogs]);
+  }, [weekLogs, facultySections, users]);
 
   /* ── Export ── */
   const handleExport = React.useCallback(() => {
@@ -1858,145 +1897,6 @@ function StudentDashboardPage() {
                         Please check in between {formatTime(onTimeWindow.start)} to {formatTime(onTimeWindow.end)} to be marked Present, otherwise you'll be marked Late or Absent.
                       </p>
                     )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </article>
-      </section>
-    </div>
-  );
-}
-
-function FacultyDashboardPage() {
-  const { currentUser } = useAuth();
-  const [scheduleRows, setScheduleRows] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState("");
-
-  const dayNameMap = { 0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday" };
-
-  function getManilaDayName() {
-    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-    return dayNameMap[now.getDay()] || "";
-  }
-
-  function getManilaDate() {
-    const d = new Date();
-    return d.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
-  }
-
-  function timeToMinutes(timeStr) {
-    if (!timeStr) return null;
-    const match = String(timeStr).match(/^(\d{1,2}):(\d{2})/);
-    if (!match) return null;
-    return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
-  }
-
-  function formatTime(timeStr) {
-    if (!timeStr || !/^\d{2}:\d{2}/.test(timeStr)) return "—";
-    const [h, m] = timeStr.slice(0, 5).split(":").map(Number);
-    return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
-  }
-
-  const loadClasses = React.useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const data = await apiFetch("/class-schedules.php");
-      setScheduleRows(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setError(err.message || "Failed to load your classes.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    loadClasses();
-  }, [loadClasses]);
-
-  const todayDayName = React.useMemo(() => getManilaDayName(), []);
-  const todayDate = React.useMemo(() => getManilaDate(), []);
-
-  // Classes this faculty member teaches today, matched by their user id.
-  const todaysClasses = React.useMemo(
-    () =>
-      scheduleRows
-        .filter((row) => {
-          const mine = currentUser ? Number(row.facultyId) === Number(currentUser.id) : false;
-          const days = Array.isArray(row.days) ? row.days : [];
-          return mine && days.includes(todayDayName);
-        })
-        .sort((a, b) => (timeToMinutes(a.startTime) ?? 0) - (timeToMinutes(b.startTime) ?? 0)),
-    [scheduleRows, currentUser, todayDayName],
-  );
-
-  return (
-    <div className="animate-fade-up space-y-4">
-      <section>
-        <article className="card-elevated p-5 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-800">My Classes Today</h2>
-              <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-gray-500">
-                <CalendarDays size={14} className="text-gray-400" />
-                {todayDayName} · {todayDate}
-              </p>
-            </div>
-            {!loading && (
-              <button
-                type="button"
-                onClick={loadClasses}
-                className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white p-2 text-gray-600 shadow-sm transition hover:bg-gray-50 hover:text-gray-800"
-                title="Refresh classes"
-              >
-                <RefreshCw size={16} />
-              </button>
-            )}
-          </div>
-
-          {error ? (
-            <div className="mt-5 alert alert-error text-center">
-              <p className="text-sm font-semibold">Failed to load your classes</p>
-              <p className="mt-2 text-xs text-gray-500">{error}</p>
-              <button
-                type="button"
-                onClick={loadClasses}
-                className="btn btn-secondary mt-4 inline-flex items-center px-4 py-2 text-xs font-semibold"
-              >
-                Retry
-              </button>
-            </div>
-          ) : loading ? (
-            <div className="mt-5 space-y-3">
-              <div className="skeleton h-24" />
-              <div className="skeleton h-24" />
-            </div>
-          ) : todaysClasses.length === 0 ? (
-            <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
-              No classes scheduled for {todayDayName} — enjoy your day off!
-            </div>
-          ) : (
-            <div className="mt-5 space-y-3">
-              {todaysClasses.map((cls) => {
-                const sectionLabel = `${parseInt(cls.yearLevel, 10) || cls.yearLevel}-${cls.section}`;
-                return (
-                  <div key={cls.id} className="rounded-xl border border-gray-200 bg-white p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h3 className="text-lg font-bold leading-snug text-gray-800">{cls.subjectName}</h3>
-                        <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-green-50 px-2.5 py-1 text-sm font-bold text-green-700">
-                          <Clock size={15} className="shrink-0" />
-                          {formatTime(cls.startTime)} – {formatTime(cls.endTime)}
-                        </div>
-                      </div>
-                      <span className="mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full border border-green-200 bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
-                        {sectionLabel}
-                      </span>
-                    </div>
-                    <div className="mt-2 text-xs text-gray-400">{cls.semester || "—"}</div>
                   </div>
                 );
               })}
