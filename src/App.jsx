@@ -1717,22 +1717,16 @@ function StudentDashboardPage() {
     return outs.length ? outs.sort()[outs.length - 1] : null;
   }, [myAttendance]);
 
-  // Status mirrors the admin dashboard's rules, using today's first class as the reference:
-  // on time (start ± 15 min) = Present, after that but before the last 15 min = Late, else Absent.
-  const attendanceStatus = React.useMemo(() => {
+  // Per-class attendance status — applied to each subject in Today's Schedule.
+  // No check-in today = Absent; check-in within or before the class window (start + 15 min) = Present;
+  // check-in after that window = Late.
+  function getClassStatus(entry) {
     if (!timeIn) return "absent";
     const inMin = timeToMinutes(timeIn);
-    const firstClass = todaysSchedule[0];
-    if (!firstClass || inMin == null) return "present";
-    const startMin = timeToMinutes(firstClass.startTime);
-    const endMin = timeToMinutes(firstClass.endTime);
-    if (startMin == null || endMin == null) return "present";
-    if (inMin >= startMin - 15 && inMin <= startMin + 15) return "present";
-    if (inMin > startMin + 15 && inMin <= endMin - 15) return "late";
-    return "absent";
-  }, [timeIn, todaysSchedule]);
-
-  const currentStatus = attendanceStatusConfig[attendanceStatus];
+    const startMin = timeToMinutes(entry.startTime);
+    if (inMin == null || startMin == null) return "present";
+    return inMin <= startMin + 15 ? "present" : "late";
+  }
 
   return (
     <div className="animate-fade-up space-y-4">
@@ -1751,102 +1745,14 @@ function StudentDashboardPage() {
         ) : null}
       </section>
 
-      {/* Attendance overview */}
-      <section>
-        <article className="card-elevated p-5 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-800">Attendance</h2>
-              <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-gray-500">
-                <CalendarDays size={14} className="text-gray-400" />
-                {todayDayName} · {todayDate}
-              </p>
-            </div>
-            {!attendanceLoading && (
-              <button
-                type="button"
-                onClick={loadAttendance}
-                className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white p-2 text-gray-600 shadow-sm transition hover:bg-gray-50 hover:text-gray-800"
-                title="Refresh attendance"
-              >
-                <RefreshCw size={16} />
-              </button>
-            )}
-          </div>
-
-          {attendanceError ? (
-            <div className="mt-5 alert alert-error text-center">
-              <p className="text-sm font-semibold">Failed to load attendance</p>
-              <p className="mt-2 text-xs text-gray-500">{attendanceError}</p>
-              <button
-                type="button"
-                onClick={loadAttendance}
-                className="btn btn-secondary mt-4 inline-flex items-center px-4 py-2 text-xs font-semibold"
-              >
-                Retry
-              </button>
-            </div>
-          ) : attendanceLoading ? (
-            <div className="mt-5 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="skeleton h-24" />
-                <div className="skeleton h-24" />
-              </div>
-              <div className="skeleton h-16" />
-            </div>
-          ) : (
-            <>
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    <LogIn size={16} className="text-green-600" />
-                    Time In
-                  </div>
-                  <div className="mt-3 text-2xl font-semibold tabular-nums text-gray-800">
-                    {displayTime(timeIn)}
-                  </div>
-                </div>
-                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    <LogOut size={16} className="text-amber-500" />
-                    Time Out
-                  </div>
-                  <div className="mt-3 text-2xl font-semibold tabular-nums text-gray-800">
-                    {displayTime(timeOut)}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
-                <div className="flex items-center gap-2">
-                  <Clock size={16} className="text-gray-400" />
-                  <span className="text-sm font-semibold text-gray-700">Attendance Status</span>
-                </div>
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-semibold ${currentStatus.pill}`}
-                >
-                  <currentStatus.Icon size={16} className={currentStatus.iconCls} />
-                  {currentStatus.label}
-                </span>
-              </div>
-
-              {!todaysSchedule.length && (
-                <p className="mt-3 text-center text-xs text-gray-400">
-                  No classes scheduled today — your status reflects today's check-in.
-                </p>
-              )}
-            </>
-          )}
-        </article>
-      </section>
-
       {/* Subject schedule */}
       <section>
         <article className="card-elevated p-5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-gray-800">Today's Schedule</h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-gray-500">
+                <CalendarDays size={14} className="text-gray-400" />
                 {parsedSection
                   ? `${todayDayName} · ${currentUser?.department ?? "Your section"} · ${parsedSection.yearLevel} · Section ${parsedSection.section}`
                   : `${todayDayName} · Your daily class schedule`}
@@ -1891,22 +1797,70 @@ function StudentDashboardPage() {
             </div>
           ) : (
             <div className="mt-5 space-y-3">
-              {todaysSchedule.map((entry) => (
-                <div key={entry.id} className="rounded-xl border border-gray-200 bg-white p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-sm font-semibold text-gray-800">{entry.subjectCode}</span>
-                    <span className="text-xs font-medium text-gray-500">
-                      {formatTime(entry.startTime)} – {formatTime(entry.endTime)}
-                    </span>
+              {todaysSchedule.map((entry) => {
+                const entryStatus = getClassStatus(entry);
+                const statusCfg = attendanceStatusConfig[entryStatus];
+                const StatusIcon = statusCfg.Icon;
+                return (
+                  <div key={entry.id} className="rounded-xl border border-gray-200 bg-white p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-gray-800">{entry.subjectCode}</span>
+                      <span className="text-xs font-medium text-gray-500">
+                        {formatTime(entry.startTime)} – {formatTime(entry.endTime)}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-sm text-gray-600">{entry.subjectName}</div>
+                    <div className="mt-1 text-xs text-gray-400">
+                      {entry.facultyName ? `Faculty: ${entry.facultyName}` : ""}
+                      {entry.facultyName && entry.semester ? " · " : ""}
+                      {entry.semester || ""}
+                    </div>
+
+                    {attendanceError ? (
+                      <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
+                        <span className="text-xs text-red-600">Attendance unavailable</span>
+                        <button type="button" onClick={loadAttendance} className="text-xs font-semibold text-red-600 underline">
+                          Retry
+                        </button>
+                      </div>
+                    ) : attendanceLoading ? (
+                      <div className="mt-3 space-y-2">
+                        <div className="skeleton h-9" />
+                        <div className="skeleton h-6" />
+                      </div>
+                    ) : (
+                      <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <div className="flex items-center gap-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-gray-400">
+                              <LogIn size={12} className="text-green-600" />
+                              Time In
+                            </div>
+                            <div className="mt-1 text-sm font-semibold tabular-nums text-gray-800">{displayTime(timeIn)}</div>
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-gray-400">
+                              <LogOut size={12} className="text-amber-500" />
+                              Time Out
+                            </div>
+                            <div className="mt-1 text-sm font-semibold tabular-nums text-gray-800">{displayTime(timeOut)}</div>
+                          </div>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between">
+                          <span className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
+                            <Clock size={12} className="text-gray-400" />
+                            Status
+                          </span>
+                          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${statusCfg.pill}`}>
+                            <StatusIcon size={13} className={statusCfg.iconCls} />
+                            {statusCfg.label}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="mt-1 text-sm text-gray-600">{entry.subjectName}</div>
-                  <div className="mt-1 text-xs text-gray-400">
-                    {entry.facultyName ? `Faculty: ${entry.facultyName}` : ""}
-                    {entry.facultyName && entry.semester ? " · " : ""}
-                    {entry.semester || ""}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </article>
