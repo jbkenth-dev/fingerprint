@@ -13,7 +13,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 
 // GET — list all departments
 if ($method === 'GET') {
-    require_auth($pdo, 'admin');
+    require_auth($pdo); // any authenticated user can list departments
     $stmt = $pdo->query('SELECT id, name FROM departments ORDER BY name ASC');
     echo json_encode($stmt->fetchAll());
     exit;

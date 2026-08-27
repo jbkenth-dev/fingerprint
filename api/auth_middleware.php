@@ -91,11 +91,14 @@ function require_auth(PDO $pdo, ?string $allowedRole = null): array {
         exit;
     }
     
-    if ($allowedRole && $session['user_role'] !== $allowedRole) {
+    if ($allowedRole) {
+    $deny = ($session['role'] !== $allowedRole) && ($session['user_role'] !== $allowedRole);
+    if ($deny) {
         http_response_code(403);
         echo json_encode(['error' => 'Forbidden. Insufficient permissions.']);
         exit;
     }
+}
     
     return $session;
 }

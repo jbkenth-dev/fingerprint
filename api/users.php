@@ -106,10 +106,19 @@ if ($method === 'POST') {
 }
 
 if ($method === 'PUT') {
-    $authUser = require_auth($pdo, 'admin');
+    $authUser = require_auth($pdo); // require authentication, but not necessarily admin
     // update user (requires id)
     $id = $input['id'] ?? null;
     if (!$id) { http_response_code(400); echo json_encode(["error"=>"An ID is required."]); exit; }
+    // If updating another user's record, require admin role
+    if ((int)$id !== (int)$authUser['id']) {
+        $authUser = require_auth($pdo, 'admin'); // re-authenticate with admin requirement
+    }
+    // For non-admin updates, strip role and status fields to prevent tampering
+    if ((int)$id === (int)$authUser['id'] && $authUser['role'] !== 'admin') {
+        unset($input['role']);
+        unset($input['status']);
+    }
     if (isset($input['password']) && $input['password'] !== '') {
         // Fetch the target user's role to decide hashing
         $stmt = $pdo->prepare('SELECT role FROM users WHERE id = ?');
@@ -172,6 +181,14 @@ if ($method === 'PUT') {
     $sql = 'UPDATE users SET ' . implode(',', $sets) . ' WHERE id = ?';
     $stmt = $pdo->prepare($sql);
     $stmt->execute($values);
+
+    // Keep sessions role in sync with users.role
+    if (!empty($input['role'])) {
+        $newRole = $input['role'];
+        $stmt = $pdo->prepare('UPDATE sessions SET role = ? WHERE user_id = ?');
+        $stmt->execute([$newRole, $id]);
+    }
+
     $stmt = $pdo->prepare('SELECT ' . select_user_fields($pdo) . ' FROM users WHERE id = ?');
     $stmt->execute([$id]);
     echo json_encode($stmt->fetch());
