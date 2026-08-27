@@ -41,6 +41,7 @@ let _authToken = null;
  */
 export function setAuthToken(token) {
   _authToken = token;
+  console.log('[api.js] setAuthToken: token set');
 }
 
 /**
@@ -48,6 +49,7 @@ export function setAuthToken(token) {
  */
 export function clearAuthToken() {
   _authToken = null;
+  console.log('[api.js] clearAuthToken: token cleared');
 }
 
 /**
@@ -59,11 +61,15 @@ function getAuthToken() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const session = JSON.parse(raw);
-      return session?.token || null;
+      const token = session?.token || null;
+      console.log('[api.js] getAuthToken: token from localStorage:', token ? 'present' : 'null');
+      return token;
     }
   } catch {
     // localStorage not available
+    console.log('[api.js] getAuthToken: localStorage not available');
   }
+  console.log('[api.js] getAuthToken: returning null');
   return null;
 }
 
@@ -71,6 +77,7 @@ function getAuthToken() {
  * Clear the stored session (used on 401 responses).
  */
 function clearSession() {
+  console.log('[api.js] clearSession: clearing session');
   _authToken = null;
   try {
     localStorage.removeItem(STORAGE_KEY);
@@ -88,7 +95,12 @@ function clearSession() {
  */
 export async function apiFetch(path, options = {}) {
   const url = `${API_BASE}${path}`;
-  const token = getAuthToken();
+  let token = getAuthToken();
+  // Ensure token is a string and trim whitespace
+  if (typeof token === 'string') {
+    token = token.trim();
+  }
+  console.log('[api.js] apiFetch:', { url, method: options.method, token: token ? 'present' : 'null' });
 
   const headers = {
     'Content-Type': 'application/json',
