@@ -137,7 +137,27 @@ if ($method === 'PUT') {
             $stmt = $pdo->prepare('SELECT password FROM users WHERE id = ?');
             $stmt->execute([(int) $id]);
             $stored = $stmt->fetch(PDO::FETCH_ASSOC);
-            if (!$stored || !password_verify($currentPassword, $stored['password'])) {
+            $storedPassword = $stored['password'] ?? '';
+
+            // Begin fallback logic (same as in auth.php)
+            $passwordValid = password_verify($currentPassword, $storedPassword);
+            if (!$passwordValid && $storedPassword !== '' && !str_starts_with($storedPassword, '$2')) {
+                // stored password is plaintext – compare directly
+                if (hash_equals($storedPassword, $currentPassword)) {
+                    $passwordValid = true;
+                    // upgrade to bcrypt only for non‑student roles
+                    if (($authUser['role'] ?? '') !== 'student') {
+                        $newHash = password_hash($currentPassword, PASSWORD_BCRYPT);
+                        $stmt = $pdo->prepare('UPDATE users SET password = ? WHERE id = ?');
+                        $stmt->execute([$newHash, $id]);
+                        // keep the updated value in $stored so the rest of the code sees the hash
+                        $stored['password'] = $newHash;
+                    }
+                }
+            }
+            // End fallback logic
+
+            if (!$passwordValid) {
                 http_response_code(401);
                 echo json_encode(["error" => "Invalid current password."]);
                 exit;

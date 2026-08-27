@@ -4943,11 +4943,25 @@ function SelfAccountPage({ role }) {
     setInitialForm(initial);
   }, [currentUser, role]);
 
-  // Update department options when users change
+  // Fetch department options for the dropdown when we have auth data
   React.useEffect(() => {
-    const depts = [...new Set(users.map(u => u.department).filter(Boolean))].sort();
-    setDepartmentOptions(depts);
-  }, [users]);
+    if (!currentUser) {
+      setDepartmentOptions([]);
+      return;
+    }
+    apiFetch('/departments.php')
+      .then(data => {
+        if (Array.isArray(data)) {
+          const names = data.map(d => d.name).filter(Boolean).sort();
+          setDepartmentOptions(names);
+        }
+      })
+      .catch(err => {
+        // In case of error, keep empty but log for debugging
+        console.warn('Failed to fetch departments:', err);
+        setDepartmentOptions([]);
+      });
+  }, [currentUser]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -5047,14 +5061,14 @@ function SelfAccountPage({ role }) {
               <div className="md:col-span-2">
                 {role === "faculty" ? (
                   <SelectField
-                    label="Department / Section"
+                    label="Department"
                     value={form.department}
                     onChange={(value) => setForm((prev) => ({ ...prev, department: value }))}
                     options={departmentOptions}
                     placeholder="Select department"
                   />
                 ) : (
-                  <Field label="Department / Section" placeholder="Enter department or section" value={form.department} onChange={(value) => setForm((prev) => ({ ...prev, department: value }))} />
+                  <Field label="Department" placeholder="Enter department" value={form.department} onChange={(value) => setForm((prev) => ({ ...prev, department: value }))} />
                 )}
               </div>
               <button type="submit" className="btn btn-primary md:col-span-2 justify-self-start">
