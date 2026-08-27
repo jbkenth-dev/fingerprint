@@ -4898,42 +4898,79 @@ function DeveloperAttendancePage() {
 function SelfAccountPage({ role }) {
   const { currentUser, users, updateOwnAccount } = useAuth();
   const [feedback, setFeedback] = React.useState({ message: "", tone: "success" });
+  const [departmentOptions, setDepartmentOptions] = React.useState([]);
+  const [initialForm, setInitialForm] = React.useState(null);
   const usesManagedSelfAccount = role === "faculty" || role === "student";
-  const [form, setForm] = React.useState({
-    ...(usesManagedSelfAccount
-      ? {
-          idNumber: currentUser?.idNumber ?? "",
-          username: currentUser?.username ?? "",
-        }
-      : {}),
-    firstName: currentUser?.firstName ?? "",
-    middleName: currentUser?.middleName ?? "",
-    lastName: currentUser?.lastName ?? "",
-    email: currentUser?.email ?? "",
-    phone: currentUser?.phone ?? "",
-    ...(usesManagedSelfAccount
-      ? {}
-      : {
-          smartCardId: currentUser?.smartCardId ?? "",
-          fingerprintId: currentUser?.fingerprintId ?? "",
-        }),
-    department: currentUser?.department ?? "",
-  });
-  const [passwordForm, setPasswordForm] = React.useState({
-    currentPassword: "",
-    newPassword: "",
-    confirmNewPassword: "",
-  });
+
+  // Initialize form with current user data and set initial form
+  React.useEffect(() => {
+    const initial = {
+      ...(usesManagedSelfAccount
+        ? {
+            idNumber: currentUser?.idNumber ?? "",
+            username: currentUser?.username ?? "",
+          }
+        : {}),
+      firstName: currentUser?.firstName ?? "",
+      middleName: currentUser?.middleName ?? "",
+      lastName: currentUser?.lastName ?? "",
+      email: currentUser?.email ?? "",
+      phone: currentUser?.phone ?? "",
+      ...(usesManagedSelfAccount
+        ? {}
+        : {
+            smartCardId: currentUser?.smartCardId ?? "",
+            fingerprintId: currentUser?.fingerprintId ?? "",
+          }),
+      department: currentUser?.department ?? "",
+    };
+    setForm(initial);
+    setInitialForm(initial);
+  }, [currentUser, role]);
+
+  // Update department options when users change
+  React.useEffect(() => {
+    const depts = [...new Set(users.map(u => u.department).filter(Boolean))].sort();
+    setDepartmentOptions(depts);
+  }, [users]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    // Check if there are any changes compared to initial form
+    let hasChanges = false;
+    if (initialForm) {
+      hasChanges = !(form.idNumber === initialForm.idNumber &&
+          form.username === initialForm.username &&
+          form.firstName === initialForm.firstName &&
+          form.middleName === initialForm.middleName &&
+          form.lastName === initialForm.lastName &&
+          form.email === initialForm.email &&
+          form.phone === initialForm.phone &&
+          form.department === initialForm.department);
+    } else {
+      // If initialForm is not set yet, we cannot determine changes, so we allow the submission to proceed.
+      hasChanges = true;
+    }
+
+    if (!hasChanges) {
+      setFeedback({ message: "No changes made", tone: "error" });
+      return;
+    }
+
     const error = usesManagedSelfAccount ? validateFacultyOwnAccount(form, users, currentUser) : validateAccount(form);
     if (error) {
       setFeedback({ message: error, tone: "error" });
       return;
     }
-    await updateOwnAccount(form);
-    setFeedback({ message: `${roleLabels[role]} account updated successfully.`, tone: "success" });
+    try {
+      await updateOwnAccount(form);
+      // Update initial form after successful update
+      setInitialForm(form);
+      setFeedback({ message: `${roleLabels[role]} account updated successfully.`, tone: "success" });
+    } catch (err) {
+      setFeedback({ message: err.message || "Failed to update account.", tone: "error" });
+    }
   };
 
   const handlePasswordSubmit = async (event) => {
@@ -4943,16 +4980,20 @@ function SelfAccountPage({ role }) {
       setFeedback({ message: error, tone: "error" });
       return;
     }
-    await updateOwnAccount({
-      currentPassword: passwordForm.currentPassword,
-      password: passwordForm.newPassword,
-    });
-    setPasswordForm({
-      currentPassword: "",
-      newPassword: "",
-      confirmNewPassword: "",
-    });
-    setFeedback({ message: `${roleLabels[role]} password updated successfully.`, tone: "success" });
+    try {
+      await updateOwnAccount({
+        currentPassword: passwordForm.currentPassword,
+        password: passwordForm.newPassword,
+      });
+      setPasswordForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmNewPassword: "",
+      });
+      setFeedback({ message: `${roleLabels[role]} password updated successfully.`, tone: "success" });
+    } catch (err) {
+      setFeedback({ message: err.message || "Failed to update password.", tone: "error" });
+    }
   };
 
   return (
@@ -4987,7 +5028,17 @@ function SelfAccountPage({ role }) {
             <Field label="Fingerprint ID" placeholder="Enter fingerprint ID" value={form.fingerprintId} onChange={(value) => setForm((prev) => ({ ...prev, fingerprintId: value }))} />
           ) : null}
           <div className="md:col-span-2">
-            <Field label="Department / Section" placeholder="Enter department or section" value={form.department} onChange={(value) => setForm((prev) => ({ ...prev, department: value }))} />
+            {role === "faculty" ? (
+              <SelectField
+                label="Department / Section"
+                value={form.department}
+                onChange={(value) => setForm((prev) => ({ ...prev, department: value }))}
+                options={departmentOptions}
+                placeholder="Select department"
+              />
+            ) : (
+              <Field label="Department / Section" placeholder="Enter department or section" value={form.department} onChange={(value) => setForm((prev) => ({ ...prev, department: value }))} />
+            )}
           </div>
           <button type="submit" className="btn btn-primary md:col-span-2 justify-self-start">
             Update Account
