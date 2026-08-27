@@ -4898,12 +4898,23 @@ function DeveloperAttendancePage() {
 function SelfAccountPage({ role }) {
   const { currentUser, users, updateOwnAccount } = useAuth();
   const [feedback, setFeedback] = React.useState({ message: "", tone: "success" });
-  const [departmentOptions, setDepartmentOptions] = React.useState([]);
+  const [form, setForm] = React.useState(null);
   const [initialForm, setInitialForm] = React.useState(null);
+  const [departmentOptions, setDepartmentOptions] = React.useState([]);
+  const [passwordForm, setPasswordForm] = React.useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmNewPassword: "",
+  });
   const usesManagedSelfAccount = role === "faculty" || role === "student";
 
   // Initialize form with current user data and set initial form
   React.useEffect(() => {
+    if (!currentUser) {
+      setForm(null);
+      setInitialForm(null);
+      return;
+    }
     const initial = {
       ...(usesManagedSelfAccount
         ? {
@@ -5008,58 +5019,69 @@ function SelfAccountPage({ role }) {
         onClose={() => setFeedback((prev) => ({ ...prev, message: "" }))}
       />
 
-      <FormCard title="Profile Details" subtitle={usesManagedSelfAccount ? undefined : "This form keeps your current validation rules and uses the new project styling."}>
-        <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
-          {usesManagedSelfAccount ? (
-            <Field label="ID Number" value={form.idNumber} onChange={(value) => setForm((prev) => ({ ...prev, idNumber: value }))} disabled />
-          ) : null}
-          <Field label="First Name" placeholder="Enter first name" value={form.firstName} onChange={(value) => setForm((prev) => ({ ...prev, firstName: value }))} />
-          <Field label="Middle Name" placeholder="Enter middle name (optional)" value={form.middleName} onChange={(value) => setForm((prev) => ({ ...prev, middleName: value }))} />
-          <Field label="Last Name" placeholder="Enter last name" value={form.lastName} onChange={(value) => setForm((prev) => ({ ...prev, lastName: value }))} />
-          {usesManagedSelfAccount ? (
-            <Field label="Username" placeholder="Enter username" value={form.username} onChange={(value) => setForm((prev) => ({ ...prev, username: value }))} />
-          ) : null}
-          <Field label="Email" type="email" placeholder="Enter email address" value={form.email} onChange={(value) => setForm((prev) => ({ ...prev, email: value }))} />
-          <Field label="Phone" placeholder="09xxxxxxxxx" value={form.phone} onChange={(value) => setForm((prev) => ({ ...prev, phone: value }))} />
-          {!usesManagedSelfAccount ? (
-            <Field label="Smart Card ID" placeholder="Enter smart card ID" value={form.smartCardId} onChange={(value) => setForm((prev) => ({ ...prev, smartCardId: value }))} />
-          ) : null}
-          {!usesManagedSelfAccount ? (
-            <Field label="Fingerprint ID" placeholder="Enter fingerprint ID" value={form.fingerprintId} onChange={(value) => setForm((prev) => ({ ...prev, fingerprintId: value }))} />
-          ) : null}
-          <div className="md:col-span-2">
-            {role === "faculty" ? (
-              <SelectField
-                label="Department / Section"
-                value={form.department}
-                onChange={(value) => setForm((prev) => ({ ...prev, department: value }))}
-                options={departmentOptions}
-                placeholder="Select department"
-              />
-            ) : (
-              <Field label="Department / Section" placeholder="Enter department or section" value={form.department} onChange={(value) => setForm((prev) => ({ ...prev, department: value }))} />
-            )}
-          </div>
-          <button type="submit" className="btn btn-primary md:col-span-2 justify-self-start">
-            Update Account
-          </button>
-        </form>
-      </FormCard>
+      {form ? (
+        <>
+          <FormCard title="Profile Details" subtitle={usesManagedSelfAccount ? undefined : "This form keeps your current validation rules and uses the new project styling."}>
+            <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
+              {usesManagedSelfAccount ? (
+                <Field label="ID Number" value={form.idNumber} onChange={(value) => setForm((prev) => ({ ...prev, idNumber: value }))} disabled />
+              ) : null}
+              <Field label="First Name" placeholder="Enter first name" value={form.firstName} onChange={(value) => setForm((prev) => ({ ...prev, firstName: value }))} />
+              <Field label="Middle Name" placeholder="Enter middle name (optional)" value={form.middleName} onChange={(value) => setForm((prev) => ({ ...prev, middleName: value }))} />
+              <Field label="Last Name" placeholder="Enter last name" value={form.lastName} onChange={(value) => setForm((prev) => ({ ...prev, lastName: value }))} />
+              {usesManagedSelfAccount ? (
+                <Field label="Username" placeholder="Enter username" value={form.username} onChange={(value) => setForm((prev) => ({ ...prev, username: value }))} />
+              ) : null}
+              <Field label="Email" type="email" placeholder="Enter email address" value={form.email} onChange={(value) => setForm((prev) => ({ ...prev, email: value }))} />
+              <Field label="Phone" placeholder="09xxxxxxxxx" value={form.phone} onChange={(value) => setForm((prev) => ({ ...prev, phone: value }))} />
+              {!usesManagedSelfAccount ? (
+                <Field label="Smart Card ID" placeholder="Enter smart card ID" value={form.smartCardId} onChange={(value) => setForm((prev) => ({ ...prev, smartCardId: value }))} />
+              ) : null}
+              {!usesManagedSelfAccount ? (
+                <Field label="Fingerprint ID" placeholder="Enter fingerprint ID" value={form.fingerprintId} onChange={(value) => setForm((prev) => ({ ...prev, fingerprintId: value }))} />
+              ) : null}
+              <div className="md:col-span-2">
+                {role === "faculty" ? (
+                  <SelectField
+                    label="Department / Section"
+                    value={form.department}
+                    onChange={(value) => setForm((prev) => ({ ...prev, department: value }))}
+                    options={departmentOptions}
+                    placeholder="Select department"
+                  />
+                ) : (
+                  <Field label="Department / Section" placeholder="Enter department or section" value={form.department} onChange={(value) => setForm((prev) => ({ ...prev, department: value }))} />
+                )}
+              </div>
+              <button type="submit" className="btn btn-primary md:col-span-2 justify-self-start">
+                Update Account
+              </button>
+            </form>
+          </FormCard>
 
-      {usesManagedSelfAccount ? (
-        <FormCard title="Change Password">
-          <form onSubmit={handlePasswordSubmit} className="grid gap-4 md:grid-cols-2">
-            <Field label="Current Password" type="password" placeholder="Enter current password" allowVisibilityToggle value={passwordForm.currentPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, currentPassword: value }))} />
-            <Field label="New Password" type="password" placeholder="Enter new password" allowVisibilityToggle value={passwordForm.newPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, newPassword: value }))} />
-            <div className="md:col-span-2">
-              <Field label="Confirm New Password" type="password" placeholder="Confirm new password" allowVisibilityToggle value={passwordForm.confirmNewPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, confirmNewPassword: value }))} />
-            </div>
-            <button type="submit" className="btn btn-primary md:col-span-2 justify-self-start">
-              Change Password
-            </button>
-          </form>
+          {usesManagedSelfAccount && (
+            <FormCard title="Change Password">
+              <form onSubmit={handlePasswordSubmit} className="grid gap-4 md:grid-cols-2">
+                <Field label="Current Password" type="password" placeholder="Enter current password" allowVisibilityToggle value={passwordForm.currentPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, currentPassword: value }))} />
+                <Field label="New Password" type="password" placeholder="Enter new password" allowVisibilityToggle value={passwordForm.newPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, newPassword: value }))} />
+                <div className="md:col-span-2">
+                  <Field label="Confirm New Password" type="password" placeholder="Confirm new password" allowVisibilityToggle value={passwordForm.confirmNewPassword} onChange={(value) => setPasswordForm((prev) => ({ ...prev, confirmNewPassword: value }))} />
+                </div>
+                <button type="submit" className="btn btn-primary md:col-span-2 justify-self-start">
+                  Change Password
+                </button>
+              </form>
+            </FormCard>
+          )}
+        </>
+      ) : (
+        <FormCard title="Profile Details">
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+            <p className="mt-2">Loading account data...</p>
+          </div>
         </FormCard>
-      ) : null}
+      )}
     </div>
   );
 }
