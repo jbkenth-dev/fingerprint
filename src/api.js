@@ -62,7 +62,11 @@ function getAuthToken() {
     if (raw) {
       const session = JSON.parse(raw);
       const token = session?.token || null;
-      console.log('[api.js] getAuthToken: token from localStorage:', token ? 'present' : 'null');
+      if (token) {
+        console.log('[api.js] getAuthToken: token from localStorage, length:', token.length, 'prefix:', token.slice(0, 8));
+      } else {
+        console.log('[api.js] getAuthToken: token from localStorage is null');
+      }
       return token;
     }
   } catch {
@@ -100,7 +104,8 @@ export async function apiFetch(path, options = {}) {
   if (typeof token === 'string') {
     token = token.trim();
   }
-  console.log('[api.js] apiFetch:', { url, method: options.method, token: token ? 'present' : 'null' });
+  let tokenLog = token ? { length: token.length, prefix: token.slice(0, 8) } : null;
+  console.log('[api.js] apiFetch:', { url, method: options.method, token: tokenLog });
 
   const headers = {
     'Content-Type': 'application/json',
