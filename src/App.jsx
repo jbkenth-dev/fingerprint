@@ -4952,8 +4952,12 @@ function SelfAccountPage({ role }) {
     apiFetch('/departments.php')
       .then(data => {
         if (Array.isArray(data)) {
-          const names = data.map(d => d.name).filter(Boolean).sort();
-          setDepartmentOptions(names);
+          const options = data
+            .map(d => d.name)
+            .filter(Boolean)
+            .sort()
+            .map(name => ({ value: name, label: name }));
+          setDepartmentOptions(options);
         }
       })
       .catch(err => {
