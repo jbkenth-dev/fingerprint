@@ -5,25 +5,18 @@
 
 /**
  * Normalize the API base URL.
- * - If VITE_API_BASE contains an absolute HTTP(S) URL, strip it to just the
- *   path portion so the browser always talks to the same origin (Vercel proxy).
- *   This prevents "Mixed Content" errors when the env var points directly at
- *   the Awardspace backend over plain HTTP.
- * - If it's already a relative path (e.g. "/api"), use it as-is.
+ * - If VITE_API_BASE contains an absolute HTTP(S) URL, use it as-is.
+ *   This avoids issues with proxies in production when the frontend and backend are on different origins.
+ *   If it's already a relative path (e.g. "/api"), use it as-is.
+ *   Note: Using an absolute URL from a different origin may cause CORS issues; ensure the backend
+ *   is configured to allow the frontend's origin.
  */
 function resolveApiBase() {
   const raw = import.meta.env.VITE_API_BASE || '/api';
+  // If raw is an absolute URL, use it as-is.
   try {
-    // If the value is an absolute URL, extract only its pathname.
-    const u = new URL(raw);
-    if (u.protocol === 'http:' || u.protocol === 'https:') {
-      console.warn(
-        `[api.js] VITE_API_BASE is an absolute URL (${raw}). ` +
-        `Using path "${u.pathname}" instead so the Vercel proxy handles routing. ` +
-        `Set VITE_API_BASE=/api in your Vercel environment to suppress this warning.`
-      );
-      return u.pathname; // e.g. "/api"
-    }
+    new URL(raw);
+    return raw;
   } catch {
     // Not a valid URL — treat it as a relative path (the normal case).
   }

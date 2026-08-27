@@ -3619,6 +3619,7 @@ function AdminAccountPage() {
     middleName: currentUser?.middleName ?? "",
     lastName: currentUser?.lastName ?? "",
     email: currentUser?.email ?? "",
+    department: currentUser?.department ?? "",
   });
   const [passwordForm, setPasswordForm] = React.useState({
     currentPassword: "",
@@ -3699,6 +3700,7 @@ function AdminAccountPage() {
       middleName: currentUser.middleName ?? "",
       lastName: currentUser.lastName ?? "",
       email: currentUser.email ?? "",
+      department: currentUser.department ?? "",
     });
     setPasswordForm({
       currentPassword: "",
@@ -3803,6 +3805,7 @@ function AdminAccountPage() {
       middleName: form.middleName,
       lastName: form.lastName,
       email: form.email,
+      department: form.department,
     });
     setFeedback({ message: "Admin profile updated successfully.", tone: "success" });
   };
@@ -4192,6 +4195,7 @@ function AdminAccountPage() {
                   <Field label="Middle Name" placeholder="Enter middle name" value={form.middleName} onChange={(value) => setForm((prev) => ({ ...prev, middleName: value }))} />
                   <Field label="Last Name" placeholder="Enter last name" value={form.lastName} onChange={(value) => setForm((prev) => ({ ...prev, lastName: value }))} />
                   <Field label="Email" type="email" placeholder="Enter email address" value={form.email} onChange={(value) => setForm((prev) => ({ ...prev, email: value }))} />
+                  <Field label="Department" placeholder="Enter department" value={form.department} onChange={(value) => setForm((prev) => ({ ...prev, department: value }))} />
                   <button type="submit" className="btn btn-primary md:col-span-2 justify-self-start">
                     Save Profile
                   </button>
