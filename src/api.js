@@ -138,19 +138,22 @@ export async function apiFetch(path, options = {}) {
   // Handle 401 — use the backend's actual error message (e.g. "Invalid credentials")
   // instead of a hardcoded string, so login failures show the right feedback.
   if (res.status === 401) {
-    // Only clear session / dispatch expiry for non-login requests.
-    // Login POST to auth.php returns 401 for wrong credentials — that's not a session expiry.
-    const isLoginAttempt = path.endsWith('/auth.php') && (options.method || 'GET').toUpperCase() === 'POST';
-    if (!isLoginAttempt) {
-      clearSession();
-      window.dispatchEvent(new CustomEvent('auth:expired'));
-    }
     // Use a contextual fallback: "session expired" makes no sense during a login attempt
     // since there is no session yet.
+    const isLoginAttempt = path.endsWith('/auth.php') && (options.method || 'GET').toUpperCase() === 'POST';
     const fallback = isLoginAttempt
       ? 'Sign in failed. Please check your credentials and try again.'
       : 'Session expired. Please sign in again.';
     throw new Error(data.error || fallback);
+
+    // Only clear session / dispatch expiry for non-login requests.
+    // Login POST to auth.php returns 401 for wrong credentials — that's not a session expiry.
+    // We do this AFTER throwing the error so that error handling in the caller
+    // is not interfered with by session cleanup side effects.
+    if (!isLoginAttempt) {
+      clearSession();
+      window.dispatchEvent(new CustomEvent('auth:expired'));
+    }
   }
 
   if (!res.ok) {
