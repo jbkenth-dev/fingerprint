@@ -3224,7 +3224,7 @@ function ClassSchedulingPage() {
       {isViewStudentsModalOpen ? (
         <div className="modal-overlay">
           <div className="my-auto w-full max-w-4xl">
-            <FormCard>
+            <FormCard className="border-l-4 border-green-500">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-800">View Students</h2>
                 <button
