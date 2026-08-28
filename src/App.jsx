@@ -3004,18 +3004,9 @@ function ClassSchedulingPage() {
                     <React.Fragment key={group.key}>
                       <tr className="table-section-row">
                         <td colSpan="6" className="px-4 py-2">
-                          <div className="text-center font-semibold sm:text-left">{group.label}</div>
-                        </td>
-                      </tr>
-                      {group.items.map((row) => (
-                        <tr key={row.id}>
-                          <td className="px-4 py-3 font-semibold text-gray-800">{row.subjectCode}</td>
-                          <td className="px-4 py-3">{row.subjectName}</td>
-                          <td className="px-4 py-3">{row.facultyName || "—"}</td>
-                          <td className="px-4 py-3">{formatScheduleDays(row.days)}</td>
-                          <td className="px-4 py-3">{formatTimeRange(row.startTime, row.endTime)}</td>
-                          <td className="px-4 py-3">
-                            <div className="inline-flex items-center gap-2">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="text-center font-semibold sm:text-left\">{group.label}</div>
+                            <div className="inline-flex items-center justify-center gap-2 sm:justify-end">
                               <button
                                 type="button"
                                 onClick={() => handleEditSchedule(group)}
@@ -3038,7 +3029,17 @@ function ClassSchedulingPage() {
                                 Delete
                               </button>
                             </div>
-                          </td>
+                          </div>
+                        </td>
+                      </tr>
+                      {group.items.map((row) => (
+                        <tr key={row.id}>
+                          <td className="px-4 py-3 font-semibold text-gray-800\">{row.subjectCode}</td>
+                          <td className="px-4 py-3\">{row.subjectName}</td>
+                          <td className="px-4 py-3\">{row.facultyName || "—"}</td>
+                          <td className="px-4 py-3\">{formatScheduleDays(row.days)}</td>
+                          <td className="px-4 py-3\>{formatTimeRange(row.startTime, row.endTime)}</td>
+                          <td className="px-4 py-3" />
                         </tr>
                       ))}
                     </React.Fragment>

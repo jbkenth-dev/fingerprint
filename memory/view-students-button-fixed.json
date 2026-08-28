@@ -1,0 +1,7 @@
+{
+  "name": "view-students-button-fixed",
+  "description": "Fixed View Students button placement: moved Edit, View Students, Delete buttons from each schedule row to the section header row, so each section shows exactly one set of buttons (Edit | View Students | Delete). Corrected JSX syntax errors (missing quotes and braces) in the modal and table.",
+  "metadata": {
+    "type": "knowledge"
+  }
+}
