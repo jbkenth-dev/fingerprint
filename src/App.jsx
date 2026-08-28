@@ -1916,47 +1916,6 @@ function RolePanel({ pageKey, role }) {
               Export
             </button>
           </div>
-
-          {/* Statistics Cards */}
-          <section className="grid gap-4 mb-6">
-            {[{
-              label: "Total Records",
-              value: filteredAttendance.length,
-              color: "text-blue-600 bg-blue-50",
-              icon: Users
-            }, {
-              label: "Present Today",
-              value: todayPresentCount,
-              color: "text-green-600 bg-green-50",
-              icon: CircleCheck
-            }, {
-              label: "Late Today",
-              value: todayLateCount,
-              color: "text-amber-600 bg-amber-50",
-              icon: TriangleAlert
-            }, {
-              label: "Absent Today",
-              value: todayAbsentCount,
-              color: "text-red-600 bg-red-50",
-              icon: CircleX
-            }, {
-              label: "Potential Duplicates",
-              value: duplicateRecords.length,
-              color: "text-purple-600 bg-purple-50",
-              icon: TriangleAlert
-            }].map((stat) => (
-              <article key={stat.label} className="card-elevated p-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="text-xs font-medium uppercase tracking-wider text-gray-500">{stat.label}</div>
-                    {stat.icon && <stat.icon size={20} className={`${stat.color.split(' ')[0]} ${stat.color.split(' ')[1]}`} />}
-                  </div>
-                  <div className="text-2xl font-bold text-gray-800">{stat.value}</div>
-                </div>
-              </article>
-            ))}
-          </section>
-
           {/* Controls Section */}
           <section className="space-y-4">
             {/* View Tabs */}
