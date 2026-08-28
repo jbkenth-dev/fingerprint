@@ -155,13 +155,13 @@ export const panelContent = {
   },
   attendance: {
     title: "Attendance",
-    description:
-      "Static attendance tables can later be connected to PHP or Node APIs with MySQL as the source of truth.",
+    description: "",
     metrics: [
-      { label: "Late Entries", value: "64", hint: "Flagged after grace period" },
-      { label: "Absent Today", value: "142", hint: "Students and faculty combined" },
-      { label: "Manual Reviews", value: "8", hint: "Awaiting admin approval" },
-      { label: "Resolved Cases", value: "31", hint: "This week" },
+      { label: "Total Records", value: "0", hint: "" },
+      { label: "Present Today", value: "0", hint: "" },
+      { label: "Late Today", value: "0", hint: "" },
+      { label: "Absent Today", value: "0", hint: "" },
+      { label: "Potential Duplicates", value: "0", hint: "" }
     ],
   },
   reports: {
