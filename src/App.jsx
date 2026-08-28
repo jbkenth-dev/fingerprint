@@ -1907,9 +1907,7 @@ function RolePanel({ pageKey, role }) {
           {/* Header with title and export button */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-semibold text-gray-800">Attendance Management</h1>
-              <p className="mt-1 text-sm text-gray-500">Monitor and manage attendance records</p>
-            </div>
+                          </div>
             <button
               onClick={handleExportAttendance}
               className="btn btn-secondary inline-flex items-center gap-2 text-sm"
