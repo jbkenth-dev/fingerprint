@@ -2890,7 +2890,7 @@ function ClassSchedulingPage() {
 
   const handleViewStudents = async (group) => {
     setViewStudentsLoading(true);
-    setViewStudentsError(\"\"\);
+    setViewStudentsError("");
     try {
       // Fetch schedules for the section (we can use the existing scheduleRows state)
       const schedulesForSection = scheduleRows.filter(
@@ -2904,8 +2904,8 @@ function ClassSchedulingPage() {
       const targetDepartment = `${group.yearLevel} - ${group.section}`;
       const activeStudents = users.filter(
         (user) =>
-          user.role === \"student\" &&
-          user.status === \"Active\" &&
+          user.role === "student" &&
+          user.status === "Active" &&
           user.department === targetDepartment
       );
 
@@ -2919,7 +2919,29 @@ function ClassSchedulingPage() {
         return firstNameA.localeCompare(firstNameB);
       });
 
-      // Format student names to \"LASTNAME, FIRSTNAME, MIDDLE NAME\"\n      const formattedStudents = sortedStudents.map(student => {\n        const lastName = student.lastName ?? '';\n        const firstName = student.firstName ?? '';\n        const middleName = student.middleName ?? '';\n        const nameParts = [lastName, firstName, middleName].filter(part => part !== '');\n        const formattedName = nameParts.join(', ');\n        return {\n          ...student,\n          formattedName: formattedName\n        };\n      });\n\n      setViewStudentsData({\n        schedules: schedulesForSection,\n        students: filteredStudents\n      });\n    } catch (error) {\n      setViewStudentsError(error.message || \"Failed to load data for View Students modal.\");\n    } finally {\n      setViewStudentsLoading(false);\n    }\n  };\n
+      // Format student names to "LASTNAME, FIRSTNAME, MIDDLE NAME"
+      const formattedStudents = sortedStudents.map(student => {
+        const lastName = student.lastName ?? '';
+        const firstName = student.firstName ?? '';
+        const middleName = student.middleName ?? '';
+        const nameParts = [lastName, firstName, middleName].filter(part => part !== '');
+        const formattedName = nameParts.join(', ');
+        return {
+          ...student,
+          formattedName: formattedName
+        };
+      });
+
+      setViewStudentsData({
+        schedules: schedulesForSection,
+        students: formattedStudents
+      });
+    } catch (error) {
+      setViewStudentsError(error.message || "Failed to load data for View Students modal.");
+    } finally {
+      setViewStudentsLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-4">

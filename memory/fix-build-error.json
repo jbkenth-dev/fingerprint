@@ -1,0 +1,8 @@
+{
+  "name": "fix-build-error",
+  "description": "Fixed syntax error in handleViewStudents function in ClassSchedulingPage",
+  "metadata": {
+    "type": "feedback"
+  },
+  "content": "Fixed the syntax error in the handleViewStudents function by correcting string literals and newline characters. The build should now pass."
+}
