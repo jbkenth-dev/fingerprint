@@ -17,11 +17,6 @@ function resolveApiBase() {
     // If the value is an absolute URL, extract only its pathname.
     const u = new URL(raw);
     if (u.protocol === 'http:' || u.protocol === 'https:') {
-      console.warn(
-        `[api.js] VITE_API_BASE is an absolute URL (${raw}). ` +
-        `Using path "${u.pathname}" instead so the Vercel proxy handles routing. ` +
-        `Set VITE_API_BASE=/api in your Vercel environment to suppress this warning.`
-      );
       return u.pathname; // e.g. "/api"
     }
   } catch {
@@ -41,7 +36,6 @@ let _authToken = null;
  */
 export function setAuthToken(token) {
   _authToken = token;
-  console.log('[api.js] setAuthToken: token set');
 }
 
 /**
@@ -49,7 +43,6 @@ export function setAuthToken(token) {
  */
 export function clearAuthToken() {
   _authToken = null;
-  console.log('[api.js] clearAuthToken: token cleared');
 }
 
 /**
@@ -62,18 +55,11 @@ function getAuthToken() {
     if (raw) {
       const session = JSON.parse(raw);
       const token = session?.token || null;
-      if (token) {
-        console.log('[api.js] getAuthToken: token from localStorage, length:', token.length, 'prefix:', token.slice(0, 8));
-      } else {
-        console.log('[api.js] getAuthToken: token from localStorage is null');
-      }
       return token;
     }
   } catch {
     // localStorage not available
-    console.log('[api.js] getAuthToken: localStorage not available');
   }
-  console.log('[api.js] getAuthToken: returning null');
   return null;
 }
 
@@ -81,7 +67,6 @@ function getAuthToken() {
  * Clear the stored session (used on 401 responses).
  */
 function clearSession() {
-  console.log('[api.js] clearSession: clearing session');
   _authToken = null;
   try {
     localStorage.removeItem(STORAGE_KEY);
@@ -105,7 +90,6 @@ export async function apiFetch(path, options = {}) {
     token = token.trim();
   }
   let tokenLog = token ? { length: token.length, prefix: token.slice(0, 8) } : null;
-  console.log('[api.js] apiFetch:', { url, method: options.method, token: tokenLog });
 
   const headers = {
     'Content-Type': 'application/json',
