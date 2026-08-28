@@ -2308,7 +2308,7 @@ function RolePanel({ pageKey, role }) {
             </div>
           </section>
         </section>
-      )}
+      )
     </div>
   );
 }
