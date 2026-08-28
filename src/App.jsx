@@ -3034,11 +3034,11 @@ function ClassSchedulingPage() {
                       </tr>
                       {group.items.map((row) => (
                         <tr key={row.id}>
-                          <td className="px-4 py-3 font-semibold text-gray-800\">{row.subjectCode}</td>
-                          <td className="px-4 py-3\">{row.subjectName}</td>
-                          <td className="px-4 py-3\">{row.facultyName || "—"}</td>
-                          <td className="px-4 py-3\">{formatScheduleDays(row.days)}</td>
-                          <td className="px-4 py-3\>{formatTimeRange(row.startTime, row.endTime)}</td>
+                          <td className="px-4 py-3 font-semibold text-gray-800">{row.subjectCode}</td>
+                          <td className="px-4 py-3">{row.subjectName}</td>
+                          <td className="px-4 py-3">{row.facultyName || "—"}</td>
+                          <td className="px-4 py-3">{formatScheduleDays(row.days)}</td>
+                          <td className="px-4 py-3">{formatTimeRange(row.startTime, row.endTime)}</td>
                           <td className="px-4 py-3" />
                         </tr>
                       ))}
