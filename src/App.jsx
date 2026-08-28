@@ -1346,16 +1346,122 @@ function RolePanel({ pageKey, role }) {
   const [attendancePage, setAttendancePage] = React.useState(1);
   const pageSize = 15;
 
-  const fetchAttendanceLogs = React.useCallback(async (date, page) => {
+// Admin attendance page state
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const [statusFilter, setStatusFilter] = React.useState('all'); // all, in, out
+  const [userTypeFilter, setUserTypeFilter] = React.useState('all'); // all, student, faculty, staff
+  const [dateRangeFilter, setDateRangeFilter] = React.useState('today'); // today, week, month, custom
+  const [customStartDate, setCustomStartDate] = React.useState('');
+  const [customEndDate, setCustomEndDate] = React.useState('');
+  const [viewMode, setViewMode] = React.useState('all'); // all, live, students, late, absent, history, duplicates
+  const [liveUpdateInterval, setLiveUpdateInterval] = React.useState(null);
+  const [duplicateRecords, setDuplicateRecords] = React.useState([]);
+
+  const fetchAttendanceLogs = React.useCallback(async (date, page, filters = {}) => {
     setAttendanceLoading(true);
     setAttendanceError("");
     try {
       const offset = (page - 1) * pageSize;
       const params = new URLSearchParams({ limit: String(pageSize), offset: String(offset) });
-      if (date) params.set("date", date);
+
+      // Apply date filter
+      let effectiveDate = date;
+      if (!effectiveDate) {
+        const today = new Date();
+        switch (dateRangeFilter) {
+          case 'today':
+            effectiveDate = today.toISOString().split('T')[0];
+            break;
+          case 'yesterday':
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            effectiveDate = yesterday.toISOString().split('T')[0];
+            break;
+          case 'week':
+            // For week, we'll fetch today and handle filtering client-side for simplicity
+            effectiveDate = today.toISOString().split('T')[0];
+            break;
+          case 'month':
+            // For month, we'll fetch today and handle filtering client-side
+            effectiveDate = today.toISOString().split('T')[0];
+            break;
+          case 'custom':
+            if (customStartDate && customEndDate) {
+              // For custom range, we'd need to modify the API to support date ranges
+              // For now, we'll use start date and filter client-side
+              effectiveDate = customStartDate;
+            } else {
+              effectiveDate = today.toISOString().split('T')[0];
+            }
+            break;
+          default:
+            effectiveDate = today.toISOString().split('T')[0];
+        }
+      } else {
+        effectiveDate = date;
+      }
+
+      if (effectiveDate) params.set("date", effectiveDate);
 
       const result = await apiFetch(`/attendance.php?${params.toString()}`);
-      setAttendanceLogs(Array.isArray(result.records) ? result.records : []);
+      let records = Array.isArray(result.records) ? result.records : [];
+
+      // Apply additional filters client-side
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        records = records.filter(record =>
+          record.name?.toLowerCase().includes(searchLower) ||
+          record.idNumber?.toLowerCase().includes(searchLower) ||
+          (record.role && record.role.toLowerCase().includes(searchLower))
+        );
+      }
+
+      if (statusFilter !== 'all') {
+        records = records.filter(record => record.status.toLowerCase() === statusFilter);
+      }
+
+      if (userTypeFilter !== 'all' && record.role) {
+        records = records.filter(record => {
+          const roleLower = record.role.toLowerCase();
+          return (userTypeFilter === 'student' && roleLower === 'student') ||
+                 (userTypeFilter === 'faculty' && roleLower === 'faculty') ||
+                 (userTypeFilter === 'staff' && (roleLower === 'admin' || roleLower === 'faculty'));
+        });
+      }
+
+      // Apply date range filters for week/month/custom
+      if (dateRangeFilter === 'week' || dateRangeFilter === 'month' || dateRangeFilter === 'custom') {
+        const startDate = dateRangeFilter === 'custom' ? new Date(customStartDate) : null;
+        const endDate = dateRangeFilter === 'custom' ? new Date(customEndDate) : null;
+        const today = new Date();
+
+        records = records.filter(record => {
+          const recordDate = new Date(record.logDate);
+          if (dateRangeFilter === 'week') {
+            // Get start of week (Sunday)
+            const weekStart = new Date(today);
+            weekStart.setDate(today.getDate() - today.getDay());
+            weekStart.setHours(0, 0, 0, 0);
+            // Get end of week (Saturday)
+            const weekEnd = new Date(today);
+            weekEnd.setDate(today.getDate() + (6 - today.getDay()));
+            weekEnd.setHours(23, 59, 59, 999);
+            return recordDate >= weekStart && recordDate <= weekEnd;
+          } else if (dateRangeFilter === 'month') {
+            // Get start of month
+            const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+            // Get end of month
+            const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            monthEnd.setHours(23, 59, 59, 999);
+            return recordDate >= monthStart && recordDate <= monthEnd;
+          } else if (dateRangeFilter === 'custom' && startDate && endDate) {
+            return recordDate >= startDate && recordDate <= endDate;
+          }
+          return true;
+        });
+      }
+
+      setAttendanceLogs(records);
       setAttendanceTotal(result.total ?? 0);
     } catch (err) {
       setAttendanceLogs([]);
@@ -1364,7 +1470,7 @@ function RolePanel({ pageKey, role }) {
     } finally {
       setAttendanceLoading(false);
     }
-  }, []);
+  }, [searchTerm, statusFilter, userTypeFilter, dateRangeFilter, customStartDate, customEndDate]);
 
   // Fetch attendance logs for dashboard — loads data immediately without page refresh
   React.useEffect(() => {
@@ -1395,7 +1501,239 @@ function RolePanel({ pageKey, role }) {
     return source === "esp32" || source === "esp32-sync" ? "Fingerprint + Card" : source;
   }
 
-  // Dashboard metrics derived from real data
+  // Check if this is the admin attendance page
+  const isAdminAttendancePage = !isDashboard && pageKey === "attendance" && role === "admin";
+
+  // Filtered attendance based on search and filters (only for admin attendance page)
+  const filteredAttendance = React.useMemo(() => {
+    if (!isAdminAttendancePage) return attendanceLogs;
+
+    return attendanceLogs.filter(record => {
+      // Apply search filter
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        const matchesSearch = record.name?.toLowerCase().includes(searchLower) ||
+          record.idNumber?.toLowerCase().includes(searchLower) ||
+          (record.role && record.role.toLowerCase().includes(searchLower));
+        if (!matchesSearch) return false;
+      }
+
+      // Apply status filter
+      if (statusFilter !== 'all' && record.status.toLowerCase() !== statusFilter) {
+        return false;
+      }
+
+      // Apply user type filter
+      if (userTypeFilter !== 'all' && record.role) {
+        const roleLower = record.role.toLowerCase();
+        if (userTypeFilter === 'student' && roleLower !== 'student') return false;
+        if (userTypeFilter === 'faculty' && roleLower !== 'faculty') return false;
+        if (userTypeFilter === 'staff' && !(roleLower === 'admin' || roleLower === 'faculty')) return false;
+      }
+
+      // Apply date range filter
+      const recordDate = new Date(record.logDate);
+      const today = new Date();
+      let includeRecord = true;
+
+      switch (dateRangeFilter) {
+        case 'today':
+          includeRecord = recordDate.toDateString() === today.toDateString();
+          break;
+        case 'week':
+          const weekStart = new Date(today);
+          weekStart.setDate(today.getDate() - today.getDay());
+          weekStart.setHours(0, 0, 0, 0);
+          const weekEnd = new Date(today);
+          weekEnd.setDate(today.getDate() + (6 - today.getDay()));
+          weekEnd.setHours(23, 59, 59, 999);
+          includeRecord = recordDate >= weekStart && recordDate <= weekEnd;
+          break;
+        case 'month':
+          const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+          const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+          monthEnd.setHours(23, 59, 59, 999);
+          includeRecord = recordDate >= monthStart && recordDate <= monthEnd;
+          break;
+        case 'custom':
+          if (customStartDate && customEndDate) {
+            const startDate = new Date(customStartDate);
+            const endDate = new Date(customEndDate);
+            includeRecord = recordDate >= startDate && recordDate <= endDate;
+          }
+          break;
+        default:
+          includeRecord = recordDate.toDateString() === today.toDateString();
+      }
+
+      return includeRecord;
+    });
+  }, [attendanceLogs, searchTerm, statusFilter, userTypeFilter, dateRangeFilter, customStartDate, customEndDate]);
+
+  // Today's statistics (for cards - only for admin attendance page)
+  const today = new Date();
+  const todayString = today.toDateString();
+  const todayRecords = isAdminAttendancePage ? attendanceLogs.filter(record =>
+    new Date(record.logDate).toDateString() === todayString
+  ) : [];
+
+  const todayPresentCount = isAdminAttendancePage ? todayRecords.filter(record => record.status === 'IN').length : 0;
+  const todayAbsentCount = isAdminAttendancePage ? todayRecords.filter(record => record.status === 'OUT').length : 0;
+
+  // Calculate late arrivals (requires schedule data which we don't have in this context)
+  // For now, we'll approximate late as IN records after 9:00 AM
+  const todayLateCount = isAdminAttendancePage ? todayRecords.filter(record => {
+    const timeIn = record.logTime;
+    if (!timeIn) return false;
+    const [hours, minutes] = timeIn.split(':').map(Number);
+    return hours > 9 || (hours === 9 && minutes > 0);
+  }).length : 0;
+
+  // Duplicate detection (only for admin attendance page)
+  const detectDuplicates = React.useCallback(() => {
+    if (!isAdminAttendancePage) return [];
+
+    const duplicates = [];
+    const seen = new Map();
+
+    attendanceLogs.forEach(record => {
+      const key = `${record.userId}-${record.logDate}`;
+      if (seen.has(key)) {
+        // This is a duplicate
+        const existingRecord = seen.get(key);
+        duplicates.push({
+          id: record.id,
+          userId: record.userId,
+          name: record.name,
+          logDate: record.logDate,
+          logTime: record.logTime,
+          status: record.status,
+          type: 'Same User & Date'
+        });
+        // Also mark the original as duplicate if not already marked
+        if (!seen.get(key).isMarkedDuplicate) {
+          duplicates.push({
+            id: existingRecord.id,
+            userId: existingRecord.userId,
+            name: existingRecord.name,
+            logDate: existingRecord.logDate,
+            logTime: existingRecord.logTime,
+            status: existingRecord.status,
+            type: 'Same User & Date'
+          });
+          seen.get(key).isMarkedDuplicate = true;
+        }
+      } else {
+        seen.set(key, { ...record, isMarkedDuplicate: false });
+      }
+    });
+
+    return duplicates;
+  }, [attendanceLogs, isAdminAttendancePage]);
+
+  // Update duplicate records when attendance logs change
+  React.useEffect(() => {
+    if (isAdminAttendancePage) {
+      setDuplicateRecords(detectDuplicates());
+    }
+  }, [attendanceLogs, detectDuplicates, isAdminAttendancePage]);
+
+  // Live attendance updates (polling every 10 seconds - only for admin attendance page)
+  React.useEffect(() => {
+    if (isAdminAttendancePage && viewMode === 'live') {
+      // Clear any existing interval
+      if (liveUpdateInterval !== null) {
+        clearInterval(liveUpdateInterval);
+      }
+
+      // Set new interval to fetch latest attendance
+      const interval = setInterval(() => {
+        // Fetch today's records for live view
+        const today = new Date();
+        const todayString = today.toISOString().split('T')[0];
+        fetchAttendanceLogs(todayString, 1, {}); // Page 1 for latest records
+      }, 10000); // 10 seconds
+
+      setLiveUpdateInterval(interval);
+
+      // Fetch initial data
+      fetchAttendanceLogs(todayString, 1, {});
+    } else if (liveUpdateInterval !== null) {
+      // Clear interval when not in live mode
+      clearInterval(liveUpdateInterval);
+      setLiveUpdateInterval(null);
+    }
+
+    // Cleanup
+    return () => {
+      if (liveUpdateInterval !== null) {
+        clearInterval(liveUpdateInterval);
+      }
+    };
+  }, [viewMode, liveUpdateInterval, fetchAttendanceLogs, isAdminAttendancePage]);
+
+  // Export function (only for admin attendance page)
+  const handleExportAttendance = React.useCallback(() => {
+    if (!isAdminAttendancePage || filteredAttendance.length === 0) {
+      alert('No data to export');
+      return;
+    }
+
+    // Prepare CSV data
+    const csvRows = [];
+
+    // Header
+    csvRows.push(['Francis Key Attendance Export']);
+    csvRows.push([`Generated: ${new Date().toLocaleString()}`]);
+    csvRows.push([]);
+
+    // Filters applied
+    csvRows.push(['Applied Filters:']);
+    csvRows.push([`Search: ${searchTerm || 'None'}`]);
+    csvRows.push([`Status: ${statusFilter === 'all' ? 'All' : statusFilter.toUpperCase()}`]);
+    csvRows.push([`User Type: ${userTypeFilter === 'all' ? 'All' : userTypeFilter}`]);
+    csvRows.push([`Date Range: ${dateRangeFilter === 'custom' && customStartDate && customEndDate ? `${customStartDate} to ${customEndDate}` : dateRangeFilter}`]);
+    csvRows.push([]);
+
+    // Data header
+    csvRows.push(['No.', 'Name', 'ID/Username', 'Role', 'Date', 'Time In', 'Time Out', 'Status', 'Method']);
+
+    // Data rows
+    filteredAttendance.forEach((record, index) => {
+      const timeIn = record.status === 'IN' ? formatAttendanceTime(record.logTime) : '';
+      const timeOut = record.status === 'OUT' ? formatAttendanceTime(record.logTime) : '';
+
+      csvRows.push([
+        index + 1,
+        record.name,
+        record.idNumber || record.username || 'N/A',
+        record.role,
+        record.logDate,
+        timeIn,
+        timeOut,
+        record.status.toUpperCase(),
+        attendanceMethod(record.source)
+      ]);
+    });
+
+    // Generate CSV
+    const csvContent = csvRows.map(row =>
+      row.map(field =>
+        `"${String(field).replace(/"/g, '""')}"`
+      ).join(',')
+    ).join('\n');
+
+    // Create download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `francis-key-attendance-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [filteredAttendance, searchTerm, statusFilter, userTypeFilter, dateRangeFilter, customStartDate, customEndDate, isAdminAttendancePage]);
   const dashboardMetrics = React.useMemo(() => {
     if (!isDashboard || !attendanceLogs.length) return data.metrics;
 
@@ -1564,56 +1902,412 @@ function RolePanel({ pageKey, role }) {
 
         </section>
       ) : (
-        <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-          <article className="card-elevated p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-gray-800">Recent Attendance Feed</h2>
-              <span className="badge badge-green text-[0.65rem] uppercase tracking-wider">Real-Time</span>
+        {/* Admin Attendance Management Page */}
+        <section className="space-y-6">
+          {/* Header with title and export button */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-800">Attendance Management</h1>
+              <p className="mt-1 text-sm text-gray-500">Monitor and manage attendance records</p>
             </div>
+            <button
+              onClick={handleExportAttendance}
+              className="btn btn-secondary inline-flex items-center gap-2 text-sm"
+            >
+              <FileBarChart size={16} />
+              Export
+            </button>
+          </div>
 
-            <div className="mt-5 table-container">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Role</th>
-                    <th>Method</th>
-                    <th>Status</th>
-                    <th>Time</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sampleAttendance.map((row) => (
-                    <tr key={row.name}>
-                      <td className="font-medium text-gray-800">{row.name}</td>
-                      <td>{row.role}</td>
-                      <td>{row.method}</td>
-                      <td>
-                        <span className="rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">{row.status}</span>
-                      </td>
-                      <td>{row.timestamp}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </article>
-
-          <article className="card-elevated p-5">
-            <h2 className="text-lg font-semibold text-gray-800">Operational Notes</h2>
-            <div className="mt-5 space-y-3">
-              {[
-                "The new visual system uses one shared palette so the whole project feels like a single product.",
-                "All key calls to action now use brighter contrast for cleaner focus and clearer user flow.",
-                "Dashboard panels and forms now share matching surfaces, borders, and icon styling.",
-                "Your routing and data behavior stay intact, so the redesign is mostly visual and UX-oriented.",
-              ].map((item) => (
-                <div key={item} className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm leading-relaxed text-gray-600">
-                  {item}
+          {/* Statistics Cards */}
+          <section className="grid gap-4 mb-6">
+            {[{
+              label: "Total Records",
+              value: filteredAttendance.length,
+              color: "text-blue-600 bg-blue-50",
+              icon: Users
+            }, {
+              label: "Present Today",
+              value: todayPresentCount,
+              color: "text-green-600 bg-green-50",
+              icon: CircleCheck
+            }, {
+              label: "Late Today",
+              value: todayLateCount,
+              color: "text-amber-600 bg-amber-50",
+              icon: TriangleAlert
+            }, {
+              label: "Absent Today",
+              value: todayAbsentCount,
+              color: "text-red-600 bg-red-50",
+              icon: CircleX
+            }, {
+              label: "Potential Duplicates",
+              value: duplicateRecords.length,
+              color: "text-purple-600 bg-purple-50",
+              icon: AlertTriangle
+            }].map((stat) => (
+              <article key={stat.label} className="card-elevated p-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="text-xs font-medium uppercase tracking-wider text-gray-500">{stat.label}</div>
+                    {stat.icon && <stat.icon size={20} className={`${stat.color.split(' ')[0]} ${stat.color.split(' ')[1]}`} />}
+                  </div>
+                  <div className="text-2xl font-bold text-gray-800">{stat.value}</div>
                 </div>
+              </article>
+            ))}
+          </section>
+
+          {/* Controls Section */}
+          <section className="space-y-4">
+            {/* View Tabs */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              {[{
+                label: "All Records",
+                value: "all"
+              }, {
+                label: "Live Attendance",
+                value: "live"
+              }, {
+                label: "Students Only",
+                value: "students"
+              }, {
+                label: "Late Arrivals",
+                value: "late"
+              }, {
+                label: "Absent Today",
+                value: "absent"
+              }, {
+                label: "Attendance History",
+                value: "history"
+              }, {
+                label: "Duplicates",
+                value: "duplicates"
+              }].map((tab) => (
+                <button
+                  key={tab.value}
+                  onClick={() => setViewMode(tab.value)}
+                  className={`
+                    px-4 py-2 rounded-md text-sm font-medium
+                    ${viewMode === tab.value
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }
+                  `}
+                >
+                  {tab.label}
+                </button>
               ))}
             </div>
-          </article>
+
+            {/* Search and Filters */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {/* Search */}
+              <div className="flex flex-col">
+                <label className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-1">
+                  Search Records
+                </label>
+                <input
+                  type="text"
+                  placeholder="Search by name, ID, or role..."
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setAttendancePage(1); // Reset to first page when searching
+                  }}
+                  className="form-input w-full rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+
+              {/* Status Filter */}
+              <div className="flex flex-col">
+                <label className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-1">
+                  Status
+                </label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value);
+                    setAttendancePage(1);
+                  }}
+                  className="form-input w-full rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="in">Time In</option>
+                  <option value="out">Time Out</option>
+                </select>
+              </div>
+
+              {/* User Type Filter */}
+              <div className="flex flex-col">
+                <label className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-1">
+                  User Type
+                </label>
+                <select
+                  value={userTypeFilter}
+                  onChange={(e) => {
+                    setUserTypeFilter(e.target.value);
+                    setAttendancePage(1);
+                  }}
+                  className="form-input w-full rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="all">All Users</option>
+                  <option value="student">Students Only</option>
+                  <option value="faculty">Faculty Only</option>
+                  <option value="staff">Staff/Admin</option>
+                </select>
+              </div>
+
+              {/* Date Range Filter */}
+              <div className="flex flex-col">
+                <label className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-1">
+                  Date Range
+                </label>
+                <select
+                  value={dateRangeFilter}
+                  onChange={(e) => {
+                    setDateRangeFilter(e.target.value);
+                    if (e.target.value === 'custom') {
+                      // Set default custom range to last 7 days
+                      const end = new Date();
+                      const start = new Date(end);
+                      start.setDate(start.getDate() - 7);
+                      setCustomStartDate(start.toISOString().split('T')[0]);
+                      setCustomEndDate(end.toISOString().split('T')[0]);
+                    } else if (e.target.value !== 'custom') {
+                      setCustomStartDate('');
+                      setCustomEndDate('');
+                    }
+                    setAttendancePage(1);
+                  }}
+                  className="form-input w-full rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="today">Today</option>
+                  <option value="week">This Week</option>
+                  <option value="month">This Month</option>
+                  <option value="custom">Custom Range</option>
+                </select>
+              </div>
+
+              {/* Custom Date Range (visible when custom is selected) */}
+              {dateRangeFilter === 'custom' && (
+                <>
+                  <div className="flex flex-col">
+                    <label className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-1">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="form-input w-full rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div className="flex flex-col">
+                    <label className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-1">
+                      End Date
+                    </label>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="form-input w-full rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+
+          {/* Attendance Records Table */}
+          <section className="space-y-4">
+            {viewMode === 'live' && (
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-lg font-semibold text-gray-800">Live Attendance Feed</h2>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+                    ● Live Updates Active
+                  </span>
+                </div>
+              </div>
+            )}
+            {viewMode !== 'live' && (
+              <h2 className="text-lg font-semibold text-gray-800">Attendance Records</h2>
+            )}
+
+            {/* Table Container */}
+            <div className="mt-4">
+              {attendanceError ? (
+                <div className="alert alert-error">
+                  <p className="font-semibold">Failed to load attendance records</p>
+                  <p className="mt-1 text-xs opacity-80">{attendanceError}</p>
+                </div>
+              ) : attendanceLoading ? (
+                <div className="text-center py-8">
+                  Loading attendance records...
+                </div>
+              ) : filteredAttendance.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  No attendance records found matching the current filters.
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="table min-w-full">
+                      <thead>
+                        <tr className="border-b border-gray-100">
+                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                            #
+                          </th>
+                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                            Name
+                          </th>
+                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                            ID / Username
+                          </th>
+                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                            Role
+                          </th>
+                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                            Date
+                          </th>
+                          {viewMode !== 'absent' && (
+                            <>
+                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Time In
+                              </th>
+                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Time Out
+                              </th>
+                            </>
+                          )}
+                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                            Status
+                          </th>
+                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                            Method
+                          </th>
+                          {viewMode === 'duplicates' && (
+                            <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                              Duplicate Type
+                            </th>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredAttendance.map((record, index) => {
+                          const isDuplicate = duplicateRecords.some(dup =>
+                            dup.id === record.id ||
+                            (dup.userId === record.userId && dup.logDate === record.logDate)
+                          );
+
+                          return (
+                            <tr
+                              key={record.id}
+                              className={`border-b border-gray-50 ${isDuplicate ? 'bg-red-50' : ''}`}
+                            >
+                              <td className="px-4 py-3 text-xs text-gray-500">{index + 1}</td>
+                              <td className="px-4 py-3 font-medium text-gray-800">{record.name}</td>
+                              <td className="px-4 py-3 text-sm text-gray-600">
+                                {record.idNumber || record.username || 'N/A'}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-600 capitalize">
+                                {record.role}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-600">
+                                {record.logDate}
+                              </td>
+                              {viewMode !== 'absent' && (
+                                <>
+                                  <td className="px-4 py-3">
+                                    {record.status === 'IN' ? (
+                                      <span className="px-2 py-0.5 rounded-full text-xs font-medium
+                                        {record.status === 'IN' ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}"
+                                      >
+                                        {formatAttendanceTime(record.logTime)}
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 rounded-full text-xs font-medium
+                                        {record.status === 'IN' ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}"
+                                      >
+                                        {record.status === 'OUT' ? formatAttendanceTime(record.logTime) : '--:--'}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    {record.status === 'OUT' ? (
+                                      <span className="px-2 py-0.5 rounded-full text-xs font-medium
+                                        {record.status === 'IN' ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}"
+                                      >
+                                        {formatAttendanceTime(record.logTime)}
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 rounded-full text-xs font-medium
+                                        {record.status === 'IN' ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}"
+                                      >
+                                        {record.status === 'IN' ? '--:--' : formatAttendanceTime(record.logTime)}
+                                      </span>
+                                    )}
+                                  </td>
+                                </>
+                              )}
+                              <td className="px-4 py-3">
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium
+                                  ${record.status === 'IN' ? 'text-green-700 bg-green-50' : record.status === 'OUT' ? 'text-blue-700 bg-blue-50' : 'text-gray-700 bg-gray-50'}`
+                                }>
+                                  {record.status.toUpperCase()}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-600">
+                                {attendanceMethod(record.source)}
+                              </td>
+                              {viewMode === 'duplicates' && (
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {isDuplicate ? (
+                                    <span className="text-xs font-medium text-red-600">
+                                      Same User & Date
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs font-medium text-gray-400">
+                                      -
+                                    </span>
+                                  )}
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination Controls */}
+                  <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-sm text-gray-500">
+                      Showing {(attendancePage - 1) * pageSize + 1}-{Math.min(attendancePage * pageSize, filteredAttendance.length)} of {filteredAttendance.length} records
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setAttendancePage(Math.max(1, attendancePage - 1))}
+                        disabled={attendancePage === 1}
+                        className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        onClick={() => setAttendancePage(Math.min(totalAttendancePages, attendancePage + 1))}
+                        disabled={attendancePage === totalAttendancePages || totalAttendancePages === 0}
+                        className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
         </section>
       )}
     </div>
