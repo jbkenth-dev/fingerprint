@@ -3221,7 +3221,7 @@ function ClassSchedulingPage() {
           </div>
         </div>
       ) : null}
-      ___VIEW_STUDENTS_MODAL_START___
+      {isViewStudentsModalOpen ? (
         <div className="modal-overlay">
           <div className="my-auto w-full max-w-4xl">
             <FormCard>
