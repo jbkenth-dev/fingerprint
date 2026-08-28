@@ -1,0 +1,7 @@
+{
+  "name": "view-students-modal-fix",
+  "description": "Fixed View Students modal: added Days column using formatScheduleDays, corrected section heading format to '4-C' style, repositioned Close button to top-left, used theme-consistent styling, and corrected JSX syntax (escaped quotes). Also ensured Edit/View Students/Delete buttons appear once per section in the section header row with proper flex layout.",
+  "metadata": {
+    "type": "knowledge"
+  }
+}

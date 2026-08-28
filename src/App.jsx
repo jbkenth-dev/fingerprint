@@ -3005,7 +3005,7 @@ function ClassSchedulingPage() {
                       <tr className="table-section-row">
                         <td colSpan="6" className="px-4 py-2">
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="text-center font-semibold sm:text-left\">{group.label}</div>
+                            <div className="text-center font-semibold sm:text-left">{group.label}</div>
                             <div className="inline-flex items-center justify-center gap-2 sm:justify-end">
                               <button
                                 type="button"
@@ -3224,7 +3224,18 @@ function ClassSchedulingPage() {
       {isViewStudentsModalOpen ? (
         <div className="modal-overlay">
           <div className="my-auto w-full max-w-4xl">
-            <FormCard title="View Students">
+            <FormCard>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-800">View Students</h2>
+                <button
+                  type="button"
+                  onClick={() => setIsViewStudentsModalOpen(false)}
+                  className="btn btn-secondary"
+                >
+                  Close
+                </button>
+              </div>
+
               {viewStudentsLoading ? (
                 <div className="text-sm text-gray-500">Loading...</div>
               ) : viewStudentsError ? (
@@ -3232,7 +3243,9 @@ function ClassSchedulingPage() {
               ) : viewStudentsData ? (
                 <>
                   <div className="mb-4">
-                    <p className="font-semibold">Section {viewStudentsData.sectionHeading}</p>
+                    <p className="font-semibold">
+                      Section {viewStudentsData.schedules[0]?.yearLevel.charAt(0)}-{viewStudentsData.schedules[0]?.section}
+                    </p>
                   </div>
 
                   {/* Class Schedule Table */}
@@ -3255,10 +3268,10 @@ function ClassSchedulingPage() {
                               <td className="px-4 py-3 font-semibold text-gray-800">{schedule.subjectCode}</td>
                               <td className="px-4 py-3">{schedule.subjectName}</td>
                               <td className="px-4 py-3">{schedule.facultyName || "—"}</td>
+                              <td className="px-4 py-3">{formatScheduleDays(schedule.days)}</td>
                               <td className="px-4 py-3">{formatTimeRange(schedule.startTime, schedule.endTime)}</td>
                             </tr>
                           ))}
-                        </tbody>
                       </table>
                     ) : (
                       <p className="text-sm text-gray-500">No class schedules found for this section.</p>
@@ -3287,7 +3300,6 @@ function ClassSchedulingPage() {
                               <td className="px-4 py-3">{student.status}</td>
                             </tr>
                           ))}
-                        </tbody>
                       </table>
                     ) : (
                       <p className="text-sm text-gray-500">No active students found for this section.</p>
@@ -3297,15 +3309,6 @@ function ClassSchedulingPage() {
               ) : (
                 <p className="text-sm text-gray-500">No data available.</p>
               )}
-              <div className="mt-6 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setIsViewStudentsModalOpen(false)}
-                  className="btn btn-secondary"
-                >
-                  Close
-                </button>
-              </div>
             </FormCard>
           </div>
         </div>
