@@ -1901,7 +1901,8 @@ function RolePanel({ pageKey, role }) {
           </article>
         </section>
       ) : (
-        {/* Admin Attendance Management Page */}
+        <>
+          {/* Admin Attendance Management Page */}
         <section className="space-y-6">
           {/* Header with title and export button */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -2308,6 +2309,7 @@ function RolePanel({ pageKey, role }) {
             </div>
           </section>
         </section>
+        </>
       )
     </div>
   );
