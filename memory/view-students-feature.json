@@ -1,0 +1,8 @@
+{
+  "name": "view-students-feature",
+  "description": "Added View Students button to each schedule row in /admin/class-scheduling, which opens a modal showing all schedules for the section and all active students formatted as LASTNAME, FIRSTNAME, MIDDLE NAME sorted by last name.",
+  "metadata": {
+    "type": "knowledge"
+  },
+  "content": "Feature includes: state variables for modal, handleViewStudents function to fetch and format data, View Students button placed between Edit and Delete in each schedule row's Actions column, and a modal displaying section heading, schedule table, and student table with proper formatting and sorting."
+}

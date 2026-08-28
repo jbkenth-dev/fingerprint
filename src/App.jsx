@@ -2934,8 +2934,10 @@ function ClassSchedulingPage() {
 
       setViewStudentsData({
         schedules: schedulesForSection,
-        students: formattedStudents
+        students: formattedStudents,
+        sectionHeading: `${group.yearLevel} - ${group.section}`
       });
+      setIsViewStudentsModalOpen(true);
     } catch (error) {
       setViewStudentsError(error.message || "Failed to load data for View Students modal.");
     } finally {
@@ -3214,6 +3216,98 @@ function ClassSchedulingPage() {
                   className="btn btn-secondary"
                 >
                   Cancel
+                </button>
+              </div>
+            </FormCard>
+          </div>
+        </div>
+      ) : null}
+      {isViewStudentsModalOpen ? (
+        <div className="modal-overlay">
+          <div className="my-auto w-full max-w-4xl">
+            <FormCard title="View Students">
+              {viewStudentsLoading ? (
+                <div className="text-sm text-gray-500">Loading...</div>
+              ) : viewStudentsError ? (
+                <div className="alert alert-error">{viewStudentsError}</div>
+              ) : viewStudentsData ? (
+                <>
+                  <div className="mb-4">
+                    <p className="font-semibold">Section {viewStudentsData.sectionHeading}</p>
+                  </div>
+
+                  {/* Class Schedule Table */}
+                  <div className="mb-6">
+                    <p className="font-semibold mb-2">Class Schedule</p>
+                    {viewStudentsData.schedules.length > 0 ? (
+                      <table className="min-w-full text-left text-sm">
+                        <thead>
+                          <tr>
+                            <th className="px-4 py-3">Code</th>
+                            <th className="px-4 py-3">Subject</th>
+                            <th className="px-4 py-3">Faculty</th>
+                            <th className="px-4 py-3">Days</th>
+                            <th className="px-4 py-3">Time</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {viewStudentsData.schedules.map((schedule) => (
+                            <tr key={schedule.id}>
+                              <td className="px-4 py-3 font-semibold text-gray-800>{schedule.subjectCode}</td>
+                              <td className="px-4 py-3>{schedule.subjectName}</td>
+                              <td className="px-4 py-3>{schedule.facultyName || "—"}</td>
+                              <td className="px-4 py-3>{formatTimeRange(schedule.startTime, schedule.endTime)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <p className="text-sm text-gray-500>No class schedules found for this section.</p>
+                    )}
+                  </div>
+
+                  {/* Students Table */}
+                  <div className="">
+                    <p className="font-semibold mb-2>Students</p>
+                    {viewStudentsData.students.length > 0 ? (
+                      <table className="min-w-full text-left text-sm>
+                        <thead>
+                          <tr>
+                            <th className="px-4 py-3>Student ID</th>
+                            <th className="px-4 py-3>Student Name</th>
+                            <th className="px-4 py-3>Section</th>
+                            <th className="px-4 py-3>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {viewStudentsData.students.map((student) => (
+                            <tr key={student.id}>
+                              <td className=px-4 py-3>{student.idNumber}</td>
+                              <td className=px-4 py-3 font-medium text-gray-800>{student.formattedName}</td>
+                              <td className=px-4 py-3>
+                                {/* Extract section from department (e.g., \"1st Year - A\" -> \"A\") */}
+                                {student.department?.split(' - ')[1] || '—'}
+                              </td>
+                              <td className=px-4 py-3>{student.status}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <p className="text-sm text-gray-500>No active students found for this section.</p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-gray-500>No data available.</p>
+              )}
+              <div className="mt-6 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsViewStudentsModalOpen(false)}
+                  className="btn btn-secondary"
+                >
+                  Close
                 </button>
               </div>
             </FormCard>
