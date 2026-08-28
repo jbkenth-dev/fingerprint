@@ -3224,15 +3224,19 @@ function ClassSchedulingPage() {
       {isViewStudentsModalOpen ? (
         <div className="modal-overlay">
           <div className="my-auto w-full max-w-4xl">
-            <FormCard className="border-l-4 border-green-500">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-800">View Students</h2>
+            <FormCard className="border-l-4 border-green-500 bg-white shadow-lg rounded-lg">
+              <div className="flex items-center justify-between mb-6 p-6 border-b border-gray-200">
+                <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                  <Users className="h-5 w-5 text-green-500" />
+                  View Students
+                </h2>
                 <button
                   type="button"
                   onClick={() => setIsViewStudentsModalOpen(false)}
-                  className="btn btn-secondary"
+                  className="btn btn-secondary hover:bg-gray-100 transition-colors"
                 >
                   Close
+                  <X className="ml-2 h-4 w-4" />
                 </button>
               </div>
 
