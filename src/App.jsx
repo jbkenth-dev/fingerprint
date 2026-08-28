@@ -2566,6 +2566,10 @@ function ClassSchedulingPage() {
   const [saving, setSaving] = React.useState(false);
   const [feedback, setFeedback] = React.useState({ message: "", tone: "success" });
   const [pageError, setPageError] = React.useState("");
+  const [isViewStudentsModalOpen, setIsViewStudentsModalOpen] = React.useState(false);
+  const [viewStudentsData, setViewStudentsData] = React.useState(null); // { schedules: [], students: [] }
+  const [viewStudentsLoading, setViewStudentsLoading] = React.useState(false);
+  const [viewStudentsError, setViewStudentsError] = React.useState("");
 
   const loadScheduleRows = React.useCallback(async () => {
     try {
@@ -2884,6 +2888,39 @@ function ClassSchedulingPage() {
     }
   };
 
+  const handleViewStudents = async (group) => {
+    setViewStudentsLoading(true);
+    setViewStudentsError(\"\"\);
+    try {
+      // Fetch schedules for the section (we can use the existing scheduleRows state)
+      const schedulesForSection = scheduleRows.filter(
+        (row) =>
+          row.section === group.section &&
+          row.yearLevel === group.yearLevel &&
+          row.semester === group.semester
+      );
+
+      // Get active students for the section from the users state (already fetched)
+      const targetDepartment = `${group.yearLevel} - ${group.section}`;
+      const activeStudents = users.filter(
+        (user) =>
+          user.role === \"student\" &&
+          user.status === \"Active\" &&
+          user.department === targetDepartment
+      );
+
+      // Sort students by last name, then first name
+      const sortedStudents = activeStudents.sort((a, b) => {
+        const lastNameA = a.lastName.toLowerCase();
+        const lastNameB = b.lastName.toLowerCase();
+        if (lastNameA !== lastNameB) return lastNameA.localeCompare(lastNameB);
+        const firstNameA = a.firstName.toLowerCase();
+        const firstNameB = b.firstName.toLowerCase();
+        return firstNameA.localeCompare(firstNameB);
+      });
+
+      // Format student names to \"LASTNAME, FIRSTNAME, MIDDLE NAME\"\n      const formattedStudents = sortedStudents.map(student => {\n        const lastName = student.lastName ?? '';\n        const firstName = student.firstName ?? '';\n        const middleName = student.middleName ?? '';\n        const nameParts = [lastName, firstName, middleName].filter(part => part !== '');\n        const formattedName = nameParts.join(', ');\n        return {\n          ...student,\n          formattedName: formattedName\n        };\n      });\n\n      setViewStudentsData({\n        schedules: schedulesForSection,\n        students: filteredStudents\n      });\n    } catch (error) {\n      setViewStudentsError(error.message || \"Failed to load data for View Students modal.\");\n    } finally {\n      setViewStudentsLoading(false);\n    }\n  };\n
+
   return (
     <div className="space-y-4">
       <HeaderBlock
@@ -2971,7 +3008,15 @@ function ClassSchedulingPage() {
                           <td className="px-4 py-3">{row.facultyName || "—"}</td>
                           <td className="px-4 py-3">{formatScheduleDays(row.days)}</td>
                           <td className="px-4 py-3">{formatTimeRange(row.startTime, row.endTime)}</td>
-                          <td className="px-4 py-3" />
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() => handleViewStudents(group)}
+                              className="btn btn-secondary text-xs text-blue-700 border-blue-200 bg-blue-50"
+                            >
+                              View Students
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </React.Fragment>
