@@ -3004,25 +3004,7 @@ function ClassSchedulingPage() {
                     <React.Fragment key={group.key}>
                       <tr className="table-section-row">
                         <td colSpan="6" className="px-4 py-2">
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="text-center font-semibold sm:text-left">{group.label}</div>
-                            <div className="inline-flex items-center justify-center gap-2 sm:justify-end">
-                              <button
-                                type="button"
-                                onClick={() => handleEditSchedule(group)}
-                                className="btn btn-secondary text-xs text-green-700 border-green-200 bg-green-50"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setDeletingSchedule(group)}
-                                className="btn btn-danger text-xs"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </div>
+                          <div className="text-center font-semibold sm:text-left">{group.label}</div>
                         </td>
                       </tr>
                       {group.items.map((row) => (
@@ -3033,13 +3015,29 @@ function ClassSchedulingPage() {
                           <td className="px-4 py-3">{formatScheduleDays(row.days)}</td>
                           <td className="px-4 py-3">{formatTimeRange(row.startTime, row.endTime)}</td>
                           <td className="px-4 py-3">
-                            <button
-                              type="button"
-                              onClick={() => handleViewStudents(group)}
-                              className="btn btn-secondary text-xs text-blue-700 border-blue-200 bg-blue-50"
-                            >
-                              View Students
-                            </button>
+                            <div className="inline-flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleEditSchedule(group)}
+                                className="btn btn-secondary text-xs text-green-700 border-green-200 bg-green-50"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleViewStudents(group)}
+                                className="btn btn-secondary text-xs text-blue-700 border-blue-200 bg-blue-50"
+                              >
+                                View Students
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeletingSchedule(group)}
+                                className="btn btn-danger text-xs"
+                              >
+                                Delete
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}

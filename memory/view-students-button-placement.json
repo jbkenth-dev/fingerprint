@@ -1,0 +1,8 @@
+{
+  "name": "view-students-button-placement",
+  "description": "Moved Edit and Delete buttons from section header to each schedule row, and added View Students button between them, fulfilling the requirement Edit | View Students | Delete per schedule row.",
+  "metadata": {
+    "type": "knowledge"
+  },
+  "content": "Changed schedule table layout: section header now shows only section label; each schedule row contains three buttons in order: Edit, View Students, Delete. Edit and Delete retain original behavior (edit/delete whole section). View Students fetches schedules and active students for the section, formats student names as LASTNAME, FIRSTNAME, MIDDLE NAME, sorts by last name then first name, and opens modal."
+}
