@@ -1,0 +1,8 @@
+{
+  "name": "view-students-build-fixed",
+  "description": "Fixed JSX syntax errors in the View Students modal in ClassSchedulingPage, resolving the build error.",
+  "metadata": {
+    "type": "feedback"
+  },
+  "content": "Fixed missing quotes and braces in JSX expressions and className attributes in the View Students modal's tables and messages. The build should now pass."
+}

@@ -3253,53 +3253,50 @@ function ClassSchedulingPage() {
                         <tbody>
                           {viewStudentsData.schedules.map((schedule) => (
                             <tr key={schedule.id}>
-                              <td className="px-4 py-3 font-semibold text-gray-800>{schedule.subjectCode}</td>
-                              <td className="px-4 py-3>{schedule.subjectName}</td>
-                              <td className="px-4 py-3>{schedule.facultyName || "—"}</td>
-                              <td className="px-4 py-3>{formatTimeRange(schedule.startTime, schedule.endTime)}</td>
+                              <td className="px-4 py-3 font-semibold text-gray-800">{schedule.subjectCode}</td>
+                              <td className="px-4 py-3">{schedule.subjectName}</td>
+                              <td className="px-4 py-3">{schedule.facultyName || "—"}</td>
+                              <td className="px-4 py-3">{formatTimeRange(schedule.startTime, schedule.endTime)}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     ) : (
-                      <p className="text-sm text-gray-500>No class schedules found for this section.</p>
+                      <p className="text-sm text-gray-500">No class schedules found for this section.</p>
                     )}
                   </div>
 
                   {/* Students Table */}
                   <div className="">
-                    <p className="font-semibold mb-2>Students</p>
+                    <p className="font-semibold mb-2">Students</p>
                     {viewStudentsData.students.length > 0 ? (
-                      <table className="min-w-full text-left text-sm>
+                      <table className="min-w-full text-left text-sm">
                         <thead>
                           <tr>
-                            <th className="px-4 py-3>Student ID</th>
-                            <th className="px-4 py-3>Student Name</th>
-                            <th className="px-4 py-3>Section</th>
-                            <th className="px-4 py-3>Status</th>
+                            <th className="px-4 py-3">Student ID</th>
+                            <th className="px-4 py-3">Student Name</th>
+                            <th className="px-4 py-3">Section</th>
+                            <th className="px-4 py-3">Status</th>
                           </tr>
                         </thead>
                         <tbody>
                           {viewStudentsData.students.map((student) => (
                             <tr key={student.id}>
-                              <td className=px-4 py-3>{student.idNumber}</td>
-                              <td className=px-4 py-3 font-medium text-gray-800>{student.formattedName}</td>
-                              <td className=px-4 py-3>
-                                {/* Extract section from department (e.g., \"1st Year - A\" -> \"A\") */}
-                                {student.department?.split(' - ')[1] || '—'}
-                              </td>
-                              <td className=px-4 py-3>{student.status}</td>
+                              <td className="px-4 py-3">{student.idNumber}</td>
+                              <td className="px-4 py-3 font-medium text-gray-800">{student.formattedName}</td>
+                              <td className="px-4 py-3">{student.department?.split(' - ')[1] || '—'}</td>
+                              <td className="px-4 py-3">{student.status}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     ) : (
-                      <p className="text-sm text-gray-500>No active students found for this section.</p>
+                      <p className="text-sm text-gray-500">No active students found for this section.</p>
                     )}
                   </div>
                 </>
               ) : (
-                <p className="text-sm text-gray-500>No data available.</p>
+                <p className="text-sm text-gray-500">No data available.</p>
               )}
               <div className="mt-6 flex justify-end">
                 <button
