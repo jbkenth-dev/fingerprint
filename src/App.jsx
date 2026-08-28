@@ -1945,7 +1945,7 @@ function RolePanel({ pageKey, role }) {
               label: "Potential Duplicates",
               value: duplicateRecords.length,
               color: "text-purple-600 bg-purple-50",
-              icon: AlertTriangle
+              icon: TriangleAlert
             }].map((stat) => (
               <article key={stat.label} className="card-elevated p-5">
                 <div className="flex items-center justify-between">
