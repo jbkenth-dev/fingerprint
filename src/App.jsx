@@ -3272,6 +3272,7 @@ function ClassSchedulingPage() {
                               <td className="px-4 py-3">{formatTimeRange(schedule.startTime, schedule.endTime)}</td>
                             </tr>
                           ))}
+                      </tbody>
                       </table>
                     ) : (
                       <p className="text-sm text-gray-500">No class schedules found for this section.</p>
@@ -3300,6 +3301,7 @@ function ClassSchedulingPage() {
                               <td className="px-4 py-3">{student.status}</td>
                             </tr>
                           ))}
+                      </tbody>
                       </table>
                     ) : (
                       <p className="text-sm text-gray-500">No active students found for this section.</p>
