@@ -1899,7 +1899,6 @@ function RolePanel({ pageKey, role }) {
               </>
             )}
           </article>
-
         </section>
       ) : (
         {/* Admin Attendance Management Page */}
