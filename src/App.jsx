@@ -1635,41 +1635,104 @@ function RolePanel({ pageKey, role }) {
   }).length : 0;
 
   const mergedAttendance = React.useMemo(() => {
-    const map = new Map();
+    // Group filteredAttendance by userId and logDate
+    const groups = new Map();
     filteredAttendance.forEach(record => {
       const key = `${record.userId}-${record.logDate}`;
-      let entry = map.get(key);
-      if (!entry) {
-        entry = {
+      let group = groups.get(key);
+      if (!group) {
+        group = {
           userId: record.userId,
           logDate: record.logDate,
+          records: [],
           name: record.name,
-          idNumber: record.idNumber || record.username || 'N/A',
-          classes: "—",
-          timeSchedule: "—",
-          timeIn: "",
-          timeOut: "",
-          status: "Invalid",
-          reason: "No Time Scheduled",
-          rawInTime: null
+          idNumber: record.idNumber || record.username || 'N/A'
         };
-        map.set(key, entry);
+        groups.set(key, group);
       }
-      if (record.status === "IN") {
-        entry.timeIn = formatAttendanceTime(record.logTime);
-        entry.rawInTime = record.logTime;
-      } else if (record.status === "OUT") {
-        entry.timeOut = formatAttendanceTime(record.logTime);
-      }
+      group.records.push(record);
     });
 
     const result = [];
-    for (const entry of map.values()) {
-      let classes = "—";
-      let timeSchedule = "—";
-      let status = "Invalid";
-      let reason = "No Time Scheduled";
-      if (isAdminAttendancePage) {
+
+    for (const group of groups.values()) {
+      const { userId, logDate, name, idNumber, records } = group;
+
+      // Sort records by logTime
+      const sortedRecords = [...records].sort((a, b) => {
+        const timeA = a.logTime ? new Date(`1970-01-01T${a.logTime}A`) : new Date(0);
+        const timeB = b.logTime ? new Date(`1970-01-01T${b.logTime}A`) : new Date(0);
+        return timeA - timeB;
+      });
+
+      // Separate IN and OUT records
+      const inTimes = sortedRecords.filter(r => r.status === "IN").map(r => r.logTime);
+      const outTimes = sortedRecords.filter(r => r.status === "OUT").map(r => r.logTime);
+
+      // Create sessions by pairing IN and OUT in order
+      const maxPairs = Math.max(inTimes.length, outTimes.length);
+      for (let i = 0; i < maxPairs; i++) {
+        const timeIn = i < inTimes.length ? inTimes[i] : null;
+        const timeOut = i < outTimes.length ? outTimes[i] : null;
+
+        // Create a session entry
+        const entry = {
+          userId,
+          logDate,
+          name,
+          idNumber,
+          classes: "—",
+          timeSchedule: "—",
+          timeIn: timeIn ? formatAttendanceTime(timeIn) : "",
+          timeOut: timeOut ? formatAttendanceTime(timeOut) : "",
+          status: "Invalid",
+          reason: "No Time Scheduled",
+          rawInTime: timeIn // keep raw for validation
+        };
+
+        // If this is the admin attendance page, compute classes, timeSchedule, status, reason
+        if (isAdminAttendancePage) {
+          const user = users.find(u => u.id === userId);
+          if (user) {
+            const parsed = parseStudentDept(user.department);
+            if (parsed) {
+              const dayName = getManilaDayFromDate(logDate);
+              const schedule = scheduleRows.find(
+                s => s.yearLevel === parsed.yearLevel &&
+                     s.section === parsed.section &&
+                     Array.isArray(s.days) &&
+                     s.days.includes(dayName)
+              );
+              if (schedule) {
+                entry.classes = `${schedule.subjectCode} — ${schedule.subjectName}`;
+                entry.timeSchedule = `${formatTime(schedule.startTime)} – ${formatTime(schedule.endTime)}`;
+                // Determine validity based on IN time (if available)
+                if (timeIn) {
+                  const inMin = timeToMinutes(timeIn);
+                  const startMin = timeToMinutes(schedule.startTime);
+                  const endMin = timeToMinutes(schedule.endTime);
+                  if (startMin !== null && endMin !== null && inMin !== null) {
+                    const windowStart = startMin - 15;
+                    const windowEnd = endMin - 15;
+                    if (inMin >= windowStart && inMin <= windowEnd) {
+                      entry.status = "Valid";
+                      entry.reason = "Time Scheduled";
+                    } else {
+                      entry.status = "Invalid";
+                      entry.reason = "No Time Scheduled";
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        result.push(entry);
+      }
+    }
+
+          if (isAdminAttendancePage) {
         const user = users.find(u => u.id === entry.userId);
         if (user) {
           const parsed = parseStudentDept(user.department);
