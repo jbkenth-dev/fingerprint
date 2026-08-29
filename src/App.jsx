@@ -569,7 +569,15 @@ function ProtectedLayout({ allowedRole }) {
                       <Icon size={16} />
                     </span>
                     <span className="flex-1">{item.label}</span>
-                    <span className="text-[0.6rem] rounded-full bg-white/10 px-1.5 py-0.5 text-white/50 whitespace-nowrap">Soon</span>
+                    {item.label === "Reports" ? (
+                      <span className="text-[0.6rem] rounded-full bg-white/10 px-1.5 py-0.5 text-white/50 whitespace-nowrap">
+                        Coming Soon
+                      </span>
+                    ) : (
+                      <span className="text-[0.6rem] rounded-full bg-white/10 px-1.5 py-0.5 text-white/50 whitespace-nowrap">
+                        Soon
+                      </span>
+                    )}
                   </div>
                 );
               }
@@ -643,7 +651,15 @@ function ProtectedLayout({ allowedRole }) {
                         <Icon size={16} />
                       </span>
                       <span className="flex-1">{item.label}</span>
-                      <span className="text-[0.6rem] rounded-full bg-white/10 px-1.5 py-0.5 text-white/50 whitespace-nowrap">Soon</span>
+                      {item.label === "Reports" ? (
+                        <span className="text-[0.6rem] rounded-full bg-white/10 px-1.5 py-0.5 text-white/50 whitespace-nowrap">
+                          Coming Soon
+                        )
+                      ) : (
+                        <span className="text-[0.6rem] rounded-full bg-white/10 px-1.5 py-0.5 text-white/50 whitespace-nowrap">
+                          Soon
+                        )
+                      )}
                     </div>
                   );
                 }
