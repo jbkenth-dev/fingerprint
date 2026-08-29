@@ -1371,9 +1371,24 @@ function RolePanel({ pageKey, role }) {
   // Helper functions
   const timeToMinutes = (timeStr) => {
     if (!timeStr) return null;
-    const match = String(timeStr).match(/^(\d{1,2}):(\d{2})/);
-    if (!match) return null;
-    return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+    const s = timeStr.trim();
+    let meridian = null;
+    let cleaned = s;
+    if (s.toUpperCase().endsWith('AM')) {
+      meridian = 'AM';
+      cleaned = s.slice(0, -2).trim();
+    } else if (s.toUpperCase().endsWith('PM')) {
+      meridian = 'PM';
+      cleaned = s.slice(0, -2).trim();
+    }
+    const parts = cleaned.split(':');
+    if (parts.length < 2) return null;
+    let hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    if (isNaN(hours) || isNaN(minutes)) return null;
+    if (meridian === 'PM' && hours !== 12) hours += 12;
+    if (meridian === 'AM' && hours === 12) hours = 0;
+    return hours * 60 + minutes;
   };
 
   const formatTime = (timeStr) => {
@@ -1476,6 +1491,15 @@ function RolePanel({ pageKey, role }) {
     const suffix = hours >= 12 ? "PM" : "AM";
     const normalizedHours = hours % 12 || 12;
     return `${normalizedHours}:${minutesText} ${suffix}`;
+  }
+
+  function minutesToTimeString(minutes) {
+    if (minutes === null) return "";
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    const suffix = hours >= 12 ? "PM" : "AM";
+    const displayHours = hours % 12 || 12;
+    return `${displayHours}:${String(mins).padStart(2, "0")} ${suffix}`;
   }
 
   function attendanceMethod(source) {
@@ -1581,10 +1605,10 @@ function RolePanel({ pageKey, role }) {
     for (const group of groups.values()) {
       const { userId, logDate, name, idNumber, records } = group;
 
-      // Sort records by logTime
+      // Sort records by logTime ascending
       const sortedRecords = [...records].sort((a, b) => {
-        const timeA = a.logTime ? new Date(`1970-01-01T${a.logTime}A`) : new Date(0);
-        const timeB = b.logTime ? new Date(`1970-01-01T${b.logTime}A`) : new Date(0);
+        const timeA = a.logTime ? timeToMinutes(a.logTime) : -1;
+        const timeB = b.logTime ? timeToMinutes(b.logTime) : -1;
         return timeA - timeB;
       });
 
@@ -1601,6 +1625,8 @@ function RolePanel({ pageKey, role }) {
             const timeOut = rec.logTime;
 
             // Create a session entry
+            const inMin = timeToMinutes(timeIn);
+            const outMin = timeToMinutes(timeOut);
             const entry = {
               userId,
               logDate,
@@ -1608,11 +1634,11 @@ function RolePanel({ pageKey, role }) {
               idNumber,
               classes: "-",
               timeSchedule: "-",
-              timeIn: timeIn ? formatAttendanceTime(timeIn) : "",
-              timeOut: timeOut ? formatAttendanceTime(timeOut) : "",
+              timeIn: inMin !== null ? minutesToTimeString(inMin) : "",
+              timeOut: outMin !== null ? minutesToTimeString(outMin) : "",
               status: "Invalid",
               reason: "No Time Scheduled",
-              rawInTime: timeIn // keep raw for validation
+              rawInTime: inMin // keep raw for validation (minutes)
             };
 
             // If this is the admin attendance page, compute classes, timeSchedule, status, reason
@@ -1656,6 +1682,7 @@ function RolePanel({ pageKey, role }) {
             result.push(entry);
           } else {
             // Unpaired OUT (no preceding IN)
+            const outMin = timeToMinutes(rec.logTime);
             const entry = {
               userId,
               logDate,
@@ -1664,7 +1691,7 @@ function RolePanel({ pageKey, role }) {
               classes: "-",
               timeSchedule: "-",
               timeIn: "",
-              timeOut: rec.logTime ? formatAttendanceTime(rec.logTime) : "",
+              timeOut: outMin !== null ? minutesToTimeString(outMin) : "",
               status: "Invalid",
               reason: "No Time Scheduled",
               rawInTime: null
@@ -1679,6 +1706,7 @@ function RolePanel({ pageKey, role }) {
         const inObj = pendingIn.shift();
         const timeIn = inObj.time;
 
+        const inMin = timeToMinutes(timeIn);
         const entry = {
           userId,
           logDate,
@@ -1686,11 +1714,11 @@ function RolePanel({ pageKey, role }) {
           idNumber,
           classes: "-",
           timeSchedule: "-",
-          timeIn: timeIn ? formatAttendanceTime(timeIn) : "",
+          timeIn: inMin !== null ? minutesToTimeString(inMin) : "",
           timeOut: "",
           status: "Invalid",
           reason: "No Time Scheduled",
-          rawInTime: timeIn
+          rawInTime: inMin // keep raw for validation (minutes)
         };
 
         // If this is the admin attendance page, compute classes, timeSchedule, status, reason
