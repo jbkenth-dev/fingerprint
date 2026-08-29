@@ -1228,6 +1228,95 @@ function DashboardCore({ scope }) {
           <div className="mt-2 text-xs text-gray-500">
             {activeStudents.length ? Math.round((presentUsers.length / activeStudents.length) * 100) : 0}% attendance rate
           </div>
+          {/* Present Students Detail Table */}
+          {presentUsers.length > 0 && (
+            <>
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">Present Students Detail</h3>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Section</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time IN</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time OUT</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Scheduled Time</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {presentUsers.map((user, index) => (
+                        <tr key={`${user.name}-${index}`} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm text-gray-500">{index + 1}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{user.name}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{user.section}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {user.timeIn ? formatTime(user.timeIn) : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {user.timeOut ? formatTime(user.timeOut) : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {user.subjectCode} — {user.subjectName}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {formatTime(user.startTime)} – {formatTime(user.endTime)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Late Students Detail Table */}
+          {lateUsers.length > 0 && (
+            <>
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">Late Students Detail</h3>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Section</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time IN</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time OUT</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Scheduled Time</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {lateUsers.map((user, index) => (
+                        <tr key={`${user.name}-${index}`} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm text-gray-500">{index + 1}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{user.name}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{user.section}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {user.timeIn ? formatTime(user.timeIn) : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {user.timeOut ? formatTime(user.timeOut) : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {user.subjectCode} — {user.subjectName}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            {formatTime(user.startTime)} – {formatTime(user.endTime)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
         </article>
       </section>
 
