@@ -826,15 +826,31 @@ function DashboardCore({ scope }) {
     return map;
   }, [todayStudentLogs]);
 
-  const userLastOut = React.useMemo(() => {
-    const map = new Map();
+  const userTimeOutAfterIn = React.useMemo(() => {
+    const inTimeMap = new Map();
+    // First, get the IN time for each student
     for (const r of todayStudentLogs) {
-      if (r.status === "OUT") {
-        // Keep the latest OUT time for each student
-        map.set(r.userId, r);
+      if (r.status === "IN" && !inTimeMap.has(r.userId)) {
+        inTimeMap.set(r.userId, timeToMinutes(r.logTime));
       }
     }
-    return map;
+
+    const outMap = new Map();
+    // Then, find the first OUT after IN for each student
+    for (const r of todayStudentLogs) {
+      if (r.status === "OUT") {
+        const inTime = inTimeMap.get(r.userId);
+        if (inTime != null) {
+          const outTime = timeToMinutes(r.logTime);
+          // Check if OUT is after IN and we haven't already recorded an OUT for this student
+          if (outTime > inTime && !outMap.has(r.userId)) {
+            outMap.set(r.userId, r);
+          }
+        }
+      }
+    }
+
+    return outMap;
   }, [todayStudentLogs]);
 
   /* ── Attendance by Subject (all other metrics derive from this) ── */
@@ -886,7 +902,7 @@ function DashboardCore({ scope }) {
             present++;
             presentIds.add(student.id);
             const inRecord = userFirstIn.get(student.id);
-            const outRecord = userLastOut.get(student.id);
+            const outRecord = userTimeOutAfterIn.get(student.id);
             presentList.push({
               name: fullName,
               department: dept,
@@ -898,7 +914,7 @@ function DashboardCore({ scope }) {
             late++;
             lateIds.add(student.id);
             const inRecord = userFirstIn.get(student.id);
-            const outRecord = userLastOut.get(student.id);
+            const outRecord = userTimeOutAfterIn.get(student.id);
             lateList.push({
               name: fullName,
               department: dept,
