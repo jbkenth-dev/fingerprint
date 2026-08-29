@@ -1772,7 +1772,7 @@ function RolePanel({ pageKey, role }) {
     csvRows.push([]);
 
     // Data header
-    csvRows.push(['No.', 'Name', 'ID Number', 'Classes', 'Time Schedule', 'Date', 'Status', 'Reason']);
+    csvRows.push(['No.', 'Name', 'ID Number', 'Classes', 'Time Schedule', 'Date', 'Time IN', 'Time OUT', 'Status', 'Reason']);
 
     // Data rows
     filteredAttendance.forEach((record, index) => {
@@ -1819,6 +1819,9 @@ function RolePanel({ pageKey, role }) {
         }
       }
 
+      const timeInStr = record.status === 'IN' ? formatAttendanceTime(record.logTime) : '';
+      const timeOutStr = record.status === 'OUT' ? formatAttendanceTime(record.logTime) : '';
+
       csvRows.push([
         index + 1,
         record.name,
@@ -1826,6 +1829,8 @@ function RolePanel({ pageKey, role }) {
         classes,
         timeSchedule,
         record.logDate,
+        timeInStr,
+        timeOutStr,
         status,
         reason
       ]);
@@ -2212,6 +2217,12 @@ function RolePanel({ pageKey, role }) {
                             Date
                           </th>
                           <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                            Time IN
+                          </th>
+                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                            Time OUT
+                          </th>
+                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
                             Status
                           </th>
                           <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
@@ -2274,6 +2285,9 @@ function RolePanel({ pageKey, role }) {
                             }
                           }
 
+                          const timeInStr = record.status === 'IN' ? formatAttendanceTime(record.logTime) : '';
+                          const timeOutStr = record.status === 'OUT' ? formatAttendanceTime(record.logTime) : '';
+
                           return (
                             <tr
                               key={record.id}
@@ -2296,6 +2310,12 @@ function RolePanel({ pageKey, role }) {
                               )}
                               <td className="px-4 py-3 text-sm text-gray-600">
                                 {record.logDate}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-600">
+                                {timeInStr}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-600">
+                                {timeOutStr}
                               </td>
                               <td className="px-4 py-3">
                                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium
