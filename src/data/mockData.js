@@ -156,13 +156,7 @@ export const panelContent = {
   attendance: {
     title: "Attendance",
     description: "",
-    metrics: [
-      { label: "Total Records", value: "0", hint: "" },
-      { label: "Present Today", value: "0", hint: "" },
-      { label: "Late Today", value: "0", hint: "" },
-      { label: "Absent Today", value: "0", hint: "" },
-      { label: "Potential Duplicates", value: "0", hint: "" }
-    ],
+    metrics: [],
   },
   reports: {
     title: "Reports",
