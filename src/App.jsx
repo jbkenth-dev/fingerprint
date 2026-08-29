@@ -1636,18 +1636,20 @@ function RolePanel({ pageKey, role }) {
         clearInterval(liveUpdateInterval);
       }
 
+      // Fetch initial data for today
+      const today = new Date();
+      const todayString = today.toISOString().split('T')[0];
+      fetchAttendanceLogs(todayString, 1, {});
+
       // Set new interval to fetch latest attendance
       const interval = setInterval(() => {
-        // Fetch today's records for live view
-        const today = new Date();
-        const todayString = today.toISOString().split('T')[0];
-        fetchAttendanceLogs(todayString, 1, {}); // Page 1 for latest records
+        // Fetch today's records for live view (get fresh date each time)
+        const currentDate = new Date();
+        const currentDateString = currentDate.toISOString().split('T')[0];
+        fetchAttendanceLogs(currentDateString, 1, {}); // Page 1 for latest records
       }, 10000); // 10 seconds
 
       setLiveUpdateInterval(interval);
-
-      // Fetch initial data
-      fetchAttendanceLogs(todayString, 1, {});
     } else if (liveUpdateInterval !== null) {
       // Clear interval when not in live mode
       clearInterval(liveUpdateInterval);
@@ -1908,7 +1910,7 @@ function RolePanel({ pageKey, role }) {
           <section className="space-y-4">
             {/* View Tabs */}
             <div className="flex flex-wrap gap-2 mb-4">
-              [{
+              {[{
                 label: "All Records",
                 value: "all"
               }, {
