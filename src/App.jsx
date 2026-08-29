@@ -1628,6 +1628,17 @@ function RolePanel({ pageKey, role }) {
     }
   }, [attendanceLogs, detectDuplicates, isAdminAttendancePage]);
 
+  // Fetch attendance logs for admin attendance page when filters change
+  React.useEffect(() => {
+    if (isAdminAttendancePage) {
+      setAttendancePage(1);
+      // For admin page, we fetch based on current filters
+      // The fetchAttendanceLogs function will apply client-side filtering
+      // based on searchTerm, dateRangeFilter, etc. from its closure
+      fetchAttendanceLogs(null, 1, {});
+    }
+  }, [isAdminAttendancePage, searchTerm, dateRangeFilter, customStartDate, customEndDate, fetchAttendanceLogs]);
+
   // Live attendance updates (polling every 10 seconds - only for admin attendance page)
   React.useEffect(() => {
     if (isAdminAttendancePage && viewMode === 'live') {
@@ -1662,7 +1673,7 @@ function RolePanel({ pageKey, role }) {
         clearInterval(liveUpdateInterval);
       }
     };
-  }, [viewMode, liveUpdateInterval, fetchAttendanceLogs, isAdminAttendancePage]);
+  }, [viewMode, isAdminAttendancePage, searchTerm, dateRangeFilter, customStartDate, customEndDate]); // Include filter dependencies to restart interval when filters change
 
   // Export function (only for admin attendance page)
   const handleExportAttendance = React.useCallback(() => {
