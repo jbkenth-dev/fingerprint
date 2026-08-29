@@ -1628,44 +1628,62 @@ function RolePanel({ pageKey, role }) {
     }
   }, [attendanceLogs, detectDuplicates, isAdminAttendancePage]);
 
-  // Fetch attendance logs for admin attendance page when filters change
+  // Fetch attendance logs for admin attendance page when filters change or viewMode changes (except for live mode)
   React.useEffect(() => {
-    if (isAdminAttendancePage) {
-      setAttendancePage(1);
-      // For admin page, we fetch based on current filters
-      // The fetchAttendanceLogs function will apply client-side filtering
-      // based on searchTerm, dateRangeFilter, etc. from its closure
+    if (!isAdminAttendancePage) return;
+
+    // Live mode is handled by the live effect, so skip here.
+    if (viewMode === 'live') {
+      return;
+    }
+
+    setAttendancePage(1);
+
+    if (viewMode === 'history') {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayString = yesterday.toISOString().split('T')[0];
+      fetchAttendanceLogs(yesterdayString, 1, {});
+    } else if (viewMode === 'duplicates') {
+      // Fetch without date to get all records
+      fetchAttendanceLogs(null, 1, {});
+    } else {
+      // Default: use the current filters (searchTerm, dateRangeFilter, etc.)
       fetchAttendanceLogs(null, 1, {});
     }
-  }, [isAdminAttendancePage, searchTerm, dateRangeFilter, customStartDate, customEndDate, fetchAttendanceLogs]);
+  }, [isAdminAttendancePage, viewMode, searchTerm, dateRangeFilter, customStartDate, customEndDate, fetchAttendanceLogs]);
 
   // Live attendance updates (polling every 10 seconds - only for admin attendance page)
   React.useEffect(() => {
-    if (isAdminAttendancePage && viewMode === 'live') {
-      // Clear any existing interval
+    if (!isAdminAttendancePage || viewMode !== 'live') {
+      // If not in live mode, clean up and return
       if (liveUpdateInterval !== null) {
         clearInterval(liveUpdateInterval);
+        setLiveUpdateInterval(null);
       }
-
-      // Fetch initial data for today
-      const today = new Date();
-      const todayString = today.toISOString().split('T')[0];
-      fetchAttendanceLogs(todayString, 1, {});
-
-      // Set new interval to fetch latest attendance
-      const interval = setInterval(() => {
-        // Fetch today's records for live view (get fresh date each time)
-        const currentDate = new Date();
-        const currentDateString = currentDate.toISOString().split('T')[0];
-        fetchAttendanceLogs(currentDateString, 1, {}); // Page 1 for latest records
-      }, 10000); // 10 seconds
-
-      setLiveUpdateInterval(interval);
-    } else if (liveUpdateInterval !== null) {
-      // Clear interval when not in live mode
-      clearInterval(liveUpdateInterval);
-      setLiveUpdateInterval(null);
+      return;
     }
+
+    // We are in live mode
+
+    // Clear any existing interval
+    if (liveUpdateInterval !== null) {
+      clearInterval(liveUpdateInterval);
+    }
+
+    // Fetch initial data for today
+    const today = new Date();
+    const todayString = today.toISOString().split('T')[0];
+    fetchAttendanceLogs(todayString, 1, {});
+
+    // Set up interval to fetch every 10 seconds
+    const interval = setInterval(() => {
+      const currentDate = new Date();
+      const currentDateString = currentDate.toISOString().split('T')[0];
+      fetchAttendanceLogs(currentDateString, 1, {}); // Page 1 for latest records
+    }, 10000);
+
+    setLiveUpdateInterval(interval);
 
     // Cleanup
     return () => {
@@ -1673,7 +1691,7 @@ function RolePanel({ pageKey, role }) {
         clearInterval(liveUpdateInterval);
       }
     };
-  }, [viewMode, isAdminAttendancePage, searchTerm, dateRangeFilter, customStartDate, customEndDate]); // Include filter dependencies to restart interval when filters change
+  }, [isAdminAttendancePage, viewMode, fetchAttendanceLogs]);
 
   // Export function (only for admin attendance page)
   const handleExportAttendance = React.useCallback(() => {
