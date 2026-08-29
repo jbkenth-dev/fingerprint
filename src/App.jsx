@@ -807,7 +807,14 @@ function DashboardCore({ scope }) {
   const fingerprintUsers = React.useMemo(() => users.filter((u) => u.fingerprintId && u.status !== "Archived"), [users]);
 
   const todayStudentLogs = React.useMemo(
-    () => todayLogs.filter((r) => activeStudents.some((s) => s.id === r.userId)),
+    () =>
+      todayLogs
+        .filter((r) => activeStudents.some((s) => s.id === r.userId))
+        .sort((a, b) => {
+          const timeA = a.logTime ? timeToMinutes(a.logTime) : -1;
+          const timeB = b.logTime ? timeToMinutes(b.logTime) : -1;
+          return timeA - timeB;
+        }),
     [todayLogs, activeStudents],
   );
 
@@ -815,6 +822,17 @@ function DashboardCore({ scope }) {
     const map = new Map();
     for (const r of todayStudentLogs) {
       if (r.status === "IN" && !map.has(r.userId)) map.set(r.userId, r);
+    }
+    return map;
+  }, [todayStudentLogs]);
+
+  const userLastOut = React.useMemo(() => {
+    const map = new Map();
+    for (const r of todayStudentLogs) {
+      if (r.status === "OUT") {
+        // Keep the latest OUT time for each student
+        map.set(r.userId, r);
+      }
     }
     return map;
   }, [todayStudentLogs]);
@@ -867,11 +885,27 @@ function DashboardCore({ scope }) {
           if (inMin >= graceStart && inMin <= graceEnd) {
             present++;
             presentIds.add(student.id);
-            presentList.push({ name: fullName, department: dept, time: userFirstIn.get(student.id)?.logTime, ...subjectInfo });
+            const inRecord = userFirstIn.get(student.id);
+            const outRecord = userLastOut.get(student.id);
+            presentList.push({
+              name: fullName,
+              department: dept,
+              timeIn: inRecord?.logTime,
+              timeOut: outRecord?.logTime,
+              ...subjectInfo
+            });
           } else if (inMin > graceEnd && inMin <= lateEnd) {
             late++;
             lateIds.add(student.id);
-            lateList.push({ name: fullName, department: dept, time: userFirstIn.get(student.id)?.logTime, ...subjectInfo });
+            const inRecord = userFirstIn.get(student.id);
+            const outRecord = userLastOut.get(student.id);
+            lateList.push({
+              name: fullName,
+              department: dept,
+              timeIn: inRecord?.logTime,
+              timeOut: outRecord?.logTime,
+              ...subjectInfo
+            });
           }
         }
       }
@@ -914,7 +948,7 @@ function DashboardCore({ scope }) {
         }
       }
     }
-    return result.sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+    return result.sort((a, b) => ((a.timeIn || "") || "").localeCompare((b.timeIn || "") || ""));
   }, [subjectStats]);
 
   const lateUsers = React.useMemo(() => {
@@ -928,7 +962,7 @@ function DashboardCore({ scope }) {
         }
       }
     }
-    return result.sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+    return result.sort((a, b) => ((a.timeIn || "") || "").localeCompare((b.timeIn || "") || ""));
   }, [subjectStats]);
 
   const absentUsers = React.useMemo(() => {
@@ -1038,22 +1072,56 @@ function DashboardCore({ scope }) {
     csvRows.push(["Total IN", totalIn]);
     csvRows.push(["Total OUT", totalOut]);
     csvRows.push([]);
-    csvRows.push(["=== ATTENDANCE BY SUBJECT ==="]);
-    csvRows.push(["Subject", "Section", "Time", "Faculty", "Total", "Present", "Late", "Absent"]);
-    subjectStats.forEach((s) => csvRows.push([
-      `${s.subjectCode} - ${s.subjectName}`,
-      `${s.yearLevel} (${s.section})`,
-      `${formatTime(s.startTime)} - ${formatTime(s.endTime)}`,
-      s.facultyName, s.total, s.present, s.late, s.absent,
-    ]));
+    csvRows.push(["=== DETAILED STUDENT ATTENDANCE ==="]);
+    csvRows.push(["Subject", "Section", "Student Name", "Time IN", "Time OUT", "Status"]);
+
+    // Export detailed student attendance for each subject
+    subjectStats.forEach((subject) => {
+      // Present students
+      subject.presentList.forEach((student) => {
+        csvRows.push([
+          `${subject.subjectCode} - ${subject.subjectName}`,
+          `${subject.yearLevel} (${subject.section})`,
+          student.name,
+          student.timeIn ? formatTime(student.timeIn) : "",
+          student.timeOut ? formatTime(student.timeOut) : "",
+          "Present"
+        ]);
+      });
+
+      // Late students
+      subject.lateList.forEach((student) => {
+        csvRows.push([
+          `${subject.subjectCode} - ${subject.subjectName}`,
+          `${subject.yearLevel} (${subject.section})`,
+          student.name,
+          student.timeIn ? formatTime(student.timeIn) : "",
+          student.timeOut ? formatTime(student.timeOut) : "",
+          "Late"
+        ]);
+      });
+
+      // Absent students
+      subject.absentList.forEach((student) => {
+        csvRows.push([
+          `${subject.subjectCode} - ${subject.subjectName}`,
+          `${subject.yearLevel} (${subject.section})`,
+          student.name,
+          "", // No time IN for absent
+          "", // No time OUT for absent
+          "Absent"
+        ]);
+      });
+    });
+
     csvRows.push([]);
     csvRows.push(["=== PRESENT USERS ==="]);
-    csvRows.push(["Name", "Department", "Time In"]);
-    presentUsers.forEach((u) => csvRows.push([u.name, u.department, formatTime(u.logTime)]));
+    csvRows.push(["Name", "Department", "Time In", "Time Out"]);
+    presentUsers.forEach((u) => csvRows.push([u.name, u.department, formatTime(u.timeIn), formatTime(u.timeOut)]));
     csvRows.push([]);
     csvRows.push(["=== LATE USERS ==="]);
-    csvRows.push(["Name", "Department", "Time In"]);
-    lateUsers.forEach((u) => csvRows.push([u.name, u.department, formatTime(u.logTime)]));
+    csvRows.push(["Name", "Department", "Time In", "Time Out"]);
+    lateUsers.forEach((u) => csvRows.push([u.name, u.department, formatTime(u.timeIn), formatTime(u.timeOut)]));
     csvRows.push([]);
     csvRows.push(["=== ABSENT USERS ==="]);
     csvRows.push(["Name", "Department"]);
@@ -1200,15 +1268,29 @@ function DashboardCore({ scope }) {
                         <div className="grid gap-4 sm:grid-cols-3">
                           <div>
                             <div className="text-xs font-semibold uppercase tracking-wider text-green-600 mb-2">Present ({row.presentList.length})</div>
-                            {row.presentList.length ? row.presentList.map((s, i) => (
-                              <div key={i} className="text-xs text-gray-700 py-0.5">{s.name} <span className="text-gray-400">— {formatTime(s.time)}</span></div>
-                            )) : <div className="text-xs text-gray-400">None</div>}
+                            {row.presentList.length ? row.presentList.map((s, i) => {
+    const timeIn = s.timeIn ? formatTime(s.timeIn) : "—";
+    const timeOut = s.timeOut ? formatTime(s.timeOut) : "—";
+    return (
+      <div key={i} className="text-xs text-gray-700 py-0.5">
+        {s.name} <br/>
+        <span className="text-gray-400">IN: {timeIn} | OUT: {timeOut}</span>
+      </div>
+    );
+  }) : <div className="text-xs text-gray-400">None</div>}
                           </div>
                           <div>
                             <div className="text-xs font-semibold uppercase tracking-wider text-amber-600 mb-2">Late ({row.lateList.length})</div>
-                            {row.lateList.length ? row.lateList.map((s, i) => (
-                              <div key={i} className="text-xs text-gray-700 py-0.5">{s.name} <span className="text-gray-400">— {formatTime(s.time)}</span></div>
-                            )) : <div className="text-xs text-gray-400">None</div>}
+                            {row.lateList.length ? row.lateList.map((s, i) => {
+    const timeIn = s.timeIn ? formatTime(s.timeIn) : "—";
+    const timeOut = s.timeOut ? formatTime(s.timeOut) : "—";
+    return (
+      <div key={i} className="text-xs text-gray-700 py-0.5">
+        {s.name} <br/>
+        <span className="text-gray-400">IN: {timeIn} | OUT: {timeOut}</span>
+      </div>
+    );
+  }) : <div className="text-xs text-gray-400">None</div>}
                           </div>
                           <div>
                             <div className="text-xs font-semibold uppercase tracking-wider text-red-600 mb-2">Absent ({row.absentList.length})</div>
