@@ -1732,48 +1732,6 @@ function RolePanel({ pageKey, role }) {
       }
     }
 
-          if (isAdminAttendancePage) {
-        const user = users.find(u => u.id === entry.userId);
-        if (user) {
-          const parsed = parseStudentDept(user.department);
-          if (parsed) {
-            const dayName = getManilaDayFromDate(entry.logDate);
-            const schedule = scheduleRows.find(
-              s => s.yearLevel === parsed.yearLevel &&
-                   s.section === parsed.section &&
-                   Array.isArray(s.days) &&
-                   s.days.includes(dayName)
-            );
-            if (schedule) {
-              classes = `${schedule.subjectCode} — ${schedule.subjectName}`;
-              timeSchedule = `${formatTime(schedule.startTime)} – ${formatTime(schedule.endTime)}`;
-              // Determine validity based on IN time
-              if (entry.timeIn && entry.rawInTime) {
-                const inMin = timeToMinutes(entry.rawInTime);
-                const startMin = timeToMinutes(schedule.startTime);
-                const endMin = timeToMinutes(schedule.endTime);
-                if (startMin !== null && endMin !== null && inMin !== null) {
-                  const windowStart = startMin - 15;
-                  const windowEnd = endMin - 15;
-                  if (inMin >= windowStart && inMin <= windowEnd) {
-                    status = "Valid";
-                    reason = "Time Scheduled";
-                  } else {
-                    status = "Invalid";
-                    reason = "No Time Scheduled";
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-      entry.classes = classes;
-      entry.timeSchedule = timeSchedule;
-      entry.status = status;
-      entry.reason = reason;
-      result.push(entry);
-    }
     return result;
   }, [filteredAttendance, users, scheduleRows, isAdminAttendancePage]);
 
