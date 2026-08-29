@@ -1363,7 +1363,8 @@ function DashboardCore({ scope }) {
     return (
       <div key={i} className="text-xs text-gray-700 py-0.5">
         {s.name} <br/>
-        <span className="text-gray-400">IN: {timeIn} | OUT: {timeOut}</span>
+        <span className="text-gray-400">IN: {timeIn}</span> <br/>
+        <span className="text-gray-400">OUT: {timeOut}</span>
       </div>
     );
   }) : <div className="text-xs text-gray-400">None</div>}
@@ -1376,7 +1377,8 @@ function DashboardCore({ scope }) {
     return (
       <div key={i} className="text-xs text-gray-700 py-0.5">
         {s.name} <br/>
-        <span className="text-gray-400">IN: {timeIn} | OUT: {timeOut}</span>
+        <span className="text-gray-400">IN: {timeIn}</span> <br/>
+        <span className="text-gray-400">OUT: {timeOut}</span>
       </div>
     );
   }) : <div className="text-xs text-gray-400">None</div>}
