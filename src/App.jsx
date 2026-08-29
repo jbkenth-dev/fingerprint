@@ -1588,17 +1588,97 @@ function RolePanel({ pageKey, role }) {
         return timeA - timeB;
       });
 
-      // Separate IN and OUT records
-      const inTimes = sortedRecords.filter(r => r.status === "IN").map(r => r.logTime);
-      const outTimes = sortedRecords.filter(r => r.status === "OUT").map(r => r.logTime);
+      // Pair IN and OUT chronologically: each IN pairs with the next OUT after it.
+      const pendingIn = []; // store {time:string}
+      for (const rec of sortedRecords) {
+        if (rec.status === "IN") {
+          pendingIn.push({time: rec.logTime});
+        } else if (rec.status === "OUT") {
+          if (pendingIn.length > 0) {
+            // Pair earliest pending IN with this OUT
+            const inObj = pendingIn.shift();
+            const timeIn = inObj.time;
+            const timeOut = rec.logTime;
 
-      // Create sessions by pairing IN and OUT in order
-      const maxPairs = Math.max(inTimes.length, outTimes.length);
-      for (let i = 0; i < maxPairs; i++) {
-        const timeIn = i < inTimes.length ? inTimes[i] : null;
-        const timeOut = i < outTimes.length ? outTimes[i] : null;
+            // Create a session entry
+            const entry = {
+              userId,
+              logDate,
+              name,
+              idNumber,
+              classes: "-",
+              timeSchedule: "-",
+              timeIn: timeIn ? formatAttendanceTime(timeIn) : "",
+              timeOut: timeOut ? formatAttendanceTime(timeOut) : "",
+              status: "Invalid",
+              reason: "No Time Scheduled",
+              rawInTime: timeIn // keep raw for validation
+            };
 
-        // Create a session entry
+            // If this is the admin attendance page, compute classes, timeSchedule, status, reason
+            if (isAdminAttendancePage && timeIn) {
+              const user = users.find(u => u.id === userId);
+              if (user) {
+                const parsed = parseStudentDept(user.department);
+                if (parsed) {
+                  const dayName = getManilaDayFromDate(logDate);
+                  const schedule = scheduleRows.find(
+                    s => s.yearLevel === parsed.yearLevel &&
+                         s.section === parsed.section &&
+                         Array.isArray(s.days) &&
+                         s.days.includes(dayName)
+                  );
+                  if (schedule) {
+                    entry.classes = `${schedule.subjectCode} — ${schedule.subjectName}`;
+                    entry.timeSchedule = `${formatTime(schedule.startTime)} – ${formatTime(schedule.endTime)}`;
+                    // Determine validity based on IN time
+                    const inMin = timeToMinutes(timeIn);
+                    const startMin = timeToMinutes(schedule.startTime);
+                    const endMin = timeToMinutes(schedule.endTime);
+                    if (startMin !== null && endMin !== null && inMin !== null) {
+                      const windowStart = startMin - 15;
+                      const windowEnd = endMin - 15;
+                      if (inMin >= windowStart && inMin <= windowEnd) {
+                        entry.status = "Valid";
+                        entry.reason = "Time Scheduled";
+                      } else {
+                        entry.status = "Invalid";
+                        entry.reason = "No Time Scheduled";
+                        entry.classes = "-";
+                        entry.timeSchedule = "-";
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            result.push(entry);
+          } else {
+            // Unpaired OUT (no preceding IN)
+            const entry = {
+              userId,
+              logDate,
+              name,
+              idNumber,
+              classes: "-",
+              timeSchedule: "-",
+              timeIn: "",
+              timeOut: rec.logTime ? formatAttendanceTime(rec.logTime) : "",
+              status: "Invalid",
+              reason: "No Time Scheduled",
+              rawInTime: null
+            };
+            result.push(entry);
+          }
+        }
+      }
+
+      // Any remaining INs without a matching OUT
+      while (pendingIn.length > 0) {
+        const inObj = pendingIn.shift();
+        const timeIn = inObj.time;
+
         const entry = {
           userId,
           logDate,
@@ -1607,14 +1687,14 @@ function RolePanel({ pageKey, role }) {
           classes: "-",
           timeSchedule: "-",
           timeIn: timeIn ? formatAttendanceTime(timeIn) : "",
-          timeOut: timeOut ? formatAttendanceTime(timeOut) : "",
+          timeOut: "",
           status: "Invalid",
           reason: "No Time Scheduled",
-          rawInTime: timeIn // keep raw for validation
+          rawInTime: timeIn
         };
 
         // If this is the admin attendance page, compute classes, timeSchedule, status, reason
-        if (isAdminAttendancePage) {
+        if (isAdminAttendancePage && timeIn) {
           const user = users.find(u => u.id === userId);
           if (user) {
             const parsed = parseStudentDept(user.department);
@@ -1629,23 +1709,21 @@ function RolePanel({ pageKey, role }) {
               if (schedule) {
                 entry.classes = `${schedule.subjectCode} — ${schedule.subjectName}`;
                 entry.timeSchedule = `${formatTime(schedule.startTime)} – ${formatTime(schedule.endTime)}`;
-                // Determine validity based on IN time (if available)
-                if (timeIn) {
-                  const inMin = timeToMinutes(timeIn);
-                  const startMin = timeToMinutes(schedule.startTime);
-                  const endMin = timeToMinutes(schedule.endTime);
-                  if (startMin !== null && endMin !== null && inMin !== null) {
-                    const windowStart = startMin - 15;
-                    const windowEnd = endMin - 15;
-                    if (inMin >= windowStart && inMin <= windowEnd) {
-                      entry.status = "Valid";
-                      entry.reason = "Time Scheduled";
-                    } else {
-                      entry.status = "Invalid";
-                      entry.reason = "No Time Scheduled";
-                      entry.classes = "-";
-                      entry.timeSchedule = "-";
-                    }
+                // Determine validity based on IN time
+                const inMin = timeToMinutes(timeIn);
+                const startMin = timeToMinutes(schedule.startTime);
+                const endMin = timeToMinutes(schedule.endTime);
+                if (startMin !== null && endMin !== null && inMin !== null) {
+                  const windowStart = startMin - 15;
+                  const windowEnd = endMin - 15;
+                  if (inMin >= windowStart && inMin <= windowEnd) {
+                    entry.status = "Valid";
+                    entry.reason = "Time Scheduled";
+                  } else {
+                    entry.status = "Invalid";
+                    entry.reason = "No Time Scheduled";
+                    entry.classes = "-";
+                    entry.timeSchedule = "-";
                   }
                 }
               }
