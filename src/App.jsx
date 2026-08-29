@@ -1545,8 +1545,6 @@ function RolePanel({ pageKey, role }) {
     }
   }, [isDashboard, attendancePage, attendanceFilterDate, fetchAttendanceLogs]);
 
-  const totalAttendancePages = Math.max(1, Math.ceil(mergedAttendance.length / pageSize));
-
   function formatAttendanceTime(logTime) {
     if (!logTime || !/^\d{2}:\d{2}/.test(logTime)) return logTime || "No Record";
     const [hoursText, minutesText] = logTime.slice(0, 5).split(":");
@@ -1715,6 +1713,8 @@ function RolePanel({ pageKey, role }) {
     }
     return result;
   }, [filteredAttendance, users, scheduleRows, isAdminAttendancePage]);
+
+  const totalAttendancePages = Math.max(1, Math.ceil(mergedAttendance.length / pageSize));
 
   // Duplicate detection (only for admin attendance page)
   const detectDuplicates = React.useCallback(() => {
