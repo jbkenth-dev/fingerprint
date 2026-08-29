@@ -1523,39 +1523,40 @@ function RolePanel({ pageKey, role }) {
       }
 
       
-      // Apply date range filter
-      const recordDate = new Date(record.logDate);
-      const today = new Date();
+      // Apply date range filter only in All Records view
       let includeRecord = true;
-
-      switch (dateRangeFilter) {
-        case 'today':
-          includeRecord = recordDate.toDateString() === today.toDateString();
-          break;
-        case 'week':
-          const weekStart = new Date(today);
-          weekStart.setDate(today.getDate() - today.getDay());
-          weekStart.setHours(0, 0, 0, 0);
-          const weekEnd = new Date(today);
-          weekEnd.setDate(today.getDate() + (6 - today.getDay()));
-          weekEnd.setHours(23, 59, 59, 999);
-          includeRecord = recordDate >= weekStart && recordDate <= weekEnd;
-          break;
-        case 'month':
-          const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-          const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-          monthEnd.setHours(23, 59, 59, 999);
-          includeRecord = recordDate >= monthStart && recordDate <= monthEnd;
-          break;
-        case 'custom':
-          if (customStartDate && customEndDate) {
-            const startDate = new Date(customStartDate);
-            const endDate = new Date(customEndDate);
-            includeRecord = recordDate >= startDate && recordDate <= endDate;
-          }
-          break;
-        default:
-          includeRecord = recordDate.toDateString() === today.toDateString();
+      if (viewMode === 'all') {
+        const recordDate = new Date(record.logDate);
+        const today = new Date();
+        switch (dateRangeFilter) {
+          case 'today':
+            includeRecord = recordDate.toDateString() === today.toDateString();
+            break;
+          case 'week':
+            const weekStart = new Date(today);
+            weekStart.setDate(today.getDate() - today.getDay());
+            weekStart.setHours(0, 0, 0, 0);
+            const weekEnd = new Date(today);
+            weekEnd.setDate(today.getDate() + (6 - today.getDay()));
+            weekEnd.setHours(23, 59, 59, 999);
+            includeRecord = recordDate >= weekStart && recordDate <= weekEnd;
+            break;
+          case 'month':
+            const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+            const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            monthEnd.setHours(23, 59, 59, 999);
+            includeRecord = recordDate >= monthStart && recordDate <= monthEnd;
+            break;
+          case 'custom':
+            if (customStartDate && customEndDate) {
+              const startDate = new Date(customStartDate);
+              const endDate = new Date(customEndDate);
+              includeRecord = recordDate >= startDate && recordDate <= endDate;
+            }
+            break;
+          default:
+            includeRecord = recordDate.toDateString() === today.toDateString();
+        }
       }
 
       return includeRecord;
