@@ -1570,8 +1570,7 @@ function RolePanel({ pageKey, role }) {
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase();
         const matchesSearch = record.name?.toLowerCase().includes(searchLower) ||
-          record.idNumber?.toLowerCase().includes(searchLower) ||
-          (record.role && record.role.toLowerCase().includes(searchLower));
+          record.idNumber?.toLowerCase().includes(searchLower);
         if (!matchesSearch) return false;
       }
 
@@ -2141,7 +2140,7 @@ function RolePanel({ pageKey, role }) {
                 </label>
                 <input
                   type="text"
-                  placeholder="Search by name, ID, or role..."
+                  placeholder="Search name or ID Number"
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);
@@ -2153,36 +2152,38 @@ function RolePanel({ pageKey, role }) {
 
               
               
-              {/* Date Range Filter */}
-              <div className="flex flex-col">
-                <label className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-1">
-                  Date Range
-                </label>
-                <select
-                  value={dateRangeFilter}
-                  onChange={(e) => {
-                    setDateRangeFilter(e.target.value);
-                    if (e.target.value === 'custom') {
-                      // Set default custom range to last 7 days
-                      const end = new Date();
-                      const start = new Date(end);
-                      start.setDate(start.getDate() - 7);
-                      setCustomStartDate(start.toISOString().split('T')[0]);
-                      setCustomEndDate(end.toISOString().split('T')[0]);
-                    } else if (e.target.value !== 'custom') {
-                      setCustomStartDate('');
-                      setCustomEndDate('');
-                    }
-                    setAttendancePage(1);
-                  }}
-                  className="form-input w-full rounded-lg px-3 py-2 text-sm"
-                >
-                  <option value="today">Today</option>
-                  <option value="week">This Week</option>
-                  <option value="month">This Month</option>
-                  <option value="custom">Custom Range</option>
-                </select>
-              </div>
+              {/* Date Range Filter - Only show in All Records view */}
+              {viewMode === 'all' && (
+                <div className="flex flex-col">
+                  <label className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-1">
+                    Date Range
+                  </label>
+                  <select
+                    value={dateRangeFilter}
+                    onChange={(e) => {
+                      setDateRangeFilter(e.target.value);
+                      if (e.target.value === 'custom') {
+                        // Set default custom range to last 7 days
+                        const end = new Date();
+                        const start = new Date(end);
+                        start.setDate(start.getDate() - 7);
+                        setCustomStartDate(start.toISOString().split('T')[0]);
+                        setCustomEndDate(end.toISOString().split('T')[0]);
+                      } else if (e.target.value !== 'custom') {
+                        setCustomStartDate('');
+                        setCustomEndDate('');
+                      }
+                      setAttendancePage(1);
+                    }}
+                    className="form-input w-full rounded-lg px-3 py-2 text-sm"
+                  >
+                    <option value="today">Today</option>
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                    <option value="custom">Custom Range</option>
+                  </select>
+                </div>
+              )}
 
               {/* Custom Date Range (visible when custom is selected) */}
               {dateRangeFilter === 'custom' && (
