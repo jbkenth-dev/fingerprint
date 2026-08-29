@@ -1472,7 +1472,7 @@ function RolePanel({ pageKey, role }) {
         effectiveDate = date;
       }
 
-      if (effectiveDate) params.set("date", effectiveDate);
+      if (effectiveDate && dateRangeFilter !== 'custom') params.set("date", effectiveDate);
 
       const result = await apiFetch(`/attendance.php?${params.toString()}`);
       let records = Array.isArray(result.records) ? result.records : [];
