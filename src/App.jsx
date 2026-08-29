@@ -1364,8 +1364,6 @@ function RolePanel({ pageKey, role }) {
 
 // Admin attendance page state
   const [searchTerm, setSearchTerm] = React.useState('');
-  const [statusFilter, setStatusFilter] = React.useState('all'); // all, in, out
-  const [userTypeFilter, setUserTypeFilter] = React.useState('all'); // all, student, faculty, staff
   const [dateRangeFilter, setDateRangeFilter] = React.useState('today'); // today, week, month, custom
   const [customStartDate, setCustomStartDate] = React.useState('');
   const [customEndDate, setCustomEndDate] = React.useState('');
@@ -1432,19 +1430,7 @@ function RolePanel({ pageKey, role }) {
         );
       }
 
-      if (statusFilter !== 'all') {
-        records = records.filter(record => record.status.toLowerCase() === statusFilter);
-      }
-
-      if (userTypeFilter !== 'all' && record.role) {
-        records = records.filter(record => {
-          const roleLower = record.role.toLowerCase();
-          return (userTypeFilter === 'student' && roleLower === 'student') ||
-                 (userTypeFilter === 'faculty' && roleLower === 'faculty') ||
-                 (userTypeFilter === 'staff' && (roleLower === 'admin' || roleLower === 'faculty'));
-        });
-      }
-
+      
       // Apply date range filters for week/month/custom
       if (dateRangeFilter === 'week' || dateRangeFilter === 'month' || dateRangeFilter === 'custom') {
         const startDate = dateRangeFilter === 'custom' ? new Date(customStartDate) : null;
@@ -1486,7 +1472,7 @@ function RolePanel({ pageKey, role }) {
     } finally {
       setAttendanceLoading(false);
     }
-  }, [searchTerm, statusFilter, userTypeFilter, dateRangeFilter, customStartDate, customEndDate]);
+  }, [searchTerm, dateRangeFilter, customStartDate, customEndDate]);
 
   // Fetch attendance logs for dashboard — loads data immediately without page refresh
   React.useEffect(() => {
@@ -1534,19 +1520,7 @@ function RolePanel({ pageKey, role }) {
         if (!matchesSearch) return false;
       }
 
-      // Apply status filter
-      if (statusFilter !== 'all' && record.status.toLowerCase() !== statusFilter) {
-        return false;
-      }
-
-      // Apply user type filter
-      if (userTypeFilter !== 'all' && record.role) {
-        const roleLower = record.role.toLowerCase();
-        if (userTypeFilter === 'student' && roleLower !== 'student') return false;
-        if (userTypeFilter === 'faculty' && roleLower !== 'faculty') return false;
-        if (userTypeFilter === 'staff' && !(roleLower === 'admin' || roleLower === 'faculty')) return false;
-      }
-
+      
       // Apply date range filter
       const recordDate = new Date(record.logDate);
       const today = new Date();
@@ -1584,7 +1558,7 @@ function RolePanel({ pageKey, role }) {
 
       return includeRecord;
     });
-  }, [attendanceLogs, searchTerm, statusFilter, userTypeFilter, dateRangeFilter, customStartDate, customEndDate]);
+  }, [attendanceLogs, searchTerm, dateRangeFilter, customStartDate, customEndDate]);
 
   // Today's statistics (for cards - only for admin attendance page)
   const today = new Date();
@@ -1706,8 +1680,6 @@ function RolePanel({ pageKey, role }) {
     // Filters applied
     csvRows.push(['Applied Filters:']);
     csvRows.push([`Search: ${searchTerm || 'None'}`]);
-    csvRows.push([`Status: ${statusFilter === 'all' ? 'All' : statusFilter.toUpperCase()}`]);
-    csvRows.push([`User Type: ${userTypeFilter === 'all' ? 'All' : userTypeFilter}`]);
     csvRows.push([`Date Range: ${dateRangeFilter === 'custom' && customStartDate && customEndDate ? `${customStartDate} to ${customEndDate}` : dateRangeFilter}`]);
     csvRows.push([]);
 
@@ -1749,7 +1721,7 @@ function RolePanel({ pageKey, role }) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [filteredAttendance, searchTerm, statusFilter, userTypeFilter, dateRangeFilter, customStartDate, customEndDate, isAdminAttendancePage]);
+  }, [filteredAttendance, searchTerm, dateRangeFilter, customStartDate, customEndDate, isAdminAttendancePage]);
   const dashboardMetrics = React.useMemo(() => {
     if (!isDashboard || !attendanceLogs.length) return data.metrics;
 
@@ -1936,15 +1908,12 @@ function RolePanel({ pageKey, role }) {
           <section className="space-y-4">
             {/* View Tabs */}
             <div className="flex flex-wrap gap-2 mb-4">
-              {[{
+              [{
                 label: "All Records",
                 value: "all"
               }, {
                 label: "Live Attendance",
                 value: "live"
-              }, {
-                label: "Students Only",
-                value: "students"
               }, {
                 label: "Late Arrivals",
                 value: "late"
@@ -1993,45 +1962,8 @@ function RolePanel({ pageKey, role }) {
                 />
               </div>
 
-              {/* Status Filter */}
-              <div className="flex flex-col">
-                <label className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-1">
-                  Status
-                </label>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => {
-                    setStatusFilter(e.target.value);
-                    setAttendancePage(1);
-                  }}
-                  className="form-input w-full rounded-lg px-3 py-2 text-sm"
-                >
-                  <option value="all">All Statuses</option>
-                  <option value="in">Time In</option>
-                  <option value="out">Time Out</option>
-                </select>
-              </div>
-
-              {/* User Type Filter */}
-              <div className="flex flex-col">
-                <label className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-1">
-                  User Type
-                </label>
-                <select
-                  value={userTypeFilter}
-                  onChange={(e) => {
-                    setUserTypeFilter(e.target.value);
-                    setAttendancePage(1);
-                  }}
-                  className="form-input w-full rounded-lg px-3 py-2 text-sm"
-                >
-                  <option value="all">All Users</option>
-                  <option value="student">Students Only</option>
-                  <option value="faculty">Faculty Only</option>
-                  <option value="staff">Staff/Admin</option>
-                </select>
-              </div>
-
+              
+              
               {/* Date Range Filter */}
               <div className="flex flex-col">
                 <label className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-1">
