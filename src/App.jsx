@@ -1681,8 +1681,8 @@ function RolePanel({ pageKey, role }) {
           logDate,
           name,
           idNumber,
-          classes: "—",
-          timeSchedule: "—",
+          classes: "-",
+          timeSchedule: "-",
           timeIn: timeIn ? formatAttendanceTime(timeIn) : "",
           timeOut: timeOut ? formatAttendanceTime(timeOut) : "",
           status: "Invalid",
@@ -1720,6 +1720,8 @@ function RolePanel({ pageKey, role }) {
                     } else {
                       entry.status = "Invalid";
                       entry.reason = "No Time Scheduled";
+                      entry.classes = "-";
+                      entry.timeSchedule = "-";
                     }
                   }
                 }
