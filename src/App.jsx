@@ -1462,7 +1462,12 @@ function DashboardCore({ scope }) {
                     <th className="px-3 py-2 font-medium">#</th>
                     <th className="px-3 py-2 font-medium">Name</th>
                     <th className="px-3 py-2 font-medium">Section</th>
-                    {section.title !== "Absent Students" && <th className="px-3 py-2 font-medium">Time IN</th>}
+                    {section.title !== "Absent Students" && (
+                      <>
+                        <th className="px-3 py-2 font-medium">Time IN</th>
+                        <th className="px-3 py-2 font-medium">Time OUT</th>
+                      </>
+                    )}
                     <th className="px-3 py-2 font-medium">Subject</th>
                     <th className="px-3 py-2 font-medium">Scheduled Time</th>
                   </tr>
@@ -1474,13 +1479,16 @@ function DashboardCore({ scope }) {
                       <td className="px-3 py-2 font-medium text-gray-800">{u.name}</td>
                       <td className="px-3 py-2 text-gray-600">{u.section ? `${u.department ? u.department.charAt(0) : ''}-${u.section}` : (u.department ?? "—")}</td>
                       {section.title !== "Absent Students" && (
-                        <td className="px-3 py-2"><span className="rounded-full bg-green-50 px-2 py-0.5 text-[0.65rem] font-medium text-green-700">{formatTime(u.time)}</span></td>
+                        <>
+                          <td className="px-3 py-2"><span className="rounded-full bg-green-50 px-2 py-0.5 text-[0.65rem] font-medium text-green-700">{formatTime(u.timeIn)}</span></td>
+                          <td className="px-3 py-2"><span className="rounded-full bg-green-50 px-2 py-0.5 text-[0.65rem] font-medium text-green-700">{formatTime(u.timeOut)}</span></td>
+                        </>
                       )}
                       <td className="px-3 py-2 text-gray-600">{u.subjectCode ? `${u.subjectCode} — ${u.subjectName}` : "—"}</td>
                       <td className="px-3 py-2 text-gray-600">{u.startTime && u.endTime ? `${formatTime(u.startTime)} – ${formatTime(u.endTime)}` : "—"}</td>
                     </tr>
                   )) : (
-                    <tr><td colSpan={section.title !== "Absent Students" ? 6 : 5} className="px-3 py-6 text-center text-gray-400">{section.empty}</td></tr>
+                    <tr><td colSpan={section.title !== "Absent Students" ? 7 : 5} className="px-3 py-6 text-center text-gray-400">{section.empty}</td></tr>
                   )}
                 </tbody>
               </table>
