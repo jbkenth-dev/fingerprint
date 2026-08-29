@@ -1545,7 +1545,7 @@ function RolePanel({ pageKey, role }) {
     }
   }, [isDashboard, attendancePage, attendanceFilterDate, fetchAttendanceLogs]);
 
-  const totalAttendancePages = Math.max(1, Math.ceil(attendanceTotal / pageSize));
+  const totalAttendancePages = Math.max(1, Math.ceil(mergedAttendance.length / pageSize));
 
   function formatAttendanceTime(logTime) {
     if (!logTime || !/^\d{2}:\d{2}/.test(logTime)) return logTime || "No Record";
@@ -1635,6 +1635,166 @@ function RolePanel({ pageKey, role }) {
     const [hours, minutes] = timeIn.split(':').map(Number);
     return hours > 9 || (hours === 9 && minutes > 0);
   }).length : 0;
+
+  const mergedAttendance = React.useMemo(() => {
+    const map = new Map();
+    filteredAttendance.forEach(record => {
+      const key = `${record.userId}-${record.logDate}`;
+      let entry = map.get(key);
+      if (!entry) {
+        entry = {
+          userId: record.userId,
+          logDate: record.logDate,
+          name: record.name,
+          idNumber: record.idNumber || record.username || 'N/A',
+          classes: "—",
+          timeSchedule: "—",
+          timeIn: "",
+          timeOut: "",
+          status: "Invalid",
+          reason: "No Time Scheduled",
+          rawInTime: null
+        };
+        map.set(key, entry);
+      }
+      if (record.status === "IN") {
+        entry.timeIn = formatAttendanceTime(record.logTime);
+        entry.rawInTime = record.logTime;
+      } else if (record.status === "OUT") {
+        entry.timeOut = formatAttendanceTime(record.logTime);
+      }
+    });
+
+    const result = [];
+    for (const entry of map.values()) {
+      let classes = "—";
+      let timeSchedule = "—";
+      let status = "Invalid";
+      let reason = "No Time Scheduled";
+      if (isAdminAttendancePage) {
+        const user = users.find(u => u.id === entry.userId);
+        if (user) {
+          const parsed = parseStudentDept(user.department);
+          if (parsed) {
+            const dayName = getManilaDayFromDate(entry.logDate);
+            const schedule = scheduleRows.find(
+              s => s.yearLevel === parsed.yearLevel &&
+                   s.section === parsed.section &&
+                   Array.isArray(s.days) &&
+                   s.days.includes(dayName)
+            );
+            if (schedule) {
+              classes = `${schedule.subjectCode} — ${schedule.subjectName}`;
+              timeSchedule = `${formatTime(schedule.startTime)} – ${formatTime(schedule.endTime)}`;
+              // Determine validity based on IN time
+              if (entry.timeIn && entry.rawInTime) {
+                const inMin = timeToMinutes(entry.rawInTime);
+                const startMin = timeToMinutes(schedule.startTime);
+                const endMin = timeToMinutes(schedule.endTime);
+                if (startMin !== null && endMin !== null && inMin !== null) {
+                  const windowStart = startMin - 15;
+                  const windowEnd = endMin - 15;
+                  if (inMin >= windowStart && inMin <= windowEnd) {
+                    status = "Valid";
+                    reason = "Time Scheduled";
+                  } else {
+                    status = "Invalid";
+                    reason = "No Time Scheduled";
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      entry.classes = classes;
+      entry.timeSchedule = timeSchedule;
+      entry.status = status;
+      entry.reason = reason;
+      result.push(entry);
+    }
+    return result;
+  }, [filteredAttendance, users, scheduleRows, isAdminAttendancePage]);
+
+  const mergedAttendance = React.useMemo(() => {
+    const map = new Map();
+    filteredAttendance.forEach(record => {
+      const key = `${record.userId}-${record.logDate}`;
+      let entry = map.get(key);
+      if (!entry) {
+        entry = {
+          userId: record.userId,
+          logDate: record.logDate,
+          name: record.name,
+          idNumber: record.idNumber || record.username || 'N/A',
+          classes: "—",
+          timeSchedule: "—",
+          timeIn: "",
+          timeOut: "",
+          status: "Invalid",
+          reason: "No Time Scheduled",
+          rawInTime: null
+        };
+        map.set(key, entry);
+      }
+      if (record.status === "IN") {
+        entry.timeIn = formatAttendanceTime(record.logTime);
+        entry.rawInTime = record.logTime;
+      } else if (record.status === "OUT") {
+        entry.timeOut = formatAttendanceTime(record.logTime);
+      }
+    });
+
+    const result = [];
+    for (const entry of map.values()) {
+      let classes = "—";
+      let timeSchedule = "—";
+      let status = "Invalid";
+      let reason = "No Time Scheduled";
+      if (isAdminAttendancePage) {
+        const user = users.find(u => u.id === entry.userId);
+        if (user) {
+          const parsed = parseStudentDept(user.department);
+          if (parsed) {
+            const dayName = getManilaDayFromDate(entry.logDate);
+            const schedule = scheduleRows.find(
+              s => s.yearLevel === parsed.yearLevel &&
+                   s.section === parsed.section &&
+                   Array.isArray(s.days) &&
+                   s.days.includes(dayName)
+            );
+            if (schedule) {
+              classes = `${schedule.subjectCode} — ${schedule.subjectName}`;
+              timeSchedule = `${formatTime(schedule.startTime)} – ${formatTime(schedule.endTime)}`;
+              // Determine validity based on IN time
+              if (entry.timeIn && entry.rawInTime) {
+                const inMin = timeToMinutes(entry.rawInTime);
+                const startMin = timeToMinutes(schedule.startTime);
+                const endMin = timeToMinutes(schedule.endTime);
+                if (startMin !== null && endMin !== null && inMin !== null) {
+                  const windowStart = startMin - 15;
+                  const windowEnd = endMin - 15;
+                  if (inMin >= windowStart && inMin <= windowEnd) {
+                    status = "Valid";
+                    reason = "Time Scheduled";
+                  } else {
+                    status = "Invalid";
+                    reason = "No Time Scheduled";
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      entry.classes = classes;
+      entry.timeSchedule = timeSchedule;
+      entry.status = status;
+      entry.reason = reason;
+      result.push(entry);
+    }
+    return result;
+  }, [filteredAttendance, users, scheduleRows, isAdminAttendancePage]);
 
   // Duplicate detection (only for admin attendance page)
   const detectDuplicates = React.useCallback(() => {
@@ -1752,7 +1912,7 @@ function RolePanel({ pageKey, role }) {
 
   // Export function (only for admin attendance page)
   const handleExportAttendance = React.useCallback(() => {
-    if (!isAdminAttendancePage || filteredAttendance.length === 0) {
+    if (!isAdminAttendancePage || mergedAttendance.length === 0) {
       alert('No data to export');
       return;
     }
@@ -1775,64 +1935,18 @@ function RolePanel({ pageKey, role }) {
     csvRows.push(['No.', 'Name', 'ID Number', 'Classes', 'Time Schedule', 'Date', 'Time IN', 'Time OUT', 'Status', 'Reason']);
 
     // Data rows
-    filteredAttendance.forEach((record, index) => {
-      // Compute class info
-      let classes = "—";
-      let timeSchedule = "—";
-      let status = "Invalid";
-      let reason = "No Time Scheduled";
-
-      if (isAdminAttendancePage) {
-        const user = users.find(u => u.id === record.userId);
-        if (user) {
-          const parsed = parseStudentDept(user.department);
-          if (parsed) {
-            const dayName = getManilaDayFromDate(record.logDate);
-            const schedule = scheduleRows.find(
-              s => s.yearLevel === parsed.yearLevel &&
-                   s.section === parsed.section &&
-                   Array.isArray(s.days) &&
-                   s.days.includes(dayName)
-            );
-            if (schedule) {
-              classes = `${schedule.subjectCode} — ${schedule.subjectName}`;
-              timeSchedule = `${formatTime(schedule.startTime)} – ${formatTime(schedule.endTime)}`;
-              // Determine validity
-              if (record.status === "IN" && record.logTime) {
-                const inMin = timeToMinutes(record.logTime);
-                const startMin = timeToMinutes(schedule.startTime);
-                const endMin = timeToMinutes(schedule.endTime);
-                if (startMin !== null && endMin !== null && inMin !== null) {
-                  const windowStart = startMin - 15;
-                  const windowEnd = endMin - 15;
-                  if (inMin >= windowStart && inMin <= windowEnd) {
-                    status = "Valid";
-                    reason = "Time Scheduled";
-                  } else {
-                    status = "Invalid";
-                    reason = "No Time Scheduled";
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-
-      const timeInStr = record.status === 'IN' ? formatAttendanceTime(record.logTime) : '';
-      const timeOutStr = record.status === 'OUT' ? formatAttendanceTime(record.logTime) : '';
-
+    mergedAttendance.forEach((entry, index) => {
       csvRows.push([
         index + 1,
-        record.name,
-        record.idNumber || record.username || 'N/A',
-        classes,
-        timeSchedule,
-        record.logDate,
-        timeInStr,
-        timeOutStr,
-        status,
-        reason
+        entry.name,
+        entry.idNumber,
+        entry.classes,
+        entry.timeSchedule,
+        entry.logDate,
+        entry.timeIn,
+        entry.timeOut,
+        entry.status,
+        entry.reason
       ]);
     });
 
@@ -1853,7 +1967,7 @@ function RolePanel({ pageKey, role }) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [filteredAttendance, searchTerm, dateRangeFilter, customStartDate, customEndDate, isAdminAttendancePage]);
+  }, [mergedAttendance, searchTerm, dateRangeFilter, customStartDate, customEndDate, isAdminAttendancePage]);
   const dashboardMetrics = React.useMemo(() => {
     if (!isDashboard || !attendanceLogs.length) return data.metrics;
 
@@ -2184,7 +2298,7 @@ function RolePanel({ pageKey, role }) {
                 <div className="text-center py-8">
                   Loading attendance records...
                 </div>
-              ) : filteredAttendance.length === 0 ? (
+              ) : mergedAttendance.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   No attendance records found matching the current filters.
                 </div>
@@ -2236,96 +2350,49 @@ function RolePanel({ pageKey, role }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredAttendance.map((record, index) => {
+                        {mergedAttendance.map((entry, index) => {
                           const isDuplicate = duplicateRecords.some(dup =>
-                            dup.id === record.id ||
-                            (dup.userId === record.userId && dup.logDate === record.logDate)
+                            dup.userId === entry.userId && dup.logDate === entry.logDate
                           );
-
-                          // Compute class info
-                          let classes = "—";
-                          let timeSchedule = "—";
-                          let status = "Invalid";
-                          let reason = "No Time Scheduled";
-
-                          if (isAdminAttendancePage) {
-                            const user = users.find(u => u.id === record.userId);
-                            if (user) {
-                              const parsed = parseStudentDept(user.department);
-                              if (parsed) {
-                                const dayName = getManilaDayFromDate(record.logDate);
-                                const schedule = scheduleRows.find(
-                                  s => s.yearLevel === parsed.yearLevel &&
-                                       s.section === parsed.section &&
-                                       Array.isArray(s.days) &&
-                                       s.days.includes(dayName)
-                                );
-                                if (schedule) {
-                                  classes = `${schedule.subjectCode} — ${schedule.subjectName}`;
-                                  timeSchedule = `${formatTime(schedule.startTime)} – ${formatTime(schedule.endTime)}`;
-                                  // Determine validity
-                                  if (record.status === "IN" && record.logTime) {
-                                    const inMin = timeToMinutes(record.logTime);
-                                    const startMin = timeToMinutes(schedule.startTime);
-                                    const endMin = timeToMinutes(schedule.endTime);
-                                    if (startMin !== null && endMin !== null && inMin !== null) {
-                                      const windowStart = startMin - 15;
-                                      const windowEnd = endMin - 15;
-                                      if (inMin >= windowStart && inMin <= windowEnd) {
-                                        status = "Valid";
-                                        reason = "Time Scheduled";
-                                      } else {
-                                        status = "Invalid";
-                                        reason = "No Time Scheduled";
-                                      }
-                                    }
-                                  }
-                                }
-                              }
-                            }
-                          }
-
-                          const timeInStr = record.status === 'IN' ? formatAttendanceTime(record.logTime) : '';
-                          const timeOutStr = record.status === 'OUT' ? formatAttendanceTime(record.logTime) : '';
 
                           return (
                             <tr
-                              key={record.id}
+                              key={`${entry.userId}-${entry.logDate}`}
                               className={`border-b border-gray-50 ${isDuplicate ? 'bg-red-50' : ''}`}
                             >
                               <td className="px-4 py-3 text-xs text-gray-500">{index + 1}</td>
-                              <td className="px-4 py-3 font-medium text-gray-800">{record.name}</td>
+                              <td className="px-4 py-3 font-medium text-gray-800">{entry.name}</td>
                               <td className="px-4 py-3 text-sm text-gray-600">
-                                {record.idNumber || record.username || 'N/A'}
+                                {entry.idNumber}
                               </td>
                               {viewMode !== 'absent' && (
                                 <>
                                   <td className="px-4 py-3 text-sm text-gray-600 capitalize">
-                                    {classes}
+                                    {entry.classes}
                                   </td>
                                   <td className="px-4 py-3 text-sm text-gray-600">
-                                    {timeSchedule}
+                                    {entry.timeSchedule}
                                   </td>
                                 </>
                               )}
                               <td className="px-4 py-3 text-sm text-gray-600">
-                                {record.logDate}
+                                {entry.logDate}
                               </td>
                               <td className="px-4 py-3 text-sm text-gray-600">
-                                {timeInStr}
+                                {entry.timeIn}
                               </td>
                               <td className="px-4 py-3 text-sm text-gray-600">
-                                {timeOutStr}
+                                {entry.timeOut}
                               </td>
                               <td className="px-4 py-3">
                                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium
-                                  ${status === 'Valid' ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}`}
+                                  ${entry.status === 'Valid' ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}`}
                                 >
-                                  {status}
+                                  {entry.status}
                                 </span>
                               </td>
                               <td className="px-4 py-3 text-sm text-gray-600">
-                                {reason}
+                                {entry.reason}
                               </td>
                               {viewMode === 'duplicates' && (
                                 <td className="px-4 py-3 text-sm text-gray-600">
@@ -2350,7 +2417,7 @@ function RolePanel({ pageKey, role }) {
                   {/* Pagination Controls */}
                   <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between">
                     <div className="text-sm text-gray-500">
-                      Showing {(attendancePage - 1) * pageSize + 1}-{Math.min(attendancePage * pageSize, filteredAttendance.length)} of {filteredAttendance.length} records
+                      Showing {(attendancePage - 1) * pageSize + 1}-{Math.min(attendancePage * pageSize, mergedAttendance.length)} of {mergedAttendance.length} records
                     </div>
                     <div className="flex gap-2">
                       <button
