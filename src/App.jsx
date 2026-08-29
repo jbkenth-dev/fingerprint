@@ -1360,7 +1360,7 @@ function RolePanel({ pageKey, role }) {
   const [attendanceError, setAttendanceError] = React.useState("");
   const [attendanceTotal, setAttendanceTotal] = React.useState(0);
   const [attendancePage, setAttendancePage] = React.useState(1);
-  const pageSize = 15;
+  const pageSize = 10;
 
 // Schedule and user data for class info
   const { users } = useAuth();
@@ -1432,96 +1432,20 @@ function RolePanel({ pageKey, role }) {
     setAttendanceLoading(true);
     setAttendanceError("");
     try {
-      const offset = (page - 1) * pageSize;
-      const params = new URLSearchParams({ limit: String(pageSize), offset: String(offset) });
-
-      // Apply date filter
-      let effectiveDate = date;
-      if (!effectiveDate) {
-        const today = new Date();
-        switch (dateRangeFilter) {
-          case 'today':
-            effectiveDate = today.toISOString().split('T')[0];
-            break;
-          case 'yesterday':
-            const yesterday = new Date(today);
-            yesterday.setDate(yesterday.getDate() - 1);
-            effectiveDate = yesterday.toISOString().split('T')[0];
-            break;
-          case 'week':
-            // For week, we'll fetch today and handle filtering client-side for simplicity
-            effectiveDate = today.toISOString().split('T')[0];
-            break;
-          case 'month':
-            // For month, we'll fetch today and handle filtering client-side
-            effectiveDate = today.toISOString().split('T')[0];
-            break;
-          case 'custom':
-            if (customStartDate && customEndDate) {
-              // For custom range, we'd need to modify the API to support date ranges
-              // For now, we'll use start date and filter client-side
-              effectiveDate = customStartDate;
-            } else {
-              effectiveDate = today.toISOString().split('T')[0];
-            }
-            break;
-          default:
-            effectiveDate = today.toISOString().split('T')[0];
+      const params = new URLSearchParams();
+      // Only send date param for live mode or history view (single-day fetches)
+      if (viewMode === 'live' || viewMode === 'history') {
+        if (date) {
+          params.set("date", date);
         }
-      } else {
-        effectiveDate = date;
       }
-
-      if (effectiveDate && dateRangeFilter !== 'custom') params.set("date", effectiveDate);
-
+      // No limit/offset; fetch all records (filtered by date if provided)
       const result = await apiFetch(`/attendance.php?${params.toString()}`);
       let records = Array.isArray(result.records) ? result.records : [];
-
-      // Apply additional filters client-side
-      if (searchTerm) {
-        const searchLower = searchTerm.toLowerCase();
-        records = records.filter(record =>
-          record.name?.toLowerCase().includes(searchLower) ||
-          record.idNumber?.toLowerCase().includes(searchLower) ||
-          (record.role && record.role.toLowerCase().includes(searchLower))
-        );
-      }
-
-      
-      // Apply date range filters for week/month/custom
-      if (dateRangeFilter === 'week' || dateRangeFilter === 'month' || dateRangeFilter === 'custom') {
-        const startDate = dateRangeFilter === 'custom' ? new Date(customStartDate) : null;
-        const endDate = dateRangeFilter === 'custom' ? new Date(customEndDate) : null;
-        const today = new Date();
-
-        records = records.filter(record => {
-          const recordDate = new Date(record.logDate);
-          if (dateRangeFilter === 'week') {
-            // Get start of week (Sunday)
-            const weekStart = new Date(today);
-            weekStart.setDate(today.getDate() - today.getDay());
-            weekStart.setHours(0, 0, 0, 0);
-            // Get end of week (Saturday)
-            const weekEnd = new Date(today);
-            weekEnd.setDate(today.getDate() + (6 - today.getDay()));
-            weekEnd.setHours(23, 59, 59, 999);
-            return recordDate >= weekStart && recordDate <= weekEnd;
-          } else if (dateRangeFilter === 'month') {
-            // Get start of month
-            const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-            // Get end of month
-            const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-            monthEnd.setHours(23, 59, 59, 999);
-            return recordDate >= monthStart && recordDate <= monthEnd;
-          } else if (dateRangeFilter === 'custom' && startDate && endDate) {
-            return recordDate >= startDate && recordDate <= endDate;
-          }
-          return true;
-        });
-      }
-
+      // If backend provides total count, use it; otherwise compute from records length
+      const total = result.total !== undefined ? result.total : records.length;
       setAttendanceLogs(records);
-      setAttendanceTotal(result.total ?? 0);
+      setAttendanceTotal(total);
     } catch (err) {
       setAttendanceLogs([]);
       setAttendanceTotal(0);
@@ -1529,7 +1453,7 @@ function RolePanel({ pageKey, role }) {
     } finally {
       setAttendanceLoading(false);
     }
-  }, [searchTerm, dateRangeFilter, customStartDate, customEndDate]);
+  }, [viewMode]);
 
   // Fetch attendance logs for dashboard — loads data immediately without page refresh
   React.useEffect(() => {
