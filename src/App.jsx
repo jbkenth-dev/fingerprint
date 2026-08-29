@@ -1362,6 +1362,63 @@ function RolePanel({ pageKey, role }) {
   const [attendancePage, setAttendancePage] = React.useState(1);
   const pageSize = 15;
 
+// Schedule and user data for class info
+  const { users } = useAuth();
+  const [scheduleRows, setScheduleRows] = React.useState([]);
+  const [scheduleLoading, setScheduleLoading] = React.useState(true);
+  const [scheduleError, setScheduleError] = React.useState("");
+
+  // Helper functions
+  const timeToMinutes = (timeStr) => {
+    if (!timeStr) return null;
+    const match = String(timeStr).match(/^(\d{1,2}):(\d{2})/);
+    if (!match) return null;
+    return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+  };
+
+  const formatTime = (timeStr) => {
+    if (!timeStr || !/^\d{2}:\d{2}/.test(timeStr)) return "—";
+    const [h, m] = timeStr.slice(0, 5).split(":").map(Number);
+    return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+  };
+
+  const parseStudentDept = (dept) => {
+    if (!dept) return null;
+    const yearMap = { 1: "1st Year", 2: "2nd Year", 3: "3rd Year", 4: "4th Year" };
+    const fullMatch = dept.match(/(\d)[^-]*-\s*([A-E])$/i);
+    if (fullMatch) {
+      return { yearLevel: yearMap[parseInt(fullMatch[1], 10)] || null, section: fullMatch[2].toUpperCase() };
+    }
+    const shortMatch = dept.match(/(\d)\s*([A-E])$/i);
+    if (shortMatch) {
+      return { yearLevel: yearMap[parseInt(shortMatch[1], 10)] || null, section: shortMatch[2].toUpperCase() };
+    }
+    return null;
+  };
+
+  const getManilaDayFromDate = (dateStr) => {
+    const dayNameMap = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    const d = new Date(dateStr);
+    return dayNameMap[d.getDay()] || "";
+  };
+
+  // Fetch schedule data
+  React.useEffect(() => {
+    const loadSchedule = async () => {
+      setScheduleLoading(true);
+      setScheduleError("");
+      try {
+        const data = await apiFetch("/class-schedules.php");
+        setScheduleRows(Array.isArray(data) ? data : []);
+      } catch (err) {
+        setScheduleError(err.message || "Failed to load schedule.");
+      } finally {
+        setScheduleLoading(false);
+      }
+    };
+    loadSchedule();
+  }, []);
+
 // Admin attendance page state
   const [searchTerm, setSearchTerm] = React.useState('');
   const [dateRangeFilter, setDateRangeFilter] = React.useState('today'); // today, week, month, custom
@@ -1715,23 +1772,62 @@ function RolePanel({ pageKey, role }) {
     csvRows.push([]);
 
     // Data header
-    csvRows.push(['No.', 'Name', 'ID/Username', 'Role', 'Date', 'Time In', 'Time Out', 'Status', 'Method']);
+    csvRows.push(['No.', 'Name', 'ID Number', 'Classes', 'Time Schedule', 'Date', 'Status', 'Reason']);
 
     // Data rows
     filteredAttendance.forEach((record, index) => {
-      const timeIn = record.status === 'IN' ? formatAttendanceTime(record.logTime) : '';
-      const timeOut = record.status === 'OUT' ? formatAttendanceTime(record.logTime) : '';
+      // Compute class info
+      let classes = "—";
+      let timeSchedule = "—";
+      let status = "Invalid";
+      let reason = "No Time Scheduled";
+
+      if (isAdminAttendancePage) {
+        const user = users.find(u => u.id === record.userId);
+        if (user) {
+          const parsed = parseStudentDept(user.department);
+          if (parsed) {
+            const dayName = getManilaDayFromDate(record.logDate);
+            const schedule = scheduleRows.find(
+              s => s.yearLevel === parsed.yearLevel &&
+                   s.section === parsed.section &&
+                   Array.isArray(s.days) &&
+                   s.days.includes(dayName)
+            );
+            if (schedule) {
+              classes = `${schedule.subjectCode} — ${schedule.subjectName}`;
+              timeSchedule = `${formatTime(schedule.startTime)} – ${formatTime(schedule.endTime)}`;
+              // Determine validity
+              if (record.status === "IN" && record.logTime) {
+                const inMin = timeToMinutes(record.logTime);
+                const startMin = timeToMinutes(schedule.startTime);
+                const endMin = timeToMinutes(schedule.endTime);
+                if (startMin !== null && endMin !== null && inMin !== null) {
+                  const windowStart = startMin - 15;
+                  const windowEnd = endMin - 15;
+                  if (inMin >= windowStart && inMin <= windowEnd) {
+                    status = "Valid";
+                    reason = "Time Scheduled";
+                  } else {
+                    status = "Invalid";
+                    reason = "No Time Scheduled";
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
 
       csvRows.push([
         index + 1,
         record.name,
         record.idNumber || record.username || 'N/A',
-        record.role,
+        classes,
+        timeSchedule,
         record.logDate,
-        timeIn,
-        timeOut,
-        record.status.toUpperCase(),
-        attendanceMethod(record.source)
+        status,
+        reason
       ]);
     });
 
@@ -2100,29 +2196,26 @@ function RolePanel({ pageKey, role }) {
                             Name
                           </th>
                           <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                            ID / Username
-                          </th>
-                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                            Role
-                          </th>
-                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                            Date
+                            ID Number
                           </th>
                           {viewMode !== 'absent' && (
                             <>
                               <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                                Time In
+                                Classes
                               </th>
                               <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                                Time Out
+                                Time Schedule
                               </th>
                             </>
                           )}
                           <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                            Date
+                          </th>
+                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
                             Status
                           </th>
                           <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                            Method
+                            Reason
                           </th>
                           {viewMode === 'duplicates' && (
                             <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
@@ -2138,6 +2231,49 @@ function RolePanel({ pageKey, role }) {
                             (dup.userId === record.userId && dup.logDate === record.logDate)
                           );
 
+                          // Compute class info
+                          let classes = "—";
+                          let timeSchedule = "—";
+                          let status = "Invalid";
+                          let reason = "No Time Scheduled";
+
+                          if (isAdminAttendancePage) {
+                            const user = users.find(u => u.id === record.userId);
+                            if (user) {
+                              const parsed = parseStudentDept(user.department);
+                              if (parsed) {
+                                const dayName = getManilaDayFromDate(record.logDate);
+                                const schedule = scheduleRows.find(
+                                  s => s.yearLevel === parsed.yearLevel &&
+                                       s.section === parsed.section &&
+                                       Array.isArray(s.days) &&
+                                       s.days.includes(dayName)
+                                );
+                                if (schedule) {
+                                  classes = `${schedule.subjectCode} — ${schedule.subjectName}`;
+                                  timeSchedule = `${formatTime(schedule.startTime)} – ${formatTime(schedule.endTime)}`;
+                                  // Determine validity
+                                  if (record.status === "IN" && record.logTime) {
+                                    const inMin = timeToMinutes(record.logTime);
+                                    const startMin = timeToMinutes(schedule.startTime);
+                                    const endMin = timeToMinutes(schedule.endTime);
+                                    if (startMin !== null && endMin !== null && inMin !== null) {
+                                      const windowStart = startMin - 15;
+                                      const windowEnd = endMin - 15;
+                                      if (inMin >= windowStart && inMin <= windowEnd) {
+                                        status = "Valid";
+                                        reason = "Time Scheduled";
+                                      } else {
+                                        status = "Invalid";
+                                        reason = "No Time Scheduled";
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+
                           return (
                             <tr
                               key={record.id}
@@ -2148,55 +2284,28 @@ function RolePanel({ pageKey, role }) {
                               <td className="px-4 py-3 text-sm text-gray-600">
                                 {record.idNumber || record.username || 'N/A'}
                               </td>
-                              <td className="px-4 py-3 text-sm text-gray-600 capitalize">
-                                {record.role}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600">
-                                {record.logDate}
-                              </td>
                               {viewMode !== 'absent' && (
                                 <>
-                                  <td className="px-4 py-3">
-                                    {record.status === 'IN' ? (
-                                      <span className="px-2 py-0.5 rounded-full text-xs font-medium
-                                        {record.status === 'IN' ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}"
-                                      >
-                                        {formatAttendanceTime(record.logTime)}
-                                      </span>
-                                    ) : (
-                                      <span className="px-2 py-0.5 rounded-full text-xs font-medium
-                                        {record.status === 'IN' ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}"
-                                      >
-                                        {record.status === 'OUT' ? formatAttendanceTime(record.logTime) : '--:--'}
-                                      </span>
-                                    )}
+                                  <td className="px-4 py-3 text-sm text-gray-600 capitalize">
+                                    {classes}
                                   </td>
-                                  <td className="px-4 py-3">
-                                    {record.status === 'OUT' ? (
-                                      <span className="px-2 py-0.5 rounded-full text-xs font-medium
-                                        {record.status === 'IN' ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}"
-                                      >
-                                        {formatAttendanceTime(record.logTime)}
-                                      </span>
-                                    ) : (
-                                      <span className="px-2 py-0.5 rounded-full text-xs font-medium
-                                        {record.status === 'IN' ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}"
-                                      >
-                                        {record.status === 'IN' ? '--:--' : formatAttendanceTime(record.logTime)}
-                                      </span>
-                                    )}
+                                  <td className="px-4 py-3 text-sm text-gray-600">
+                                    {timeSchedule}
                                   </td>
                                 </>
                               )}
+                              <td className="px-4 py-3 text-sm text-gray-600">
+                                {record.logDate}
+                              </td>
                               <td className="px-4 py-3">
                                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium
-                                  ${record.status === 'IN' ? 'text-green-700 bg-green-50' : record.status === 'OUT' ? 'text-blue-700 bg-blue-50' : 'text-gray-700 bg-gray-50'}`
-                                }>
-                                  {record.status.toUpperCase()}
+                                  ${status === 'Valid' ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}`}
+                                >
+                                  {status}
                                 </span>
                               </td>
                               <td className="px-4 py-3 text-sm text-gray-600">
-                                {attendanceMethod(record.source)}
+                                {reason}
                               </td>
                               {viewMode === 'duplicates' && (
                                 <td className="px-4 py-3 text-sm text-gray-600">
