@@ -1899,7 +1899,7 @@ function RolePanel({ pageKey, role }) {
     }
   }, [isAdminAttendancePage, viewMode, setSelectedDate]);
 
-  // Filtered attendance based on search and filters (only for admin attendance page)
+  // Filtered attendance based on search (only for admin attendance page)
   const filteredAttendance = React.useMemo(() => {
     if (!isAdminAttendancePage) return attendanceLogs;
 
@@ -1912,46 +1912,10 @@ function RolePanel({ pageKey, role }) {
         if (!matchesSearch) return false;
       }
 
-      
-      // Apply date range filter only in All Records view
-      let includeRecord = true;
-      if (viewMode === 'all') {
-        const recordDate = new Date(record.logDate);
-        const today = new Date();
-        switch (dateRangeFilter) {
-          case 'today':
-            includeRecord = recordDate.toDateString() === today.toDateString();
-            break;
-          case 'week':
-            const weekStart = new Date(today);
-            weekStart.setDate(today.getDate() - today.getDay());
-            weekStart.setHours(0, 0, 0, 0);
-            const weekEnd = new Date(today);
-            weekEnd.setDate(today.getDate() + (6 - today.getDay()));
-            weekEnd.setHours(23, 59, 59, 999);
-            includeRecord = recordDate >= weekStart && recordDate <= weekEnd;
-            break;
-          case 'month':
-            const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-            const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-            monthEnd.setHours(23, 59, 59, 999);
-            includeRecord = recordDate >= monthStart && recordDate <= monthEnd;
-            break;
-          case 'custom':
-            if (customStartDate && customEndDate) {
-              const startDate = new Date(customStartDate);
-              const endDate = new Date(customEndDate);
-              includeRecord = recordDate >= startDate && recordDate <= endDate;
-            }
-            break;
-          default:
-            includeRecord = recordDate.toDateString() === today.toDateString();
-        }
-      }
-
-      return includeRecord;
+      // Always include record (date filtering is handled at fetch level)
+      return true;
     });
-  }, [attendanceLogs, searchTerm, dateRangeFilter, customStartDate, customEndDate]);
+  }, [attendanceLogs, searchTerm]);
 
   // Today's statistics (for cards - only for admin attendance page)
   const today = new Date();
@@ -2263,9 +2227,45 @@ function RolePanel({ pageKey, role }) {
 
   // Export function (only for admin attendance page)
   const handleExportAttendance = React.useCallback(() => {
-    if (!isAdminAttendancePage || mergedAttendance.length === 0) {
+    if (!isAdminAttendancePage) {
       alert('No data to export');
       return;
+    }
+
+    let recordsToExport = [];
+    let fileNameSuffix = '';
+
+    if (viewMode === 'live') {
+      // For live mode, export mergedAttendance (today's paired records)
+      if (mergedAttendance.length === 0) {
+        alert('No data to export');
+        return;
+      }
+      recordsToExport = mergedAttendance;
+      fileNameSuffix = '-live';
+    } else {
+      // For present/late/absent modes, export the classified data
+      let records = [];
+      switch (viewMode) {
+        case 'present':
+          records = presentRecords;
+          break;
+        case 'late':
+          records = lateRecords;
+          break;
+        case 'absent':
+          records = absentRecords;
+          break;
+        default:
+          records = [];
+      }
+
+      if (records.length === 0) {
+        alert('No data to export');
+        return;
+      }
+      recordsToExport = records;
+      fileNameSuffix = `-${viewMode}`;
     }
 
     // Prepare CSV data
@@ -2279,14 +2279,19 @@ function RolePanel({ pageKey, role }) {
     // Filters applied
     csvRows.push(['Applied Filters:']);
     csvRows.push([`Search: ${searchTerm || 'None'}`]);
-    csvRows.push([`Date Range: ${dateRangeFilter === 'custom' && customStartDate && customEndDate ? `${customStartDate} to ${customEndDate}` : dateRangeFilter}`]);
+    if (viewMode === 'live') {
+      csvRows.push(['View: Live Attendance (Today)']);
+    } else {
+      csvRows.push([`View: ${viewMode.charAt(0).toUpperCase() + viewMode.slice(1)}`]);
+      csvRows.push([`Date: ${selectedDate}`]);
+    }
     csvRows.push([]);
 
     // Data header
     csvRows.push(['No.', 'Name', 'ID Number', 'Classes', 'Time Schedule', 'Date', 'Time IN', 'Time OUT', 'Status', 'Reason']);
 
     // Data rows
-    mergedAttendance.forEach((entry, index) => {
+    recordsToExport.forEach((entry, index) => {
       csvRows.push([
         index + 1,
         entry.name,
@@ -2313,12 +2318,12 @@ function RolePanel({ pageKey, role }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `francis-key-attendance-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `francis-key-attendance${fileNameSuffix}-${selectedDate || new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [mergedAttendance, searchTerm, dateRangeFilter, customStartDate, customEndDate, isAdminAttendancePage]);
+  }, [isAdminAttendancePage, viewMode, selectedDate, searchTerm, presentRecords, lateRecords, absentRecords, mergedAttendance]);
   const dashboardMetrics = React.useMemo(() => {
     if (!isDashboard || !attendanceLogs.length) return data.metrics;
 
@@ -2555,67 +2560,7 @@ function RolePanel({ pageKey, role }) {
 
               
               
-              {/* Date Range Filter - Only show in All Records view */}
-              {viewMode === 'all' && (
-                <div className="flex flex-col">
-                  <label className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-1">
-                    Date Range
-                  </label>
-                  <select
-                    value={dateRangeFilter}
-                    onChange={(e) => {
-                      setDateRangeFilter(e.target.value);
-                      if (e.target.value === 'custom') {
-                        // Set default custom range to last 7 days
-                        const end = new Date();
-                        const start = new Date(end);
-                        start.setDate(start.getDate() - 7);
-                        setCustomStartDate(start.toISOString().split('T')[0]);
-                        setCustomEndDate(end.toISOString().split('T')[0]);
-                      } else if (e.target.value !== 'custom') {
-                        setCustomStartDate('');
-                        setCustomEndDate('');
-                      }
-                      setAttendancePage(1);
-                    }}
-                    className="form-input w-full rounded-lg px-3 py-2 text-sm"
-                  >
-                    <option value="today">Today</option>
-                    <option value="week">This Week</option>
-                    <option value="month">This Month</option>
-                    <option value="custom">Custom Range</option>
-                  </select>
-                </div>
-              )}
-
-              {/* Custom Date Range (visible when custom is selected) */}
-              {dateRangeFilter === 'custom' && (
-                <>
-                  <div className="flex flex-col">
-                    <label className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-1">
-                      Start Date
-                    </label>
-                    <input
-                      type="date"
-                      value={customStartDate}
-                      onChange={(e) => setCustomStartDate(e.target.value)}
-                      className="form-input w-full rounded-lg px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <div className="flex flex-col">
-                    <label className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-1">
-                      End Date
-                    </label>
-                    <input
-                      type="date"
-                      value={customEndDate}
-                      onChange={(e) => setCustomEndDate(e.target.value)}
-                      className="form-input w-full rounded-lg px-3 py-2 text-sm"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
+                          </div>
           </section>
 
           {/* Attendance Records Table */}
@@ -2645,145 +2590,192 @@ function RolePanel({ pageKey, role }) {
                 <div className="text-center py-8">
                   Loading attendance records...
                 </div>
-              ) : mergedAttendance.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  No attendance records found matching the current filters.
-                </div>
               ) : (
-                <>
-                  <div className="overflow-x-auto">
-                    <table className="table min-w-full">
-                      <thead>
-                        <tr className="border-b border-gray-100">
-                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                            #
-                          </th>
-                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                            Name
-                          </th>
-                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                            ID Number
-                          </th>
-                          {viewMode !== 'absent' && (
-                            <>
-                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                                Classes
-                              </th>
-                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                                Time Schedule
-                              </th>
-                            </>
-                          )}
-                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                            Date
-                          </th>
-                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                            Time IN
-                          </th>
-                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                            Time OUT
-                          </th>
-                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                            Status
-                          </th>
-                          <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                            Reason
-                          </th>
-                          {viewMode === 'duplicates' && (
+                // Determine which data set to use based on viewMode
+                let currentRecords: any[] = [];
+                let currentPage: number = 1;
+                let pageSize: number = 10;
+                let totalPages: number = 1;
+
+                if (viewMode === 'live') {
+                  currentRecords = mergedAttendance;
+                  currentPage = attendancePage;
+                  pageSize = 10; // Same as original
+                  totalPages = Math.max(1, Math.ceil(mergedAttendance.length / pageSize));
+                } else if (viewMode === 'present') {
+                  currentRecords = presentRecords;
+                  currentPage = classifiedPage;
+                  pageSize = classifiedPageSize;
+                  totalPages = Math.max(1, Math.ceil(presentRecords.length / pageSize));
+                } else if (viewMode === 'late') {
+                  currentRecords = lateRecords;
+                  currentPage = classifiedPage;
+                  pageSize = classifiedPageSize;
+                  totalPages = Math.max(1, Math.ceil(lateRecords.length / pageSize));
+                } else if (viewMode === 'absent') {
+                  currentRecords = absentRecords;
+                  currentPage = classifiedPage;
+                  pageSize = classifiedPageSize;
+                  totalPages = Math.max(1, Math.ceil(absentRecords.length / pageSize));
+                }
+
+                currentRecords.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    {viewMode === 'live'
+                      ? 'No attendance records found for today.'
+                      : `No ${viewMode} records found for the selected date.`}
+                  </div>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="table min-w-full">
+                        <thead>
+                          <tr className="border-b border-gray-100">
                             <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                              Duplicate Type
+                              #
                             </th>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {mergedAttendance.map((entry, index) => {
-                          const isDuplicate = duplicateRecords.some(dup =>
-                            dup.userId === entry.userId && dup.logDate === entry.logDate
-                          );
+                            <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                              Name
+                            </th>
+                            <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                              ID Number
+                            </th>
+                            {viewMode !== 'absent' && (
+                              <>
+                                <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                                  Classes
+                                </th>
+                                <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                                  Time Schedule
+                                </th>
+                              </>
+                            )}
+                            <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                              Date
+                            </th>
+                            <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                              Time IN
+                            </th>
+                            <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                              Time OUT
+                            </th>
+                            <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                              Status
+                            </th>
+                            <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                              Reason
+                            </th>
+                            {viewMode === 'duplicates' && (
+                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Duplicate Type
+                              </th>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {currentRecords.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((entry, index) => {
+                            const actualIndex = (currentPage - 1) * pageSize + index + 1;
+                            const isDuplicate = duplicateRecords.some(dup =>
+                              dup.userId === entry.userId && dup.logDate === entry.logDate
+                            );
 
-                          return (
-                            <tr
-                              key={`${entry.userId}-${entry.logDate}`}
-                              className={`border-b border-gray-50 ${isDuplicate ? 'bg-red-50' : ''}`}
-                            >
-                              <td className="px-4 py-3 text-xs text-gray-500">{index + 1}</td>
-                              <td className="px-4 py-3 font-medium text-gray-800">{entry.name}</td>
-                              <td className="px-4 py-3 text-sm text-gray-600">
-                                {entry.idNumber}
-                              </td>
-                              {viewMode !== 'absent' && (
-                                <>
-                                  <td className="px-4 py-3 text-sm text-gray-600 capitalize">
-                                    {entry.classes}
-                                  </td>
-                                  <td className="px-4 py-3 text-sm text-gray-600">
-                                    {entry.timeSchedule}
-                                  </td>
-                                </>
-                              )}
-                              <td className="px-4 py-3 text-sm text-gray-600">
-                                {entry.logDate}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600">
-                                {entry.timeIn}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600">
-                                {entry.timeOut}
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium
-                                  ${entry.status === 'Valid' ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}`}
-                                >
-                                  {entry.status}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-sm text-gray-600">
-                                {entry.reason}
-                              </td>
-                              {viewMode === 'duplicates' && (
+                            return (
+                              <tr
+                                key={`${entry.userId}-${entry.logDate}`}
+                                className={`border-b border-gray-50 ${isDuplicate ? 'bg-red-50' : ''}`}
+                              >
+                                <td className="px-4 py-3 text-xs text-gray-500">{actualIndex}</td>
+                                <td className="px-4 py-3 font-medium text-gray-800">{entry.name}</td>
                                 <td className="px-4 py-3 text-sm text-gray-600">
-                                  {isDuplicate ? (
-                                    <span className="text-xs font-medium text-red-600">
-                                      Same User & Date
-                                    </span>
-                                  ) : (
-                                    <span className="text-xs font-medium text-gray-400">
-                                      -
-                                    </span>
-                                  )}
+                                  {entry.idNumber}
                                 </td>
-                              )}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                                {viewMode !== 'absent' && (
+                                  <>
+                                    <td className="px-4 py-3 text-sm text-gray-600 capitalize">
+                                      {entry.classes}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-gray-600">
+                                      {entry.timeSchedule}
+                                    </td>
+                                  </>
+                                )}
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.logDate}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.timeIn}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.timeOut}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium
+                                    ${entry.status === 'Valid' ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}`}
+                                  >
+                                    {entry.status}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {entry.reason}
+                                </td>
+                                {viewMode === 'duplicates' && (
+                                  <td className="px-4 py-3 text-sm text-gray-600">
+                                    {isDuplicate ? (
+                                      <span className="text-xs font-medium text-red-600">
+                                        Same User & Date
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs font-medium text-gray-400">
+                                        -
+                                      </span>
+                                    )}
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
 
-                  {/* Pagination Controls */}
-                  <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                    <div className="text-sm text-gray-500">
-                      Showing {(attendancePage - 1) * pageSize + 1}-{Math.min(attendancePage * pageSize, mergedAttendance.length)} of {mergedAttendance.length} records
+                    {/* Pagination Controls */}
+                    <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                      <div className="text-sm text-gray-500">
+                        Showing {((currentPage - 1) * pageSize + 1)}-{Math.min(currentPage * pageSize, currentRecords.length)} of {currentRecords.length} records
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            if (viewMode === 'live') {
+                              setAttendancePage(Math.max(1, attendancePage - 1));
+                            } else {
+                              setClassifiedPage(Math.max(1, classifiedPage - 1));
+                            }
+                          }}
+                          disabled={(viewMode === 'live' && attendancePage === 1) ||
+                                   (viewMode !== 'live' && classifiedPage === 1)}
+                          className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Previous
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (viewMode === 'live') {
+                              setAttendancePage(Math.min(totalAttendancePages, attendancePage + 1));
+                            } else {
+                              setClassifiedPage(Math.min(totalPages, classifiedPage + 1));
+                            }
+                          }}
+                          disabled={(viewMode === 'live' && attendancePage === totalAttendancePages) ||
+                                   (viewMode !== 'live' && classifiedPage === totalPages)}
+                          className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Next
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setAttendancePage(Math.max(1, attendancePage - 1))}
-                        disabled={attendancePage === 1}
-                        className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        Previous
-                      </button>
-                      <button
-                        onClick={() => setAttendancePage(Math.min(totalAttendancePages, attendancePage + 1))}
-                        disabled={attendancePage === totalAttendancePages || totalAttendancePages === 0}
-                        className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                </>
+                  </>
+                )}
               )}
             </div>
           </section>
