@@ -1633,23 +1633,20 @@ function RolePanel({ pageKey, role }) {
 
 // Admin attendance page state
   const [searchTerm, setSearchTerm] = React.useState('');
-  const [dateRangeFilter, setDateRangeFilter] = React.useState('today'); // today, week, month, custom
-  const [customStartDate, setCustomStartDate] = React.useState('');
-  const [customEndDate, setCustomEndDate] = React.useState('');
-  const [viewMode, setViewMode] = React.useState('all'); // all, live, students, late, absent, history, duplicates
+  const [selectedDate, setSelectedDate] = React.useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  });
+  const [viewMode, setViewMode] = React.useState('present'); // present, late, absent, live
   const [liveUpdateInterval, setLiveUpdateInterval] = React.useState(null);
-  const [duplicateRecords, setDuplicateRecords] = React.useState([]);
 
   const fetchAttendanceLogs = React.useCallback(async (date, page, filters = {}) => {
     setAttendanceLoading(true);
     setAttendanceError("");
     try {
       const params = new URLSearchParams();
-      // Only send date param for live mode or history view (single-day fetches)
-      if (viewMode === 'live' || viewMode === 'history') {
-        if (date) {
-          params.set("date", date);
-        }
+      if (date) {
+        params.set("date", date);
       }
       // No limit/offset; fetch all records (filtered by date if provided)
       const result = await apiFetch(`/attendance.php?${params.toString()}`);
@@ -1665,7 +1662,7 @@ function RolePanel({ pageKey, role }) {
     } finally {
       setAttendanceLoading(false);
     }
-  }, [viewMode]);
+  }, []);
 
   // Fetch attendance logs for dashboard — loads data immediately without page refresh
   React.useEffect(() => {
@@ -1705,6 +1702,202 @@ function RolePanel({ pageKey, role }) {
 
   // Check if this is the admin attendance page
   const isAdminAttendancePage = !isDashboard && pageKey === "attendance" && role === "admin";
+
+// Classified attendance storage
+  const [presentRecords, setPresentRecords] = React.useState([]);
+  const [lateRecords, setLateRecords] = React.useState([]);
+  const [absentRecords, setAbsentRecords] = React.useState([]);
+  const [classifiedLoading, setClassifiedLoading] = React.useState(false);
+  const [classifiedError, setClassifiedError] = React.useState("");
+  const [classifiedPage, setClassifiedPage] = React.useState(1);
+  const classifiedPageSize = 10;
+
+  // Compute classified attendance for a given date
+  const computeClassifiedAttendance = React.useCallback(async (date) => {
+    if (!isAdminAttendancePage) return;
+
+    setClassifiedLoading(true);
+    setClassifiedError("");
+
+    try {
+      // Fetch attendance logs for the date
+      const params = new URLSearchParams();
+      if (date) {
+        params.set("date", date);
+      }
+      const attendanceResult = await apiFetch(`/attendance.php?${params.toString()}`);
+      const attendanceLogs = Array.isArray(attendanceResult.records) ? attendanceResult.records : [];
+
+      // Group attendance logs by userId and date for efficient lookup
+      const attendanceByUserDate = new Map();
+      attendanceLogs.forEach(record => {
+        const key = `${record.userId}-${record.logDate}`;
+        if (!attendanceByUserDate.has(key)) {
+          attendanceByUserDate.set(key, []);
+        }
+        attendanceByUserDate.get(key).push(record);
+      });
+
+      // Get today's date for live mode comparisons
+      const today = new Date();
+      const todayString = today.toISOString().split('T')[0];
+
+      // Determine which date we're computing for
+      const targetDate = date || todayString;
+      const isToday = targetDate === todayString;
+
+      // Get schedules for the target date
+      const targetDateObj = new Date(targetDate);
+      const dayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][targetDateObj.getDay()];
+      const schedulesForDate = scheduleRows.filter(schedule =>
+        Array.isArray(schedule.days) && schedule.days.includes(dayName)
+      );
+
+      // Get active students
+      const activeStudents = users.filter(u => u.role === "student" && u.status === "Active");
+
+      // Initialize result arrays
+      const present = [];
+      const late = [];
+      const absent = [];
+
+      // Process each schedule
+      for (const schedule of schedulesForDate) {
+        // Get students enrolled in this schedule
+        const enrolledStudents = activeStudents.filter(student => {
+          const parsed = parseStudentDept(student.department);
+          return parsed &&
+            parsed.yearLevel === schedule.yearLevel &&
+            parsed.section === schedule.section;
+        });
+
+        // Process each student
+        for (const student of enrolledStudents) {
+          const studentAttendanceLogs = attendanceByUserDate.get(`${student.id}-${targetDate}`) || [];
+
+          // Find IN records for this student on this date
+          const inRecords = studentAttendanceLogs.filter(record => record.status === "IN");
+
+          let classification = "Absent";
+          let reason = "No Time IN";
+          let timeIn = "";
+          let timeOut = "";
+
+          if (inRecords.length > 0) {
+            // Sort IN records by time to get the earliest
+            const sortedInRecords = [...inRecords].sort((a, b) => {
+              const timeA = a.logTime ? timeToMinutes(a.logTime) : -1;
+              const timeB = b.logTime ? timeToMinutes(b.logTime) : -1;
+              return timeA - timeB;
+            });
+            const earliestIn = sortedInRecords[0];
+            const inMin = timeToMinutes(earliestIn.logTime);
+
+            // Calculate schedule times
+            const startMin = timeToMinutes(schedule.startTime);
+            const endMin = timeToMinutes(schedule.endTime);
+
+            if (startMin !== null && endMin !== null && inMin !== null) {
+              const presentStart = startMin - 15;
+              const presentEnd = startMin + 15;
+              const lateEnd = endMin + 15;
+
+              if (inMin >= presentStart && inMin <= presentEnd) {
+                classification = "Present";
+                reason = "On Time";
+              } else if (inMin > presentStart && inMin <= lateEnd) {
+                classification = "Late";
+                reason = "Late Arrival";
+              } else {
+                classification = "Absent";
+                reason = "Outside Valid Window";
+              }
+
+              // For Present and Late, try to get paired IN/OUT times
+              if (classification === "Present" || classification === "Late") {
+                // Pair IN and OUT chronologically
+                const sortedAllRecords = [...studentAttendanceLogs].sort((a, b) => {
+                  const timeA = a.logTime ? timeToMinutes(a.logTime) : -1;
+                  const timeB = b.logTime ? timeToMinutes(b.logTime) : -1;
+                  return timeA - timeB;
+                });
+
+                const pendingIn = [];
+                let pairedOutTime = null;
+
+                for (const rec of sortedAllRecords) {
+                  if (rec.status === "IN") {
+                    pendingIn.push(rec.logTime);
+                  } else if (rec.status === "OUT" && pendingIn.length > 0) {
+                    pendingIn.shift(); // Pair with earliest IN
+                    if (pendingIn.length === 0) {
+                      // We've paired the earliest IN
+                      pairedOutTime = rec.logTime;
+                      break;
+                    }
+                  }
+                }
+
+                timeIn = earliestIn.logTime;
+                timeOut = pairedOutTime || "";
+              }
+            }
+          }
+
+          // Create record
+          const record = {
+            userId: student.id,
+            logDate: targetDate,
+            name: [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" "),
+            idNumber: student.idNumber || student.username || 'N/A',
+            classes: `${schedule.subjectCode} — ${schedule.subjectName}`,
+            timeSchedule: `${formatTime(schedule.startTime)} – ${formatTime(schedule.endTime)}`,
+            timeIn,
+            timeOut,
+            status: classification,
+            reason
+          };
+
+          // Add to appropriate array
+          if (classification === "Present") {
+            present.push(record);
+          } else if (classification === "Late") {
+            late.push(record);
+          } else {
+            absent.push(record);
+          }
+        }
+      }
+
+      // Update state
+      setPresentRecords(present);
+      setLateRecords(late);
+      setAbsentRecords(absent);
+    } catch (err) {
+      setClassifiedError(err.message || "Failed to compute classified attendance.");
+      setPresentRecords([]);
+      setLateRecords([]);
+      setAbsentRecords([]);
+    } finally {
+      setClassifiedLoading(false);
+    }
+  }, [isAdminAttendancePage, users, scheduleRows, parseStudentDept, formatTime, timeToMinutes]);
+
+  // Compute classified attendance when selectedDate changes
+  React.useEffect(() => {
+    if (isAdminAttendancePage && viewMode !== 'live') {
+      computeClassifiedAttendance(selectedDate);
+    }
+  }, [isAdminAttendancePage, viewMode, selectedDate, computeClassifiedAttendance]);
+
+  // Set selectedDate to today when switching to live mode
+  React.useEffect(() => {
+    if (isAdminAttendancePage && viewMode === 'live') {
+      const today = new Date();
+      const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      setSelectedDate(todayString);
+    }
+  }, [isAdminAttendancePage, viewMode, setSelectedDate]);
 
   // Filtered attendance based on search and filters (only for admin attendance page)
   const filteredAttendance = React.useMemo(() => {
@@ -2015,7 +2208,7 @@ function RolePanel({ pageKey, role }) {
     }
   }, [attendanceLogs, detectDuplicates, isAdminAttendancePage]);
 
-  // Fetch attendance logs for admin attendance page when filters change or viewMode changes (except for live mode)
+  // Fetch attendance logs for admin attendance page when filters change or viewMode changes
   React.useEffect(() => {
     if (!isAdminAttendancePage) return;
 
@@ -2025,20 +2218,8 @@ function RolePanel({ pageKey, role }) {
     }
 
     setAttendancePage(1);
-
-    if (viewMode === 'history') {
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayString = yesterday.toISOString().split('T')[0];
-      fetchAttendanceLogs(yesterdayString, 1, {});
-    } else if (viewMode === 'duplicates') {
-      // Fetch without date to get all records
-      fetchAttendanceLogs(null, 1, {});
-    } else {
-      // Default: use the current filters (searchTerm, dateRangeFilter, etc.)
-      fetchAttendanceLogs(null, 1, {});
-    }
-  }, [isAdminAttendancePage, viewMode, searchTerm, dateRangeFilter, customStartDate, customEndDate, fetchAttendanceLogs]);
+    fetchAttendanceLogs(selectedDate, 1, {});
+  }, [isAdminAttendancePage, viewMode, selectedDate, fetchAttendanceLogs]);
 
   // Live attendance updates (polling every 10 seconds - only for admin attendance page)
   React.useEffect(() => {
@@ -2063,12 +2244,12 @@ function RolePanel({ pageKey, role }) {
     const todayString = today.toISOString().split('T')[0];
     fetchAttendanceLogs(todayString, 1, {});
 
-    // Set up interval to fetch every 10 seconds
+    // Set up interval to fetch every 5 seconds
     const interval = setInterval(() => {
       const currentDate = new Date();
       const currentDateString = currentDate.toISOString().split('T')[0];
       fetchAttendanceLogs(currentDateString, 1, {}); // Page 1 for latest records
-    }, 10000);
+    }, 5000);
 
     setLiveUpdateInterval(interval);
 
@@ -2325,23 +2506,17 @@ function RolePanel({ pageKey, role }) {
             {/* View Tabs */}
             <div className="flex flex-wrap gap-2 mb-4">
               {[{
-                label: "All Records",
-                value: "all"
+                label: "Present",
+                value: "present"
               }, {
                 label: "Live Attendance",
                 value: "live"
               }, {
-                label: "Late Arrivals",
+                label: "Late",
                 value: "late"
               }, {
-                label: "Absent Today",
+                label: "Absent",
                 value: "absent"
-              }, {
-                label: "Attendance History",
-                value: "history"
-              }, {
-                label: "Duplicates",
-                value: "duplicates"
               }].map((tab) => (
                 <button
                   key={tab.value}
