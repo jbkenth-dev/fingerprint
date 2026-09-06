@@ -2353,6 +2353,54 @@ function RolePanel({ pageKey, role }) {
     return Array.from(map.values());
   }, [isDashboard, attendanceLogs]);
 
+  // Compute table data for admin attendance page based on viewMode
+  const tableData = React.useMemo(() => {
+    if (!isAdminAttendancePage) {
+      return {
+        records: [],
+        currentPage: 1,
+        pageSize: 10,
+        totalPages: 1,
+        hasData: false
+      };
+    }
+
+    let records: any[] = [];
+    let currentPage: number = 1;
+    let pageSize: number = 10;
+    let totalPages: number = 1;
+
+    if (viewMode === 'live') {
+      records = mergedAttendance;
+      currentPage = attendancePage;
+      pageSize = 10; // Same as original
+      totalPages = Math.max(1, Math.ceil(mergedAttendance.length / pageSize));
+    } else if (viewMode === 'present') {
+      records = presentRecords;
+      currentPage = classifiedPage;
+      pageSize = classifiedPageSize;
+      totalPages = Math.max(1, Math.ceil(presentRecords.length / pageSize));
+    } else if (viewMode === 'late') {
+      records = lateRecords;
+      currentPage = classifiedPage;
+      pageSize = classifiedPageSize;
+      totalPages = Math.max(1, Math.ceil(lateRecords.length / pageSize));
+    } else if (viewMode === 'absent') {
+      records = absentRecords;
+      currentPage = classifiedPage;
+      pageSize = classifiedPageSize;
+      totalPages = Math.max(1, Math.ceil(absentRecords.length / pageSize));
+    }
+
+    return {
+      records,
+      currentPage,
+      pageSize,
+      totalPages,
+      hasData: records.length > 0
+    };
+  }, [isAdminAttendancePage, viewMode, attendancePage, classifiedPage, mergedAttendance, presentRecords, lateRecords, absentRecords]);
+
   if (mockLoading) return <DashboardSkeleton />;
 
   return (
@@ -2591,190 +2639,162 @@ function RolePanel({ pageKey, role }) {
                   Loading attendance records...
                 </div>
               ) : (
-                // Determine which data set to use based on viewMode
-                let currentRecords: any[] = [];
-                let currentPage: number = 1;
-                let pageSize: number = 10;
-                let totalPages: number = 1;
-
-                if (viewMode === 'live') {
-                  currentRecords = mergedAttendance;
-                  currentPage = attendancePage;
-                  pageSize = 10; // Same as original
-                  totalPages = Math.max(1, Math.ceil(mergedAttendance.length / pageSize));
-                } else if (viewMode === 'present') {
-                  currentRecords = presentRecords;
-                  currentPage = classifiedPage;
-                  pageSize = classifiedPageSize;
-                  totalPages = Math.max(1, Math.ceil(presentRecords.length / pageSize));
-                } else if (viewMode === 'late') {
-                  currentRecords = lateRecords;
-                  currentPage = classifiedPage;
-                  pageSize = classifiedPageSize;
-                  totalPages = Math.max(1, Math.ceil(lateRecords.length / pageSize));
-                } else if (viewMode === 'absent') {
-                  currentRecords = absentRecords;
-                  currentPage = classifiedPage;
-                  pageSize = classifiedPageSize;
-                  totalPages = Math.max(1, Math.ceil(absentRecords.length / pageSize));
-                }
-
-                currentRecords.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    {viewMode === 'live'
-                      ? 'No attendance records found for today.'
-                      : `No ${viewMode} records found for the selected date.`}
-                  </div>
-                ) : (
-                  <>
-                    <div className="overflow-x-auto">
-                      <table className="table min-w-full">
-                        <thead>
-                          <tr className="border-b border-gray-100">
-                            <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                              #
-                            </th>
-                            <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                              Name
-                            </th>
-                            <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                              ID Number
-                            </th>
-                            {viewMode !== 'absent' && (
-                              <>
-                                <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                                  Classes
-                                </th>
-                                <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                                  Time Schedule
-                                </th>
-                              </>
-                            )}
-                            <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                              Date
-                            </th>
-                            <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                              Time IN
-                            </th>
-                            <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                              Time OUT
-                            </th>
-                            <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                              Status
-                            </th>
-                            <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                              Reason
-                            </th>
-                            {viewMode === 'duplicates' && (
+                  {!tableData.hasData ? (
+                    <div className="text-center py-8 text-gray-500">
+                      {viewMode === 'live'
+                        ? 'No attendance records found for today.'
+                        : `No ${viewMode} records found for the selected date.`}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="overflow-x-auto">
+                        <table className="table min-w-full">
+                          <thead>
+                            <tr className="border-b border-gray-100">
                               <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                                Duplicate Type
+                                #
                               </th>
-                            )}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {currentRecords.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((entry, index) => {
-                            const actualIndex = (currentPage - 1) * pageSize + index + 1;
-                            const isDuplicate = duplicateRecords.some(dup =>
-                              dup.userId === entry.userId && dup.logDate === entry.logDate
-                            );
+                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Name
+                              </th>
+                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                                ID Number
+                              </th>
+                              {viewMode !== 'absent' && (
+                                <>
+                                  <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                                    Classes
+                                  </th>
+                                  <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                                    Time Schedule
+                                  </th>
+                                </>
+                              )}
+                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Date
+                              </th>
+                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Time IN
+                              </th>
+                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Time OUT
+                              </th>
+                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Status
+                              </th>
+                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Reason
+                              </th>
+                              {viewMode === 'duplicates' && (
+                                <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
+                                  Duplicate Type
+                                </th>
+                              )}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tableData.records.slice((tableData.currentPage - 1) * tableData.pageSize, tableData.currentPage * tableData.pageSize).map((entry, index) => {
+                              const actualIndex = (tableData.currentPage - 1) * tableData.pageSize + index + 1;
+                              const isDuplicate = duplicateRecords.some(dup =>
+                                dup.userId === entry.userId && dup.logDate === entry.logDate
+                              );
 
-                            return (
-                              <tr
-                                key={`${entry.userId}-${entry.logDate}`}
-                                className={`border-b border-gray-50 ${isDuplicate ? 'bg-red-50' : ''}`}
-                              >
-                                <td className="px-4 py-3 text-xs text-gray-500">{actualIndex}</td>
-                                <td className="px-4 py-3 font-medium text-gray-800">{entry.name}</td>
-                                <td className="px-4 py-3 text-sm text-gray-600">
-                                  {entry.idNumber}
-                                </td>
-                                {viewMode !== 'absent' && (
-                                  <>
-                                    <td className="px-4 py-3 text-sm text-gray-600 capitalize">
-                                      {entry.classes}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-gray-600">
-                                      {entry.timeSchedule}
-                                    </td>
-                                  </>
-                                )}
-                                <td className="px-4 py-3 text-sm text-gray-600">
-                                  {entry.logDate}
-                                </td>
-                                <td className="px-4 py-3 text-sm text-gray-600">
-                                  {entry.timeIn}
-                                </td>
-                                <td className="px-4 py-3 text-sm text-gray-600">
-                                  {entry.timeOut}
-                                </td>
-                                <td className="px-4 py-3">
-                                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium
-                                    ${entry.status === 'Valid' ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}`}
-                                  >
-                                    {entry.status}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 text-sm text-gray-600">
-                                  {entry.reason}
-                                </td>
-                                {viewMode === 'duplicates' && (
+                              return (
+                                <tr
+                                  key={`${entry.userId}-${entry.logDate}`}
+                                  className={`border-b border-gray-50 ${isDuplicate ? 'bg-red-50' : ''}`}
+                                >
+                                  <td className="px-4 py-3 text-xs text-gray-500">{actualIndex}</td>
+                                  <td className="px-4 py-3 font-medium text-gray-800">{entry.name}</td>
                                   <td className="px-4 py-3 text-sm text-gray-600">
-                                    {isDuplicate ? (
-                                      <span className="text-xs font-medium text-red-600">
-                                        Same User & Date
-                                      </span>
-                                    ) : (
-                                      <span className="text-xs font-medium text-gray-400">
-                                        -
-                                      </span>
-                                    )}
+                                    {entry.idNumber}
+                                  </td>
+                                  {viewMode !== 'absent' && (
+                                    <>
+                                      <td className="px-4 py-3 text-sm text-gray-600 capitalize">
+                                        {entry.classes}
+                                      </td>
+                                      <td className="px-4 py-3 text-sm text-gray-600">
+                                        {entry.timeSchedule}
+                                      </td>
+                                    </>
+                                  )}
+                                  <td className="px-4 py-3 text-sm text-gray-600">
+                                    {entry.logDate}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">
+                                    {entry.timeIn}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">
+                                    {entry.timeOut}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium
+                                      ${entry.status === 'Valid' ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}`}
+                                    >
+                                      {entry.status}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">
+                                    {entry.reason}
+                                  </td>
+                                  {viewMode === 'duplicates' && (
+                                    <td className="px-4 py-3 text-sm text-gray-600">
+                                      {isDuplicate ? (
+                                        <span className="text-xs font-medium text-red-600">
+                                          Same User & Date
+                                        </span>
+                                      ) : (
+                                        <span className="text-xs font-medium text-gray-400">
+                                          -
+                                        </span>
+                                      )}
                                   </td>
                                 )}
                               </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
 
-                    {/* Pagination Controls */}
-                    <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                      <div className="text-sm text-gray-500">
-                        Showing {((currentPage - 1) * pageSize + 1)}-{Math.min(currentPage * pageSize, currentRecords.length)} of {currentRecords.length} records
+                      {/* Pagination Controls */}
+                      <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                        <div className="text-sm text-gray-500">
+                          Showing {((tableData.currentPage - 1) * tableData.pageSize + 1)}-{Math.min(tableData.currentPage * tableData.pageSize, tableData.records.length)} of {tableData.records.length} records
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              if (viewMode === 'live') {
+                                setAttendancePage(Math.max(1, attendancePage - 1));
+                              } else {
+                                setClassifiedPage(Math.max(1, classifiedPage - 1));
+                              }
+                            }}
+                            disabled={(viewMode === 'live' && attendancePage === 1) ||
+                                     (viewMode !== 'live' && classifiedPage === 1)}
+                            className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Previous
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (viewMode === 'live') {
+                                setAttendancePage(Math.min(tableData.totalPages, attendancePage + 1));
+                              } else {
+                                setClassifiedPage(Math.min(tableData.totalPages, classifiedPage + 1));
+                              }
+                            }}
+                            disabled={(viewMode === 'live' && attendancePage === tableData.totalPages) ||
+                                     (viewMode !== 'live' && classifiedPage === tableData.totalPages)}
+                            className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Next
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            if (viewMode === 'live') {
-                              setAttendancePage(Math.max(1, attendancePage - 1));
-                            } else {
-                              setClassifiedPage(Math.max(1, classifiedPage - 1));
-                            }
-                          }}
-                          disabled={(viewMode === 'live' && attendancePage === 1) ||
-                                   (viewMode !== 'live' && classifiedPage === 1)}
-                          className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Previous
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (viewMode === 'live') {
-                              setAttendancePage(Math.min(totalAttendancePages, attendancePage + 1));
-                            } else {
-                              setClassifiedPage(Math.min(totalPages, classifiedPage + 1));
-                            }
-                          }}
-                          disabled={(viewMode === 'live' && attendancePage === totalAttendancePages) ||
-                                   (viewMode !== 'live' && classifiedPage === totalPages)}
-                          className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Next
-                        </button>
-                      </div>
-                    </div>
-                  </>
+                    </>
+                  )}
                 )}
               )}
             </div>
