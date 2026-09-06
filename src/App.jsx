@@ -2639,7 +2639,7 @@ function RolePanel({ pageKey, role }) {
                   Loading attendance records...
                 </div>
               ) : (
-                  {!tableData.hasData ? (
+                  !tableData.hasData ? (
                     <div className="text-center py-8 text-gray-500">
                       {viewMode === 'live'
                         ? 'No attendance records found for today.'
