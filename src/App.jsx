@@ -2365,10 +2365,10 @@ function RolePanel({ pageKey, role }) {
       };
     }
 
-    let records: any[] = [];
-    let currentPage: number = 1;
-    let pageSize: number = 10;
-    let totalPages: number = 1;
+    let records = [];
+    let currentPage = 1;
+    let pageSize = 10;
+    let totalPages = 1;
 
     if (viewMode === 'live') {
       records = mergedAttendance;
