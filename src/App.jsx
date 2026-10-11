@@ -2124,7 +2124,7 @@ function RolePanel({ pageKey, role }) {
   const totalAttendancePages = Math.max(1, Math.ceil(mergedAttendance.length / pageSize));
 
   // Duplicate detection (only for admin attendance page)
-  const detectDuplicates = React.useCallback(() => {
+  const duplicateRecords = React.useMemo(() => {
     if (!isAdminAttendancePage) return [];
 
     const duplicates = [];
@@ -2164,13 +2164,6 @@ function RolePanel({ pageKey, role }) {
 
     return duplicates;
   }, [attendanceLogs, isAdminAttendancePage]);
-
-  // Update duplicate records when attendance logs change
-  React.useEffect(() => {
-    if (isAdminAttendancePage) {
-      setDuplicateRecords(detectDuplicates());
-    }
-  }, [attendanceLogs, detectDuplicates, isAdminAttendancePage]);
 
   // Fetch attendance logs for admin attendance page when filters change or viewMode changes
   React.useEffect(() => {
@@ -2751,7 +2744,8 @@ function RolePanel({ pageKey, role }) {
                                       )}
                                   </td>
                                 )}
-                              </tr>
+                                </tr>
+                              );
                             })}
                           </tbody>
                         </table>
@@ -2794,8 +2788,7 @@ function RolePanel({ pageKey, role }) {
                         </div>
                       </div>
                     </>
-                  )}
-                )}
+                  )
               )}
             </div>
           </section>
