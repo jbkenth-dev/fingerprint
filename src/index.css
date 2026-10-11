@@ -501,6 +501,27 @@ body,
   overscroll-behavior: contain;
 }
 
+.academic-confirmation-overlay {
+  align-items: center;
+}
+
+.academic-confirmation-modal {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  max-width: 32rem;
+  height: auto;
+  max-height: calc(100dvh - 2rem);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-xl);
+}
+
+.academic-confirmation-modal .academic-fullscreen-header,
+.academic-confirmation-modal .academic-fullscreen-body {
+  padding: 1.25rem;
+}
+
 .academic-page .academic-search {
   padding-left: 2.25rem;
 }

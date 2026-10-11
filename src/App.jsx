@@ -2859,7 +2859,7 @@ function ClassSubjectPage() {
       </AcademicRecordsCard>
 
       {isSubjectModalOpen ? (
-        <AcademicFullscreenModal
+        <AcademicModal
               title={editingId ? "Edit Class Subject" : "Add Class Subject"}
              onClose={resetForm}>
               <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
@@ -2915,11 +2915,11 @@ function ClassSubjectPage() {
                   </button>
                 </div>
               </form>
-                    </AcademicFullscreenModal>
+                    </AcademicModal>
       ) : null}
 
       {deletingSubject ? (
-        <AcademicFullscreenModal
+        <AcademicModal centered
               title="Delete Class Subject"
               subtitle={`Are you sure you want to delete ${deletingSubject.subjectCode} - ${deletingSubject.subjectName}?`}
              onClose={() => setDeletingSubject(null)}>
@@ -2939,7 +2939,7 @@ function ClassSubjectPage() {
                   Cancel
                 </button>
               </div>
-                    </AcademicFullscreenModal>
+                    </AcademicModal>
       ) : null}
     </div>
   );
@@ -3475,7 +3475,7 @@ function ClassSchedulingPage() {
       </AcademicRecordsCard>
 
       {isScheduleModalOpen ? (
-        <AcademicFullscreenModal title={editingSchedule ? "Edit Schedule" : "Add Schedule"} onClose={resetScheduleForm}>
+        <AcademicModal title={editingSchedule ? "Edit Schedule" : "Add Schedule"} onClose={resetScheduleForm}>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <SelectField
                     label="Section"
@@ -3604,11 +3604,11 @@ function ClassSchedulingPage() {
                     </button>
                   </div>
                 </form>
-                      </AcademicFullscreenModal>
+                      </AcademicModal>
       ) : null}
 
       {deletingSchedule ? (
-        <AcademicFullscreenModal
+        <AcademicModal centered
               title="Delete Class Schedule"
               subtitle={`Are you sure you want to delete Section ${deletingSchedule.section} - ${deletingSchedule.yearLevel} (${deletingSchedule.semester})?`}
              onClose={() => setDeletingSchedule(null)}>
@@ -3628,10 +3628,10 @@ function ClassSchedulingPage() {
                   Cancel
                 </button>
               </div>
-                    </AcademicFullscreenModal>
+                    </AcademicModal>
       ) : null}
       {isViewStudentsModalOpen ? (
-        <AcademicFullscreenModal title="View Students" subtitle="Section roster and class schedule" onClose={() => setIsViewStudentsModalOpen(false)}>
+        <AcademicModal title="View Students" subtitle="Section roster and class schedule" onClose={() => setIsViewStudentsModalOpen(false)}>
           <div className="space-y-6">
 
               {viewStudentsLoading ? (
@@ -3721,7 +3721,7 @@ function ClassSchedulingPage() {
                 <p className="py-8 text-center text-sm text-gray-500">No data available.</p>
               )}
             </div>
-        </AcademicFullscreenModal>
+        </AcademicModal>
       ) : null}
     </div>
   );
@@ -5908,7 +5908,7 @@ function HeaderBlock({ title, description, rightContent = null }) {
   );
 }
 
-function AcademicFullscreenModal({ title, subtitle, onClose, children }) {
+function AcademicModal({ title, subtitle, onClose, children, centered = false }) {
   const closeButtonRef = React.useRef(null);
   const titleId = React.useId();
   React.useEffect(() => {
@@ -5922,7 +5922,8 @@ function AcademicFullscreenModal({ title, subtitle, onClose, children }) {
     };
   }, []);
   return createPortal(
-    <div className="academic-fullscreen-modal" role="dialog" aria-modal="true" aria-labelledby={titleId}
+    <div className={centered ? "modal-overlay academic-confirmation-overlay" : undefined}>
+    <div className={clsx("academic-fullscreen-modal", centered && "academic-confirmation-modal")} role="dialog" aria-modal="true" aria-labelledby={titleId}
       onKeyDown={(event) => {
         if (event.key === "Escape") { event.stopPropagation(); onClose(); }
         if (event.key === "Tab") {
@@ -5944,6 +5945,7 @@ function AcademicFullscreenModal({ title, subtitle, onClose, children }) {
         </button>
       </header>
       <div className="academic-fullscreen-body">{children}</div>
+    </div>
     </div>,
     document.body,
   );
