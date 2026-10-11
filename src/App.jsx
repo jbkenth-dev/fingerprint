@@ -10,6 +10,7 @@ import { useManilaClock } from "./hooks/useManilaClock";
 import { useAuth } from "./state/AuthContext";
 import { apiFetch } from "./api";
 import { manilaNow, datesInRange, fetchAttendanceRange, classifyAttendance, liveAttendance, searchAttendance } from "./utils/attendance";
+import { startPolling } from "./utils/polling";
 
 const navIcons = {
   "Dashboard & Monitoring": LayoutDashboard,
@@ -774,20 +775,20 @@ function DashboardCore({ scope }) {
       setError("");
       try {
         const today = getManilaDate(0);
-        const [todayRes, schedulesRes, ...weekResults] = await Promise.allSettled([
-          apiFetch(`/attendance.php?date=${today}&limit=500&offset=0`),
+        const [logsRes, schedulesRes] = await Promise.allSettled([
+          fetchAttendanceRange(apiFetch, getManilaDate(6), today),
           apiFetch("/class-schedules.php"),
-          ...Array.from({ length: 7 }, (_, i) =>
-            apiFetch(`/attendance.php?date=${getManilaDate(6 - i)}&limit=500&offset=0`)
-          ),
         ]);
         if (cancelled) return;
-        if (todayRes.status === "fulfilled" && todayRes.value?.records) setTodayLogs(todayRes.value.records);
+        if (logsRes.status === "rejected") throw logsRes.reason;
+        if (schedulesRes.status === "rejected") throw schedulesRes.reason;
+        setTodayLogs(logsRes.value.filter(record => record.logDate === today));
         if (schedulesRes.status === "fulfilled" && Array.isArray(schedulesRes.value)) setScheduleRows(schedulesRes.value);
         const newWeek = {};
-        weekResults.forEach((r, i) => {
-          if (r.status === "fulfilled" && r.value?.records) newWeek[getManilaDate(6 - i)] = r.value.records;
-        });
+        for (let i = 0; i < 7; i++) {
+          const date = getManilaDate(6 - i);
+          newWeek[date] = logsRes.value.filter(record => record.logDate === date);
+        }
         setWeekLogs(newWeek);
       } catch (err) {
         if (!cancelled) setError(err.message || "Failed to load dashboard data.");
@@ -1565,23 +1566,30 @@ function RolePanel({ pageKey, role }) {
   const [scheduleRows, setScheduleRows] = React.useState([]);
   const [scheduleLoading, setScheduleLoading] = React.useState(true);
   const [scheduleError, setScheduleError] = React.useState("");
+  const [refreshVersion, setRefreshVersion] = React.useState(0);
 
   // Fetch schedule data
   React.useEffect(() => {
+    let mounted = true;
     const loadSchedule = async () => {
       setScheduleLoading(true);
       setScheduleError("");
       try {
-        const data = await apiFetch("/class-schedules.php");
-        setScheduleRows(Array.isArray(data) ? data : []);
+        const data = await apiFetch("/class-schedules.php", refreshVersion ? { cacheTtl: 0 } : {});
+        if (mounted) setScheduleRows(Array.isArray(data) ? data : []);
       } catch (err) {
-        setScheduleError(err.message || "Failed to load schedule.");
+        if (mounted) setScheduleError(err.message || "Failed to load schedule.");
       } finally {
-        setScheduleLoading(false);
+        if (mounted) setScheduleLoading(false);
       }
     };
     loadSchedule();
-  }, []);
+    window.addEventListener('api:recovered', loadSchedule);
+    return () => {
+      mounted = false;
+      window.removeEventListener('api:recovered', loadSchedule);
+    };
+  }, [refreshVersion]);
 
 // Admin attendance page state
   const [searchTerm, setSearchTerm] = React.useState('');
@@ -1589,7 +1597,6 @@ function RolePanel({ pageKey, role }) {
   const [endDate, setEndDate] = React.useState(() => manilaNow().date);
   const [viewMode, setViewMode] = React.useState('live');
   const [loadedPeriod, setLoadedPeriod] = React.useState('');
-  const [refreshVersion, setRefreshVersion] = React.useState(0);
   const [lastUpdated, setLastUpdated] = React.useState(null);
   useManilaClock(); // Keep today's date and class windows current, including Manila midnight.
   const { date: manilaToday, minutes: manilaMinutes } = manilaNow();
@@ -1654,34 +1661,30 @@ function RolePanel({ pageKey, role }) {
     if (!isAdminAttendancePage || (viewMode !== 'live' && rangeError)) return;
     const controller = new AbortController();
     let active = true;
-    let timer;
     const first = viewMode === 'live' ? manilaToday : startDate;
     const last = viewMode === 'live' ? manilaToday : endDate;
     async function load() {
       setAttendanceLoading(true);
       setAttendanceError('');
       try {
-        const records = await fetchAttendanceRange(apiFetch, first, last, controller.signal);
+        const records = await fetchAttendanceRange(apiFetch, first, last, controller.signal, refreshVersion ? { cacheTtl: 0 } : {});
         if (!active) return;
         setAttendanceLogs(records);
         setLoadedPeriod(periodKey);
         setLastUpdated(new Date());
       } catch (error) {
         if (!active || controller.signal.aborted) return;
-        setAttendanceLogs([]);
         setAttendanceError(error.message || 'Failed to load attendance records.');
+        throw error;
       } finally {
-        if (active) {
-          setAttendanceLoading(false);
-          if (viewMode === 'live') timer = setTimeout(load, 5000);
-        }
+        if (active) setAttendanceLoading(false);
       }
     }
-    load();
+    const stopPolling = startPolling(load, { repeat: viewMode === 'live', initialDelay: refreshVersion ? 0 : 300 });
     return () => {
       active = false;
+      stopPolling();
       controller.abort();
-      clearTimeout(timer);
     };
   }, [isAdminAttendancePage, viewMode === 'live', startDate, endDate, manilaToday, periodKey, rangeError, refreshVersion]);
 
@@ -2031,7 +2034,7 @@ function RolePanel({ pageKey, role }) {
             )}
             <div className="border-t border-gray-100 bg-gray-50/50 px-5 py-3 text-xs text-gray-500 sm:px-6">
               {viewMode === 'live'
-                ? `Refreshes every 5 seconds${lastUpdated ? ` · Updated ${lastUpdated.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila' })}` : ''}`
+                ? `Refreshes every 60 seconds while this tab is visible and online${lastUpdated ? ` · Updated ${lastUpdated.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila' })}` : ''}`
                 : 'Based on current class schedules and student sections. Today’s absences appear after each class check-in window closes.'}
             </div>
           </div>

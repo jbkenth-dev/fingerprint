@@ -55,6 +55,9 @@ export default async function handler(req, res) {
     
     // Make the request to the backend
     const response = await fetch(url, fetchOptions);
+    const retryAfter = response.headers.get('retry-after');
+    if (retryAfter) res.setHeader('Retry-After', retryAfter);
+    res.setHeader('Cache-Control', 'no-store');
     
     // Get the response data
     const data = await response.text();

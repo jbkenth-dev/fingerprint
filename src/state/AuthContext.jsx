@@ -35,16 +35,22 @@ export function AuthProvider({ children }) {
 
   // Load users from API (fallback to bundled initialUsers)
   useEffect(() => {
+    if (!session?.token) return;
     let mounted = true;
-    apiFetch("/users.php")
+    const loadUsers = () => apiFetch("/users.php")
       .then((data) => {
         if (mounted && Array.isArray(data)) setUsers(data);
       })
       .catch(() => {
         // keep bundled initialUsers on failure
       });
-    return () => (mounted = false);
-  }, []);
+    loadUsers();
+    window.addEventListener('api:recovered', loadUsers);
+    return () => {
+      mounted = false;
+      window.removeEventListener('api:recovered', loadUsers);
+    };
+  }, [session?.token]);
 
   useEffect(() => {
     if (session) {

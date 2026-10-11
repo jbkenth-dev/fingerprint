@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:api": "node scripts/testApi.mjs",
-    "test:attendance": "node --test scripts/testAttendance.mjs"
+    "test:attendance": "node --test scripts/testAttendance.mjs",
+    "test:requests": "node --test scripts/testRequestPolicy.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

@@ -21,34 +21,32 @@ export function datesInRange(start, end) {
   return dates;
 }
 
-// Use the existing date endpoint, including every API page, with bounded concurrency.
-export async function fetchAttendanceRange(fetcher, start, end, signal) {
-  const dates = datesInRange(start, end);
-  const results = new Array(dates.length);
-  let next = 0;
-  async function worker() {
-    while (next < dates.length) {
-      const index = next++;
-      const date = dates[index];
-      const records = [];
-      let total = Infinity;
-      while (records.length < total) {
-        signal?.throwIfAborted();
-        const params = new URLSearchParams({ date, limit: '500', offset: String(records.length) });
-        const result = await fetcher(`/attendance.php?${params}`, { signal });
-        const page = Array.isArray(result.records) ? result.records : [];
-        total = Number(result.total ?? page.length);
-        if (!page.length) {
-          if (records.length < total) throw new Error('Attendance data changed while loading. Please refresh.');
-          break;
-        }
-        records.push(...page);
-      }
-      results[index] = records.filter(record => record.logDate === date);
+// Query the entire range per API page instead of opening a DB connection for every day.
+export async function fetchAttendanceRange(fetcher, start, end, signal, options = {}) {
+  if (!datesInRange(start, end).length) throw new Error('Select a valid attendance date range.');
+  const records = [];
+  let total = Infinity;
+  while (records.length < total) {
+    signal?.throwIfAborted();
+    const params = new URLSearchParams({ limit: '500', offset: String(records.length) });
+    if (start === end) params.set('date', start);
+    else {
+      params.set('startDate', start);
+      params.set('endDate', end);
     }
+    const result = await fetcher(`/attendance.php?${params}`, { ...options, signal });
+    if (start !== end && (result.range?.startDate !== start || result.range?.endDate !== end)) {
+      throw new Error('The attendance API needs updating to support date ranges.');
+    }
+    const page = Array.isArray(result.records) ? result.records : [];
+    total = Number(result.total ?? page.length);
+    if (!page.length) {
+      if (records.length < total) throw new Error('Attendance data changed while loading. Please refresh.');
+      break;
+    }
+    records.push(...page);
   }
-  await Promise.all(Array.from({ length: Math.min(4, dates.length) }, worker));
-  return results.flat();
+  return records.filter(record => record.logDate >= start && record.logDate <= end);
 }
 
 export function timeMinutes(value) {

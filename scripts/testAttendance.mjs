@@ -58,19 +58,32 @@ test('live shows only today, matches later classes, and pairs IN/OUT without dup
   assert.equal(searchAttendance(result, 'missing').length, 0);
 });
 
-test('loads all API pages for every selected date instead of truncating at 100 or 500', async () => {
+test('loads a combined range in API pages instead of one connection per day', async () => {
   const calls = [];
   const result = await fetchAttendanceRange(async path => {
     const params = new URL(path, 'http://localhost').searchParams;
     calls.push(params);
     const offset = Number(params.get('offset'));
-    const count = Math.min(500, 501 - offset);
-    return { records: Array.from({ length: count }, (_, i) => log(offset + i, params.get('date'), '08:00:00')), total: 501 };
+    const count = Math.min(500, 1002 - offset);
+    return { records: Array.from({ length: count }, (_, i) => log(offset + i, '2026-10-12', '08:00:00')), total: 1002,
+      range: { startDate: params.get('startDate'), endDate: params.get('endDate') } };
   }, '2026-10-12', '2026-10-13');
   assert.equal(result.length, 1002);
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 3);
   assert.ok(calls.every(params => params.get('limit') === '500'));
-  assert.equal(calls.filter(params => params.get('offset') === '500').length, 2);
+  assert.equal(calls.filter(params => params.get('offset') === '500').length, 1);
+  assert.ok(calls.every(params => params.get('startDate') === '2026-10-12' && params.get('endDate') === '2026-10-13'));
+});
+
+test('an empty month requires only one request and never falls back to an old unfiltered API', async () => {
+  let calls = 0;
+  const records = await fetchAttendanceRange(async () => {
+    calls++;
+    return { records: [], total: 0, range: { startDate: '2026-09-01', endDate: '2026-09-30' } };
+  }, '2026-09-01', '2026-09-30');
+  assert.deepEqual(records, []);
+  assert.equal(calls, 1);
+  await assert.rejects(fetchAttendanceRange(async () => ({ records: [], total: 0 }), '2026-09-01', '2026-09-30'), /API needs updating/);
 });
 
 test('aborted or incomplete API requests cannot produce a partial report', async () => {

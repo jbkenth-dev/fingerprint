@@ -126,6 +126,8 @@ uint32_t lastHomeUpdateAt = 0;
 uint32_t lastApiCheckAt = 0;
 uint32_t lastWifiReconnectAt = 0;
 uint32_t lastSyncUnsentAt = 0;
+uint32_t apiCooldownStartedAt = 0;
+uint32_t apiCooldownMs = 0;
 
 // Queue for posting attendance to online database after local save
 struct PendingAttendance {
@@ -1753,10 +1755,35 @@ void handleApiTimeSet() {
   }
 }
 
+bool apiCoolingDown() {
+  if (apiCooldownMs > 0 && (uint32_t) (millis() - apiCooldownStartedAt) >= apiCooldownMs) apiCooldownMs = 0;
+  return apiCooldownMs > 0;
+}
+
+void recordApiCooldown(int httpCode, const String &payload, DynamicJsonDocument &response) {
+  if (httpCode >= 200 && httpCode < 300) return;
+  bool quota = payload.indexOf("max_connections_per_hour") >= 0 ||
+               payload.indexOf("[1226]") >= 0 ||
+               String((const char *) (response["code"] | "")) == "DB_CONNECTION_LIMIT";
+  uint32_t seconds = response["retryAfter"] | 0UL;
+  if (!quota && httpCode != 503 && httpCode != 429) return;
+  if (seconds == 0) seconds = quota ? 3600UL : 60UL;
+  if (seconds > 3600UL) seconds = 3600UL;
+  apiCooldownMs = seconds * 1000UL;
+  apiCooldownStartedAt = millis();
+  databaseReady = false;
+}
+
 bool getDeviceJson(const String &action, DynamicJsonDocument &response, int &httpCode, String &error) {
   if (!wifiReady) {
     httpCode = 0;
     error = "WiFi is offline.";
+    return false;
+  }
+
+  if (apiCoolingDown()) {
+    httpCode = 503;
+    error = "API temporarily paused after a server limit. Please retry later.";
     return false;
   }
 
@@ -1774,6 +1801,7 @@ bool getDeviceJson(const String &action, DynamicJsonDocument &response, int &htt
   }
 
   DeserializationError parseError = deserializeJson(response, payload);
+  recordApiCooldown(httpCode, payload, response);
   if (parseError) {
     error = "Invalid API JSON response.";
     return false;
@@ -1792,6 +1820,12 @@ bool postDeviceJson(const String &action, DynamicJsonDocument &request, DynamicJ
   if (!wifiReady) {
     httpCode = 0;
     error = "WiFi is offline.";
+    return false;
+  }
+
+  if (apiCoolingDown()) {
+    httpCode = 503;
+    error = "API temporarily paused after a server limit. Please retry later.";
     return false;
   }
 
@@ -1815,6 +1849,7 @@ bool postDeviceJson(const String &action, DynamicJsonDocument &request, DynamicJ
   }
 
   DeserializationError parseError = deserializeJson(response, payload);
+  recordApiCooldown(httpCode, payload, response);
   if (parseError) {
     error = "Invalid API JSON response.";
     return false;

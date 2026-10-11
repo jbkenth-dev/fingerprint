@@ -1,3 +1,5 @@
+import { createApiClient } from "./utils/apiClient";
+
 /**
  * API helper for Francis Key frontend.
  * Handles auth token injection and API base URL configuration.
@@ -36,6 +38,7 @@ let _authToken = null;
  */
 export function setAuthToken(token) {
   _authToken = token;
+  client.clearCache();
 }
 
 /**
@@ -43,6 +46,7 @@ export function setAuthToken(token) {
  */
 export function clearAuthToken() {
   _authToken = null;
+  client.clearCache();
 }
 
 /**
@@ -75,76 +79,20 @@ function clearSession() {
   }
 }
 
-/**
- * Make an authenticated API request.
- *
- * @param {string} path - API path (e.g., '/users.php')
- * @param {object} [options] - Fetch options (method, body, headers, etc.)
- * @returns {Promise<any>} Parsed JSON response
- */
-export async function apiFetch(path, options = {}) {
-  const url = `${API_BASE}${path}`;
-  let token = getAuthToken();
-  // Ensure token is a string and trim whitespace
-  if (typeof token === 'string') {
-    token = token.trim();
-  }
-  let tokenLog = token ? { length: token.length, prefix: token.slice(0, 8) } : null;
+let browserStorage;
+try { browserStorage = globalThis.localStorage; } catch { /* Memory-only protection. */ }
+const client = createApiClient({
+  base: API_BASE,
+  getToken: getAuthToken,
+  storage: browserStorage,
+  onUnauthorized() {
+    clearSession();
+    window.dispatchEvent(new CustomEvent('auth:expired'));
+  },
+  onRecovered() {
+    window.dispatchEvent(new CustomEvent('api:recovered'));
+  },
+});
 
-  const headers = {
-    'Content-Type': 'application/json',
-    ...options.headers,
-  };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  const res = await fetch(url, {
-    ...options,
-    headers,
-  });
-
-  // Try to parse JSON, fall back to text
-  let data;
-  const contentType = res.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    data = await res.json();
-  } else {
-    const text = await res.text();
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = { error: text };
-    }
-  }
-
-  // Handle 401 — use the backend's actual error message (e.g. "Invalid credentials")
-  // instead of a hardcoded string, so login failures show the right feedback.
-  if (res.status === 401) {
-    // Use a contextual fallback: "session expired" makes no sense during a login attempt
-    // since there is no session yet.
-    const isLoginAttempt = path.endsWith('/auth.php') && (options.method || 'GET').toUpperCase() === 'POST';
-    const fallback = isLoginAttempt
-      ? 'Sign in failed. Please check your credentials and try again.'
-      : 'Session expired. Please sign in again.';
-    throw new Error(data.error || fallback);
-
-    // Only clear session / dispatch expiry for non-login requests.
-    // Login POST to auth.php returns 401 for wrong credentials — that's not a session expiry.
-    // We do this AFTER throwing the error so that error handling in the caller
-    // is not interfered with by session cleanup side effects.
-    if (!isLoginAttempt) {
-      clearSession();
-      window.dispatchEvent(new CustomEvent('auth:expired'));
-    }
-  }
-
-  if (!res.ok) {
-    throw new Error(data.error || `Request failed: ${res.status}`);
-  }
-
-  return data;
-}
-
+export const apiFetch = client.request;
 export { API_BASE };
