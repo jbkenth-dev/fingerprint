@@ -470,6 +470,76 @@ body,
   overflow-y: auto;
 }
 
+.academic-page .academic-search {
+  padding-left: 2.25rem;
+}
+
+.academic-table-scroll {
+  max-height: 38rem;
+  overflow: auto;
+}
+
+.academic-subject-table {
+  min-width: 600px;
+}
+
+.academic-schedule-table {
+  min-width: 900px;
+}
+
+.academic-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--gray-50);
+  box-shadow: inset 0 -1px var(--gray-200);
+}
+
+.academic-table td {
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.academic-table td:first-child {
+  font-weight: 600;
+  color: var(--green-800);
+}
+
+.academic-table tbody tr:not(.academic-group-row):nth-child(odd) {
+  background: #f8fafc80;
+}
+
+.academic-table tbody tr:not(.academic-group-row):hover {
+  background: var(--green-50);
+}
+
+.academic-table .academic-group-row td {
+  background: var(--green-50);
+  border-top: 1px solid var(--green-200);
+  border-bottom: 1px solid var(--green-200);
+  padding-top: 0.875rem;
+  padding-bottom: 0.875rem;
+  color: var(--green-800);
+  font-weight: 600;
+}
+
+.academic-table .academic-actions-heading {
+  text-align: right;
+}
+
+.academic-schedule-table td:nth-child(5) {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.academic-table .academic-empty {
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--gray-500);
+  font-weight: 400;
+}
+
+.academic-count,
 .department-count {
   border: 1px solid var(--green-200);
   border-radius: var(--radius-full);

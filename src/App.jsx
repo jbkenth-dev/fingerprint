@@ -2763,32 +2763,18 @@ function ClassSubjectPage() {
   }, [filteredSubjects]);
 
   return (
-    <div className="space-y-4">
+    <div className="academic-page animate-fade-up space-y-5">
       <HeaderBlock
+        title="Class Subjects"
+        description="Organize your curriculum by year level and semester."
         rightContent={(
-          <div className="grid w-full gap-3 grid-cols-1 sm:grid-cols-[minmax(0,1fr)_160px] md:grid-cols-[minmax(0,1fr)_190px] md:items-center">
-            <div className="w-full">
-              <Field
-                label="Search Subject"
-                hideLabel
-                value={search}
-                placeholder="Search subject code, name, year level, or semister"
-                onChange={setSearch}
-                small
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setEditingId(null);
-                setForm(emptyClassSubjectForm);
-                setIsSubjectModalOpen(true);
-              }}
-              className="btn btn-secondary whitespace-nowrap"
-            >
-              Add Subject
-            </button>
-          </div>
+          <button type="button" onClick={() => {
+            setEditingId(null);
+            setForm(emptyClassSubjectForm);
+            setIsSubjectModalOpen(true);
+          }} className="btn btn-secondary w-full justify-center whitespace-nowrap lg:w-auto">
+            <Plus className="h-4 w-4 shrink-0" aria-hidden="true" /> Add Subject
+          </button>
         )}
       />
 
@@ -2798,38 +2784,38 @@ function ClassSubjectPage() {
         onClose={() => setFeedback((prev) => ({ ...prev, message: "" }))}
       />
 
-      <div className="grid gap-4">
-        <FormCard
-          title="Subject Records"
-        >
+      <AcademicRecordsCard title="Subject Directory" description="Browse subjects grouped by year level and semester." icon={BookOpenText}
+        count={subjects.length} visibleCount={filteredSubjects.length} recordLabel="subjects"
+        search={search} onSearch={setSearch} searchPlaceholder="Search code, name, year, or semester..." loading={loading}>
           {pageError ? (
-            <div className="alert alert-error">
+            <div role="alert" className="alert alert-error mx-5 my-4">
               {pageError}
             </div>
           ) : null}
 
-          <div className="table-container">
-            <table className="min-w-full text-left text-sm">
+          <div className="academic-table-scroll" role="region" aria-label="Class subject table" tabIndex={0}>
+            <table className="table academic-table academic-subject-table">
+              <caption className="sr-only">Subjects grouped by year level and semester</caption>
               <thead className="">
                 <tr>
-                  <th className="px-4 py-3">Code</th>
-                  <th className="px-4 py-3">Name</th>
-                  <th className="w-[1%] px-4 py-3 whitespace-nowrap">Actions</th>
+                  <th scope="col" className="px-4 py-3">Code</th>
+                  <th scope="col" className="px-4 py-3">Subject Name</th>
+                  <th scope="col" className="academic-actions-heading w-[1%] px-4 py-3 whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="3" className="px-4 py-6 text-center text-gray-500">
+                    <td colSpan="3" className="academic-empty">
                       Loading class subjects...
                     </td>
                   </tr>
                 ) : sectionedSubjects.length ? (
                   sectionedSubjects.map((section) => (
                     <React.Fragment key={section.key}>
-                      <tr className="table-section-row">
-                        <td colSpan="3" className="px-4 py-2 text-center font-semibold">
-                          {section.label}
+                      <tr className="academic-group-row">
+                        <td colSpan="3" className="px-4 py-3">
+                          <div className="flex items-center gap-3"><span>{section.label}</span><span className="academic-count">{section.items.length} subjects</span></div>
                         </td>
                       </tr>
                       {section.items.map((subject) => (
@@ -2837,17 +2823,19 @@ function ClassSubjectPage() {
                           <td className="px-4 py-3 font-semibold text-gray-800">{subject.subjectCode}</td>
                           <td className="px-4 py-3">{subject.subjectName}</td>
                           <td className="w-[1%] px-4 py-3 whitespace-nowrap">
-                            <div className="inline-flex items-center gap-2 whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                               <button
                                 type="button"
                                 onClick={() => handleEdit(subject)}
-                                className="btn btn-secondary text-xs text-green-700 border-green-200 bg-green-50"
+                                aria-label={`Edit ${subject.subjectCode}`}
+                                className="btn btn-secondary text-xs"
                               >
                                 Edit
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setDeletingSubject(subject)}
+                                aria-label={`Delete ${subject.subjectCode}`}
                                 className="btn btn-danger text-xs"
                               >
                                 Delete
@@ -2860,7 +2848,7 @@ function ClassSubjectPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="3" className="px-4 py-6 text-center text-gray-500">
+                    <td colSpan="3" className="academic-empty">
                       {search.trim() ? "No matching class subjects found." : "No class subjects found yet."}
                     </td>
                   </tr>
@@ -2868,8 +2856,7 @@ function ClassSubjectPage() {
               </tbody>
             </table>
           </div>
-        </FormCard>
-      </div>
+      </AcademicRecordsCard>
 
       {isSubjectModalOpen ? (
         <div className="modal-overlay">
@@ -2906,11 +2893,11 @@ function ClassSubjectPage() {
                   required
                 />
                 <SelectField
-                  label="Semister"
+                  label="Semester"
                   value={form.semester}
                   onChange={(value) => setForm((prev) => ({ ...prev, semester: value }))}
                   options={[
-                    { label: "Select semister", value: "" },
+                    { label: "Select semester", value: "" },
                     { label: "1st Sem", value: "1st Sem" },
                     { label: "2nd Sem", value: "2nd Sem" },
                   ]}
@@ -2968,6 +2955,7 @@ function ClassSubjectPage() {
 
 function ClassSchedulingPage() {
   const { users } = useAuth();
+  const [search, setSearch] = React.useState("");
   const facultyUsers = React.useMemo(
     () => users.filter((u) => u.role === "faculty" && u.status === "Active"),
     [users],
@@ -3189,6 +3177,16 @@ function ClassSchedulingPage() {
     }, []);
   }, [scheduleRows]);
 
+  const visibleScheduleGroups = React.useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    if (!keyword) return groupedScheduleRows;
+    return groupedScheduleRows.filter((group) =>
+      [group.label, ...group.items.flatMap((row) => [row.subjectCode, row.subjectName, row.facultyName, ...(Array.isArray(row.days) ? row.days : []), formatScheduleDays(row.days)])]
+        .filter(Boolean).join(" ").toLowerCase().includes(keyword)
+    );
+  }, [groupedScheduleRows, search]);
+  const visibleScheduleCount = visibleScheduleGroups.reduce((count, group) => count + group.items.length, 0);
+
   const handleEntryChange = (subjectId, field, value) => {
     setOverlapSubjectIds((prev) => prev.filter((id) => id !== subjectId));
     setSubjectEntries((prev) =>
@@ -3370,8 +3368,10 @@ function ClassSchedulingPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="academic-page animate-fade-up space-y-5">
       <HeaderBlock
+        title="Class Scheduling"
+        description="Manage section schedules, faculty assignments, and student rosters."
         rightContent={(
           <button
             type="button"
@@ -3383,9 +3383,9 @@ function ClassSchedulingPage() {
               setOverlapSubjectIds([]);
               setIsScheduleModalOpen(true);
             }}
-            className="btn btn-secondary whitespace-nowrap"
+            className="btn btn-secondary w-full justify-center whitespace-nowrap lg:w-auto"
           >
-            Add Schedule
+            <Plus className="h-4 w-4 shrink-0" aria-hidden="true" /> Add Schedule
           </button>
         )}
       />
@@ -3396,58 +3396,61 @@ function ClassSchedulingPage() {
         onClose={() => setFeedback((prev) => ({ ...prev, message: "" }))}
       />
 
-      <div className="grid gap-4">
-        <FormCard title="Schedule Records">
+      <AcademicRecordsCard title="Schedule Directory" description="Schedules grouped by section, year level, and semester." icon={CalendarRange}
+        count={scheduleRows.length} visibleCount={visibleScheduleCount} recordLabel="schedules"
+        search={search} onSearch={setSearch} searchPlaceholder="Search section, subject, faculty, or day..." loading={loadingRows}>
           {pageError ? (
-            <div className="alert alert-error">
+            <div role="alert" className="alert alert-error mx-5 my-4">
               {pageError}
             </div>
           ) : null}
 
-          <div className="table-container">
-            <table className="min-w-full text-left text-sm">
+          <div className="academic-table-scroll" role="region" aria-label="Class schedule table" tabIndex={0}>
+            <table className="table academic-table academic-schedule-table">
+              <caption className="sr-only">Class schedules grouped by section</caption>
               <thead className="">
                 <tr>
-                  <th className="px-4 py-3">Code</th>
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">Faculty</th>
-                  <th className="px-4 py-3">Days</th>
-                  <th className="px-4 py-3">Time</th>
-                  <th className="w-[1%] px-4 py-3 whitespace-nowrap">Actions</th>
+                  <th scope="col" className="px-4 py-3">Code</th>
+                  <th scope="col" className="px-4 py-3">Subject Name</th>
+                  <th scope="col" className="px-4 py-3">Faculty</th>
+                  <th scope="col" className="px-4 py-3">Days</th>
+                  <th scope="col" className="px-4 py-3">Time</th>
                 </tr>
               </thead>
               <tbody>
                 {loadingRows ? (
                   <tr>
-                    <td colSpan="6" className="px-4 py-6 text-center text-gray-500">
+                    <td colSpan="5" className="academic-empty">
                       Loading class schedules...
                     </td>
                   </tr>
-                ) : groupedScheduleRows.length ? (
-                  groupedScheduleRows.map((group) => (
+                ) : visibleScheduleGroups.length ? (
+                  visibleScheduleGroups.map((group) => (
                     <React.Fragment key={group.key}>
-                      <tr className="table-section-row">
-                        <td colSpan="6" className="px-4 py-2">
+                      <tr className="academic-group-row">
+                        <td colSpan="5" className="px-4 py-2">
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="text-center font-semibold sm:text-left">{group.label}</div>
+                            <div className="flex items-center gap-3"><span>{group.label}</span><span className="academic-count">{group.items.length} classes</span></div>
                             <div className="inline-flex items-center justify-center gap-2 sm:justify-end">
                               <button
                                 type="button"
                                 onClick={() => handleEditSchedule(group)}
-                                className="btn btn-secondary text-xs text-green-700 border-green-200 bg-green-50"
+                                aria-label={`Edit ${group.label}`}
+                                className="btn btn-secondary text-xs"
                               >
                                 Edit
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleViewStudents(group)}
-                                className="btn btn-secondary text-xs text-blue-700 border-blue-200 bg-blue-50"
+                                className="btn btn-secondary text-xs"
                               >
                                 View Students
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setDeletingSchedule(group)}
+                                aria-label={`Delete ${group.label}`}
                                 className="btn btn-danger text-xs"
                               >
                                 Delete
@@ -3463,23 +3466,21 @@ function ClassSchedulingPage() {
                           <td className="px-4 py-3">{row.facultyName || "—"}</td>
                           <td className="px-4 py-3">{formatScheduleDays(row.days)}</td>
                           <td className="px-4 py-3">{formatTimeRange(row.startTime, row.endTime)}</td>
-                          <td className="px-4 py-3" />
                         </tr>
                       ))}
                     </React.Fragment>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="6" className="px-4 py-6 text-center text-gray-500">
-                      No class schedules found yet.
+                    <td colSpan="5" className="academic-empty">
+                      {search.trim() ? "No matching schedules found. Try a different search." : "No class schedules yet. Add a schedule to get started."}
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
-        </FormCard>
-      </div>
+      </AcademicRecordsCard>
 
       {isScheduleModalOpen ? (
         <div className="modal-overlay">
@@ -5942,6 +5943,36 @@ function HeaderBlock({ title, description, rightContent = null }) {
         </div>
         {rightContent ? <div className="w-full lg:w-auto">{rightContent}</div> : null}
       </div>
+    </section>
+  );
+}
+
+function AcademicRecordsCard({ title, description, icon: Icon, count, visibleCount, recordLabel, search, onSearch, searchPlaceholder, loading, children }) {
+  return (
+    <section className="card-elevated">
+      <div className="flex flex-wrap items-center gap-3 border-b border-gray-200 p-5 sm:px-6">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-50 text-green-700">
+          <Icon className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <div>
+          <div className="flex items-center gap-2"><h2 className="text-lg font-semibold text-gray-900">{title}</h2><span className="academic-count">{count}</span></div>
+          <p className="mt-0.5 text-sm text-gray-500">{description}</p>
+        </div>
+      </div>
+      <div className="flex flex-col gap-3 bg-gray-50/60 px-5 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-6">
+        <label className="block w-full sm:max-w-md">
+          <span className="mb-1.5 block text-xs font-semibold text-gray-600">Search {recordLabel}</span>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+            <input type="search" value={search} onChange={(e) => onSearch(e.target.value)} placeholder={searchPlaceholder} className="form-input academic-search" />
+          </div>
+        </label>
+        {search ? <button type="button" onClick={() => onSearch("")} className="btn btn-secondary shrink-0 text-xs">Clear search</button> : null}
+      </div>
+      {children}
+      <footer className="border-t border-gray-200 px-5 py-4 text-sm text-gray-500 sm:px-6" aria-live="polite">
+        {loading ? "Loading records..." : <>Showing <span className="font-medium text-gray-700">{visibleCount}</span> of <span className="font-medium text-gray-700">{count}</span> {recordLabel}</>}
+      </footer>
     </section>
   );
 }
