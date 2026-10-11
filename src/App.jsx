@@ -2859,11 +2859,9 @@ function ClassSubjectPage() {
       </AcademicRecordsCard>
 
       {isSubjectModalOpen ? (
-        <div className="modal-overlay">
-          <div className="my-auto w-full max-w-2xl">
-            <FormCard
+        <AcademicFullscreenModal
               title={editingId ? "Edit Class Subject" : "Add Class Subject"}
-            >
+             onClose={resetForm}>
               <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
                 <Field
                   label="Subject Code"
@@ -2917,18 +2915,14 @@ function ClassSubjectPage() {
                   </button>
                 </div>
               </form>
-            </FormCard>
-          </div>
-        </div>
+                    </AcademicFullscreenModal>
       ) : null}
 
       {deletingSubject ? (
-        <div className="modal-overlay">
-          <div className="my-auto w-full max-w-md">
-            <FormCard
+        <AcademicFullscreenModal
               title="Delete Class Subject"
               subtitle={`Are you sure you want to delete ${deletingSubject.subjectCode} - ${deletingSubject.subjectName}?`}
-            >
+             onClose={() => setDeletingSubject(null)}>
               <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
@@ -2945,9 +2939,7 @@ function ClassSubjectPage() {
                   Cancel
                 </button>
               </div>
-            </FormCard>
-          </div>
-        </div>
+                    </AcademicFullscreenModal>
       ) : null}
     </div>
   );
@@ -3483,9 +3475,7 @@ function ClassSchedulingPage() {
       </AcademicRecordsCard>
 
       {isScheduleModalOpen ? (
-        <div className="modal-overlay">
-            <div className="my-auto w-full max-w-2xl py-4">
-              <FormCard title={editingSchedule ? "Edit Schedule" : "Add Schedule"}>
+        <AcademicFullscreenModal title={editingSchedule ? "Edit Schedule" : "Add Schedule"} onClose={resetScheduleForm}>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <SelectField
                     label="Section"
@@ -3614,18 +3604,14 @@ function ClassSchedulingPage() {
                     </button>
                   </div>
                 </form>
-              </FormCard>
-            </div>
-        </div>
+                      </AcademicFullscreenModal>
       ) : null}
 
       {deletingSchedule ? (
-        <div className="modal-overlay">
-          <div className="my-auto w-full max-w-2xl">
-            <FormCard
+        <AcademicFullscreenModal
               title="Delete Class Schedule"
               subtitle={`Are you sure you want to delete Section ${deletingSchedule.section} - ${deletingSchedule.yearLevel} (${deletingSchedule.semester})?`}
-            >
+             onClose={() => setDeletingSchedule(null)}>
               <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
@@ -3642,36 +3628,12 @@ function ClassSchedulingPage() {
                   Cancel
                 </button>
               </div>
-            </FormCard>
-          </div>
-        </div>
+                    </AcademicFullscreenModal>
       ) : null}
       {isViewStudentsModalOpen ? (
-        <div className="modal-overlay">
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="view-students-title"
-            className="view-students-modal my-auto w-full max-w-6xl"
-          >
-            <header className="flex items-center justify-between gap-4 border-b border-gray-200 px-5 py-4 sm:px-6">
-              <div className="flex items-center gap-3">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-50 text-green-700">
-                  <Users className="h-5 w-5" aria-hidden="true" />
-                </span>
-                <div>
-                  <h2 id="view-students-title" className="text-lg font-semibold text-gray-900">View Students</h2>
-                  <p className="text-sm text-gray-500">Section roster and class schedule</p>
-                </div>
-              </div>
-              <button type="button" onClick={() => setIsViewStudentsModalOpen(false)} className="btn btn-secondary shrink-0">
-                <span className="hidden sm:inline">Close</span>
-                <X className="h-4 w-4" aria-hidden="true" />
-                <span className="sr-only sm:hidden">Close</span>
-              </button>
-            </header>
+        <AcademicFullscreenModal title="View Students" subtitle="Section roster and class schedule" onClose={() => setIsViewStudentsModalOpen(false)}>
+          <div className="space-y-6">
 
-            <div className="view-students-body space-y-6 p-5 sm:p-6">
               {viewStudentsLoading ? (
                 <p role="status" className="py-8 text-center text-sm text-gray-500">Loading section details...</p>
               ) : viewStudentsError ? (
@@ -3759,8 +3721,7 @@ function ClassSchedulingPage() {
                 <p className="py-8 text-center text-sm text-gray-500">No data available.</p>
               )}
             </div>
-          </section>
-        </div>
+        </AcademicFullscreenModal>
       ) : null}
     </div>
   );
@@ -5944,6 +5905,47 @@ function HeaderBlock({ title, description, rightContent = null }) {
         {rightContent ? <div className="w-full lg:w-auto">{rightContent}</div> : null}
       </div>
     </section>
+  );
+}
+
+function AcademicFullscreenModal({ title, subtitle, onClose, children }) {
+  const closeButtonRef = React.useRef(null);
+  const titleId = React.useId();
+  React.useEffect(() => {
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, []);
+  return createPortal(
+    <div className="academic-fullscreen-modal" role="dialog" aria-modal="true" aria-labelledby={titleId}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") { event.stopPropagation(); onClose(); }
+        if (event.key === "Tab") {
+          const controls = [...event.currentTarget.querySelectorAll('button, input, select, textarea, a[href], [tabindex="0"]')]
+            .filter((element) => !element.disabled && element.getClientRects().length);
+          const first = controls[0];
+          const last = controls[controls.length - 1];
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        }
+      }}>
+      <header className="academic-fullscreen-header">
+        <div>
+          <h2 id={titleId} className="text-xl font-semibold text-gray-900">{title}</h2>
+          {subtitle ? <p className="mt-1 text-sm text-gray-500">{subtitle}</p> : null}
+        </div>
+        <button ref={closeButtonRef} type="button" onClick={onClose} className="btn btn-secondary shrink-0" aria-label="Close modal">
+          <span className="hidden sm:inline">Close</span><X className="h-4 w-4 shrink-0" aria-hidden="true" />
+        </button>
+      </header>
+      <div className="academic-fullscreen-body">{children}</div>
+    </div>,
+    document.body,
   );
 }
 
