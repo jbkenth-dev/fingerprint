@@ -2,7 +2,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import clsx from "clsx";
-import { Activity, Archive, Asterisk, BadgeCheck, BookOpenText, Building2, CalendarDays, CalendarRange, ChevronDown, CircleCheck, CircleX, Clock, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, Info, LayoutDashboard, LockKeyhole, LogIn, LogOut, Menu, RefreshCw, TriangleAlert, UserCog, UserRound, Users, X } from "lucide-react";
+import { Activity, Archive, Asterisk, BadgeCheck, BookOpenText, Building2, CalendarDays, CalendarRange, ChevronDown, CircleCheck, CircleX, Clock, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, Info, LayoutDashboard, LockKeyhole, LogIn, LogOut, Menu, Pencil, Plus, RefreshCw, Search, Trash2, TriangleAlert, UserCog, UserRound, Users, X } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { panelContent, roleLabels, roles, routeConfig, sampleAttendance } from "./data/mockData";
 import { useMockLoading } from "./hooks/useMockLoading";
@@ -3767,6 +3767,8 @@ function ClassSchedulingPage() {
 
 function AdminDepartmentPage() {
   const [departments, setDepartments] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState("");
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState("10");
@@ -3779,10 +3781,13 @@ function AdminDepartmentPage() {
 
   const fetchDepartments = React.useCallback(async () => {
     try {
+      setLoadError("");
       const data = await apiFetch("/departments.php");
       if (Array.isArray(data)) setDepartments(data);
-    } catch {
-      // keep current state on failure
+    } catch (err) {
+      setLoadError(err.message || "Unable to load departments. Please try again.");
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -3867,10 +3872,15 @@ function AdminDepartmentPage() {
   };
 
   return (
-    <div className="animate-fade-up space-y-4">
+    <div className="department-page animate-fade-up space-y-5">
       <HeaderBlock
         title="Department Management"
-        description="Manage department names used across the system."
+        description="Manage the department names used across your system."
+        rightContent={(
+          <button type="button" onClick={() => { setAddModalOpen(true); setNewName(""); }} className="btn btn-secondary w-full justify-center whitespace-nowrap lg:w-auto">
+            <Plus className="h-4 w-4" aria-hidden="true" /> Add Department
+          </button>
+        )}
       />
       <FeedbackModal
         message={feedback.message}
@@ -3878,103 +3888,113 @@ function AdminDepartmentPage() {
         onClose={() => setFeedback((prev) => ({ ...prev, message: "" }))}
       />
 
-      <section className="card-elevated p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <section className="card-elevated" aria-labelledby="department-directory-title">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 p-5 sm:px-6">
           <div className="flex items-center gap-3">
-            <Field label="Search" hideLabel value={search} onChange={setSearch} placeholder="Search departments..." small />
-          </div>
-          <button type="button" onClick={() => { setAddModalOpen(true); setNewName(""); }} className="btn btn-secondary whitespace-nowrap">
-            Add Department
-          </button>
-        </div>
-      </section>
-
-      <section className="card-elevated p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-          <div className="text-sm text-gray-500">
-            Showing <span className="text-gray-700">{paginated.length}</span> of <span className="text-gray-700">{filtered.length}</span> departments
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500">Rows per page</span>
-            <div className="w-24">
-              <SelectField label="Rows per page" hideLabel small value={pageSize} onChange={setPageSize} options={[{ label: "10", value: "10" }, { label: "30", value: "30" }, { label: "50", value: "50" }]} />
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-50 text-green-700">
+              <Building2 className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 id="department-directory-title" className="text-lg font-semibold text-gray-900">Department Directory</h2>
+                <span className="department-count">{departments.length}</span>
+              </div>
+              <p className="mt-0.5 text-sm text-gray-500">View and maintain your department records.</p>
             </div>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full border-separate border-spacing-y-3">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-[0.18em] text-gray-500">
-                <th className="w-16 px-4 py-2 font-semibold">No.</th>
-                <th className="px-4 py-2 font-semibold">Department Name</th>
-                <th className="px-4 py-2 font-semibold text-right">Actions</th>
-              </tr>
-            </thead>
+        <div className="flex flex-col gap-4 bg-gray-50/60 px-5 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-6">
+          <label className="block w-full sm:max-w-sm">
+            <span className="mb-1.5 block text-xs font-semibold text-gray-600">Search departments</span>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+              <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by department name..." className="form-input department-search" />
+            </div>
+          </label>
+          <label className="flex shrink-0 items-center gap-3 whitespace-nowrap text-sm text-gray-500">
+            Rows per page
+            <select value={pageSize} onChange={(e) => setPageSize(e.target.value)} className="form-input department-page-size" aria-label="Rows per page">
+              <option value="10">10</option><option value="30">30</option><option value="50">50</option>
+            </select>
+          </label>
+        </div>
+
+        {loadError ? (
+          <div role="alert" className="mx-5 my-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <span>{loadError}</span><button type="button" onClick={fetchDepartments} className="btn btn-secondary text-xs">Retry</button>
+          </div>
+        ) : null}
+        <div className="department-table-scroll" role="region" aria-label="Department directory table" tabIndex={0}>
+          <table className="table department-table">
+            <caption className="sr-only">Department directory with edit and delete actions</caption>
+            <thead><tr>
+              <th scope="col" className="w-20">No.</th>
+              <th scope="col">Department Name</th>
+              <th scope="col" className="department-actions-heading">Actions</th>
+            </tr></thead>
             <tbody>
-              {paginated.length > 0 ? (
-                paginated.map((dept, idx) => (
-                  <tr key={dept.id} className="group rounded-xl bg-gray-50/80 transition hover:bg-gray-100/80">
-                    <td className="whitespace-nowrap rounded-l-xl px-4 py-3 text-sm text-gray-500">
-                      {(safePage - 1) * Number(pageSize) + idx + 1}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-800">
+              {loading ? (
+                <tr><td colSpan={3} className="department-empty"><p role="status">Loading departments...</p></td></tr>
+              ) : paginated.length > 0 ? paginated.map((dept, idx) => (
+                <tr key={dept.id} className={editId === dept.id ? "department-editing" : ""}>
+                  <td className="tabular-nums">{(safePage - 1) * Number(pageSize) + idx + 1}</td>
+                  <td>
+                    {editId === dept.id ? (
+                      <input autoFocus aria-label="Edit department name" value={editName} onChange={(e) => setEditName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") saveEdit(dept); if (e.key === "Escape") cancelEdit(); }}
+                        className="form-input w-full" />
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-green-700">
+                          <Building2 className="h-4 w-4" aria-hidden="true" />
+                        </span>
+                        <span className="font-semibold text-gray-800">{dept.name}</span>
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    <div className="flex justify-end gap-2">
                       {editId === dept.id ? (
-                        <input
-                          autoFocus
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") saveEdit(dept);
-                            if (e.key === "Escape") cancelEdit();
-                          }}
-                          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
+                        <>
+                          <button type="button" onClick={() => saveEdit(dept)} className="btn btn-primary text-xs">Save</button>
+                          <button type="button" onClick={cancelEdit} className="btn btn-secondary text-xs">Cancel</button>
+                        </>
                       ) : (
-                        dept.name
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap rounded-r-xl px-4 py-3 text-right">
-                      {editId === dept.id ? (
-                        <div className="flex justify-end gap-2">
-                          <button type="button" onClick={() => saveEdit(dept)} className="btn btn-primary px-3 py-1 text-xs">Save</button>
-                          <button type="button" onClick={cancelEdit} className="btn btn-secondary px-3 py-1 text-xs">Cancel</button>
-                        </div>
-                      ) : (
-                        <div className="flex justify-end gap-2">
-                          <button type="button" onClick={() => startEdit(dept)} className="text-gray-400 transition hover:text-blue-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-4"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" /></svg>
+                        <>
+                          <button type="button" onClick={() => startEdit(dept)} aria-label={`Edit ${dept.name}`} className="btn btn-secondary text-xs">
+                            <Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Edit
                           </button>
-                          <button type="button" onClick={() => setDeleteTarget(dept)} className="text-gray-400 transition hover:text-red-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-4"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                          <button type="button" onClick={() => setDeleteTarget(dept)} aria-label={`Delete ${dept.name}`} className="btn btn-danger text-xs">
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Delete
                           </button>
-                        </div>
+                        </>
                       )}
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={3} className="px-4 py-6 text-center text-gray-500">
-                    {search.trim() ? "No matching departments found." : "No departments found."}
+                    </div>
                   </td>
                 </tr>
+              )) : (
+                <tr><td colSpan={3} className="department-empty">
+                  <Building2 className="mx-auto mb-3 h-8 w-8 text-gray-300" aria-hidden="true" />
+                  <p className="font-semibold text-gray-700">{loadError ? "Department directory unavailable" : search.trim() ? "No matching departments" : "No departments yet"}</p>
+                  <p className="mt-1 text-sm">{loadError ? "Retry loading the department records." : search.trim() ? "Try a different department name." : "Add a department to start building your directory."}</p>
+                  {search.trim() ? <button type="button" onClick={() => setSearch("")} className="btn btn-secondary mt-4 text-xs">Clear search</button> : null}
+                </td></tr>
               )}
             </tbody>
           </table>
         </div>
 
-        {filtered.length > Number(pageSize) ? (
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-sm text-gray-500">
-              Page <span className="text-gray-700">{safePage}</span> of <span className="text-gray-700">{totalPages}</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={safePage === 1} className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
-              <button type="button" onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))} disabled={safePage === totalPages} className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50">Next</button>
-            </div>
-          </div>
-        ) : null}
+        <footer className="flex flex-col gap-3 border-t border-gray-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <p className="text-sm text-gray-500">
+            Showing <span className="font-medium text-gray-700">{filtered.length ? (safePage - 1) * Number(pageSize) + 1 : 0}&ndash;{Math.min(safePage * Number(pageSize), filtered.length)}</span> of <span className="font-medium text-gray-700">{filtered.length}</span> departments
+          </p>
+          <nav aria-label="Department pagination" className="flex items-center gap-2">
+            <button type="button" onClick={() => setPage(safePage - 1)} disabled={safePage === 1} className="btn btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+            <span className="px-1 text-xs text-gray-500">Page {safePage} of {totalPages}</span>
+            <button type="button" onClick={() => setPage(safePage + 1)} disabled={safePage === totalPages} className="btn btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+          </nav>
+        </footer>
       </section>
 
       {addModalOpen

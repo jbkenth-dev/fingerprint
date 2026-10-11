@@ -470,6 +470,74 @@ body,
   overflow-y: auto;
 }
 
+.department-count {
+  border: 1px solid var(--green-200);
+  border-radius: var(--radius-full);
+  padding: 0.125rem 0.625rem;
+  background: var(--green-50);
+  color: var(--green-800);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.department-page .department-search {
+  padding-left: 2.25rem;
+}
+
+.department-page .department-page-size {
+  width: 5rem;
+  flex-shrink: 0;
+}
+
+.department-table-scroll {
+  max-height: 36rem;
+  overflow: auto;
+}
+
+.department-table {
+  min-width: 560px;
+}
+
+.department-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--gray-50);
+  box-shadow: inset 0 -1px var(--gray-200);
+}
+
+.department-table .department-actions-heading {
+  text-align: right;
+}
+
+.department-table td {
+  vertical-align: middle;
+}
+
+.department-table td:nth-child(2) {
+  overflow-wrap: anywhere;
+}
+
+.department-table td:last-child {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.department-table tbody tr:nth-child(even) {
+  background: #f8fafc80;
+}
+
+.department-table tbody tr:hover,
+.department-table tbody tr.department-editing {
+  background: var(--green-50);
+}
+
+.department-table .department-empty {
+  padding: 3.5rem 1.5rem;
+  text-align: center;
+  color: var(--gray-500);
+}
+
 .view-students-modal {
   display: flex;
   flex-direction: column;
