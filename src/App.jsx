@@ -9,6 +9,7 @@ import { useMockLoading } from "./hooks/useMockLoading";
 import { useManilaClock } from "./hooks/useManilaClock";
 import { useAuth } from "./state/AuthContext";
 import { apiFetch } from "./api";
+import { manilaNow, datesInRange, fetchAttendanceRange, classifyAttendance, liveAttendance, searchAttendance } from "./utils/attendance";
 
 const navIcons = {
   "Dashboard & Monitoring": LayoutDashboard,
@@ -1544,7 +1545,7 @@ function DashboardCore({ scope }) {
 function RolePanel({ pageKey, role }) {
   const isDashboard = pageKey === "dashboard";
   // Dashboard fetches real data immediately — skip mock loading so the table renders without flicker
-  const mockLoading = useMockLoading(isDashboard ? null : 3000, `${role}-${pageKey}`);
+  const mockLoading = useMockLoading(isDashboard || pageKey === "attendance" ? null : 3000, `${role}-${pageKey}`);
   const data = panelContent[pageKey];
 
   // Attendance logs state
@@ -1565,55 +1566,6 @@ function RolePanel({ pageKey, role }) {
   const [scheduleLoading, setScheduleLoading] = React.useState(true);
   const [scheduleError, setScheduleError] = React.useState("");
 
-  // Helper functions
-  const timeToMinutes = (timeStr) => {
-    if (!timeStr) return null;
-    const s = timeStr.trim();
-    let meridian = null;
-    let cleaned = s;
-    if (s.toUpperCase().endsWith('AM')) {
-      meridian = 'AM';
-      cleaned = s.slice(0, -2).trim();
-    } else if (s.toUpperCase().endsWith('PM')) {
-      meridian = 'PM';
-      cleaned = s.slice(0, -2).trim();
-    }
-    const parts = cleaned.split(':');
-    if (parts.length < 2) return null;
-    let hours = parseInt(parts[0], 10);
-    const minutes = parseInt(parts[1], 10);
-    if (isNaN(hours) || isNaN(minutes)) return null;
-    if (meridian === 'PM' && hours !== 12) hours += 12;
-    if (meridian === 'AM' && hours === 12) hours = 0;
-    return hours * 60 + minutes;
-  };
-
-  const formatTime = (timeStr) => {
-    if (!timeStr || !/^\d{2}:\d{2}/.test(timeStr)) return "—";
-    const [h, m] = timeStr.slice(0, 5).split(":").map(Number);
-    return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
-  };
-
-  const parseStudentDept = (dept) => {
-    if (!dept) return null;
-    const yearMap = { 1: "1st Year", 2: "2nd Year", 3: "3rd Year", 4: "4th Year" };
-    const fullMatch = dept.match(/(\d)[^-]*-\s*([A-E])$/i);
-    if (fullMatch) {
-      return { yearLevel: yearMap[parseInt(fullMatch[1], 10)] || null, section: fullMatch[2].toUpperCase() };
-    }
-    const shortMatch = dept.match(/(\d)\s*([A-E])$/i);
-    if (shortMatch) {
-      return { yearLevel: yearMap[parseInt(shortMatch[1], 10)] || null, section: shortMatch[2].toUpperCase() };
-    }
-    return null;
-  };
-
-  const getManilaDayFromDate = (dateStr) => {
-    const dayNameMap = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-    const d = new Date(dateStr);
-    return dayNameMap[d.getDay()] || "";
-  };
-
   // Fetch schedule data
   React.useEffect(() => {
     const loadSchedule = async () => {
@@ -1633,12 +1585,20 @@ function RolePanel({ pageKey, role }) {
 
 // Admin attendance page state
   const [searchTerm, setSearchTerm] = React.useState('');
-  const [selectedDate, setSelectedDate] = React.useState(() => {
-    const today = new Date();
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  });
-  const [viewMode, setViewMode] = React.useState('present'); // present, late, absent, live
-  const [liveUpdateInterval, setLiveUpdateInterval] = React.useState(null);
+  const [startDate, setStartDate] = React.useState(() => manilaNow().date);
+  const [endDate, setEndDate] = React.useState(() => manilaNow().date);
+  const [viewMode, setViewMode] = React.useState('live');
+  const [loadedPeriod, setLoadedPeriod] = React.useState('');
+  const [refreshVersion, setRefreshVersion] = React.useState(0);
+  const [lastUpdated, setLastUpdated] = React.useState(null);
+  useManilaClock(); // Keep today's date and class windows current, including Manila midnight.
+  const { date: manilaToday, minutes: manilaMinutes } = manilaNow();
+  const rangeError = !startDate || !endDate ? 'Select both a start date and an end date.'
+    : !datesInRange(startDate, endDate).length ? 'End date must be on or after start date.'
+    : endDate > manilaToday ? 'Choose dates up to today.' : '';
+  const periodKey = viewMode === 'live' ? `live:${manilaToday}` : `${startDate}:${endDate}`;
+  const [classifiedPage, setClassifiedPage] = React.useState(1);
+  const classifiedPageSize = 10;
 
   const fetchAttendanceLogs = React.useCallback(async (date, page, filters = {}) => {
     setAttendanceLoading(true);
@@ -1687,636 +1647,60 @@ function RolePanel({ pageKey, role }) {
     return `${normalizedHours}:${minutesText} ${suffix}`;
   }
 
-  function minutesToTimeString(minutes) {
-    if (minutes === null) return "";
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    const suffix = hours >= 12 ? "PM" : "AM";
-    const displayHours = hours % 12 || 12;
-    return `${displayHours}:${String(mins).padStart(2, "0")} ${suffix}`;
-  }
-
-  function attendanceMethod(source) {
-    return source === "esp32" || source === "esp32-sync" ? "Fingerprint + Card" : source;
-  }
-
   // Check if this is the admin attendance page
   const isAdminAttendancePage = !isDashboard && pageKey === "attendance" && role === "admin";
 
-// Classified attendance storage
-  const [presentRecords, setPresentRecords] = React.useState([]);
-  const [lateRecords, setLateRecords] = React.useState([]);
-  const [absentRecords, setAbsentRecords] = React.useState([]);
-  const [classifiedLoading, setClassifiedLoading] = React.useState(false);
-  const [classifiedError, setClassifiedError] = React.useState("");
-  const [classifiedPage, setClassifiedPage] = React.useState(1);
-  const classifiedPageSize = 10;
-
-  // Compute classified attendance for a given date
-  const computeClassifiedAttendance = React.useCallback(async (date) => {
-    if (!isAdminAttendancePage) return;
-
-    setClassifiedLoading(true);
-    setClassifiedError("");
-
-    try {
-      // Fetch attendance logs for the date
-      const params = new URLSearchParams();
-      if (date) {
-        params.set("date", date);
-      }
-      const attendanceResult = await apiFetch(`/attendance.php?${params.toString()}`);
-      const attendanceLogs = Array.isArray(attendanceResult.records) ? attendanceResult.records : [];
-
-      // Group attendance logs by userId and date for efficient lookup
-      const attendanceByUserDate = new Map();
-      attendanceLogs.forEach(record => {
-        const key = `${record.userId}-${record.logDate}`;
-        if (!attendanceByUserDate.has(key)) {
-          attendanceByUserDate.set(key, []);
-        }
-        attendanceByUserDate.get(key).push(record);
-      });
-
-      // Get today's date for live mode comparisons
-      const today = new Date();
-      const todayString = today.toISOString().split('T')[0];
-
-      // Determine which date we're computing for
-      const targetDate = date || todayString;
-      const isToday = targetDate === todayString;
-
-      // Get schedules for the target date
-      const targetDateObj = new Date(targetDate);
-      const dayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][targetDateObj.getDay()];
-      const schedulesForDate = scheduleRows.filter(schedule =>
-        Array.isArray(schedule.days) && schedule.days.includes(dayName)
-      );
-
-      // Get active students
-      const activeStudents = users.filter(u => u.role === "student" && u.status === "Active");
-
-      // Initialize result arrays
-      const present = [];
-      const late = [];
-      const absent = [];
-
-      // Process each schedule
-      for (const schedule of schedulesForDate) {
-        // Get students enrolled in this schedule
-        const enrolledStudents = activeStudents.filter(student => {
-          const parsed = parseStudentDept(student.department);
-          return parsed &&
-            parsed.yearLevel === schedule.yearLevel &&
-            parsed.section === schedule.section;
-        });
-
-        // Process each student
-        for (const student of enrolledStudents) {
-          const studentAttendanceLogs = attendanceByUserDate.get(`${student.id}-${targetDate}`) || [];
-
-          // Find IN records for this student on this date
-          const inRecords = studentAttendanceLogs.filter(record => record.status === "IN");
-
-          let classification = "Absent";
-          let reason = "No Time IN";
-          let timeIn = "";
-          let timeOut = "";
-
-          if (inRecords.length > 0) {
-            // Sort IN records by time to get the earliest
-            const sortedInRecords = [...inRecords].sort((a, b) => {
-              const timeA = a.logTime ? timeToMinutes(a.logTime) : -1;
-              const timeB = b.logTime ? timeToMinutes(b.logTime) : -1;
-              return timeA - timeB;
-            });
-            const earliestIn = sortedInRecords[0];
-            const inMin = timeToMinutes(earliestIn.logTime);
-
-            // Calculate schedule times
-            const startMin = timeToMinutes(schedule.startTime);
-            const endMin = timeToMinutes(schedule.endTime);
-
-            if (startMin !== null && endMin !== null && inMin !== null) {
-              const presentStart = startMin - 15;
-              const presentEnd = startMin + 15;
-              const lateEnd = endMin + 15;
-
-              if (inMin >= presentStart && inMin <= presentEnd) {
-                classification = "Present";
-                reason = "On Time";
-              } else if (inMin > presentStart && inMin <= lateEnd) {
-                classification = "Late";
-                reason = "Late Arrival";
-              } else {
-                classification = "Absent";
-                reason = "Outside Valid Window";
-              }
-
-              // For Present and Late, try to get paired IN/OUT times
-              if (classification === "Present" || classification === "Late") {
-                // Pair IN and OUT chronologically
-                const sortedAllRecords = [...studentAttendanceLogs].sort((a, b) => {
-                  const timeA = a.logTime ? timeToMinutes(a.logTime) : -1;
-                  const timeB = b.logTime ? timeToMinutes(b.logTime) : -1;
-                  return timeA - timeB;
-                });
-
-                const pendingIn = [];
-                let pairedOutTime = null;
-
-                for (const rec of sortedAllRecords) {
-                  if (rec.status === "IN") {
-                    pendingIn.push(rec.logTime);
-                  } else if (rec.status === "OUT" && pendingIn.length > 0) {
-                    pendingIn.shift(); // Pair with earliest IN
-                    if (pendingIn.length === 0) {
-                      // We've paired the earliest IN
-                      pairedOutTime = rec.logTime;
-                      break;
-                    }
-                  }
-                }
-
-                timeIn = earliestIn.logTime;
-                timeOut = pairedOutTime || "";
-              }
-            }
-          }
-
-          // Create record
-          const record = {
-            userId: student.id,
-            logDate: targetDate,
-            name: [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" "),
-            idNumber: student.idNumber || student.username || 'N/A',
-            classes: `${schedule.subjectCode} — ${schedule.subjectName}`,
-            timeSchedule: `${formatTime(schedule.startTime)} – ${formatTime(schedule.endTime)}`,
-            timeIn,
-            timeOut,
-            status: classification,
-            reason
-          };
-
-          // Add to appropriate array
-          if (classification === "Present") {
-            present.push(record);
-          } else if (classification === "Late") {
-            late.push(record);
-          } else {
-            absent.push(record);
-          }
-        }
-      }
-
-      // Update state
-      setPresentRecords(present);
-      setLateRecords(late);
-      setAbsentRecords(absent);
-    } catch (err) {
-      setClassifiedError(err.message || "Failed to compute classified attendance.");
-      setPresentRecords([]);
-      setLateRecords([]);
-      setAbsentRecords([]);
-    } finally {
-      setClassifiedLoading(false);
-    }
-  }, [isAdminAttendancePage, users, scheduleRows, parseStudentDept, formatTime, timeToMinutes]);
-
-  // Compute classified attendance when selectedDate changes
   React.useEffect(() => {
-    if (isAdminAttendancePage && viewMode !== 'live') {
-      computeClassifiedAttendance(selectedDate);
+    if (!isAdminAttendancePage || (viewMode !== 'live' && rangeError)) return;
+    const controller = new AbortController();
+    let active = true;
+    let timer;
+    const first = viewMode === 'live' ? manilaToday : startDate;
+    const last = viewMode === 'live' ? manilaToday : endDate;
+    async function load() {
+      setAttendanceLoading(true);
+      setAttendanceError('');
+      try {
+        const records = await fetchAttendanceRange(apiFetch, first, last, controller.signal);
+        if (!active) return;
+        setAttendanceLogs(records);
+        setLoadedPeriod(periodKey);
+        setLastUpdated(new Date());
+      } catch (error) {
+        if (!active || controller.signal.aborted) return;
+        setAttendanceLogs([]);
+        setAttendanceError(error.message || 'Failed to load attendance records.');
+      } finally {
+        if (active) {
+          setAttendanceLoading(false);
+          if (viewMode === 'live') timer = setTimeout(load, 5000);
+        }
+      }
     }
-  }, [isAdminAttendancePage, viewMode, selectedDate, computeClassifiedAttendance]);
+    load();
+    return () => {
+      active = false;
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [isAdminAttendancePage, viewMode === 'live', startDate, endDate, manilaToday, periodKey, rangeError, refreshVersion]);
 
-  // Set selectedDate to today when switching to live mode
   React.useEffect(() => {
-    if (isAdminAttendancePage && viewMode === 'live') {
-      const today = new Date();
-      const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      setSelectedDate(todayString);
+    setAttendancePage(1);
+    setClassifiedPage(1);
+  }, [viewMode, startDate, endDate, searchTerm]);
+
+  const classified = React.useMemo(() => {
+    if (!isAdminAttendancePage || viewMode === 'live' || loadedPeriod !== periodKey || rangeError) {
+      return { present: [], late: [], absent: [] };
     }
-  }, [isAdminAttendancePage, viewMode, setSelectedDate]);
+    return classifyAttendance(attendanceLogs, users, scheduleRows, startDate, endDate);
+  }, [isAdminAttendancePage, viewMode === 'live', loadedPeriod, periodKey, rangeError, attendanceLogs, users, scheduleRows, startDate, endDate, manilaMinutes]);
 
-  // Filtered attendance based on search (only for admin attendance page)
-  const filteredAttendance = React.useMemo(() => {
-    if (!isAdminAttendancePage) return attendanceLogs;
-
-    return attendanceLogs.filter(record => {
-      // Apply search filter
-      if (searchTerm) {
-        const searchLower = searchTerm.toLowerCase();
-        const matchesSearch = record.name?.toLowerCase().includes(searchLower) ||
-          record.idNumber?.toLowerCase().includes(searchLower);
-        if (!matchesSearch) return false;
-      }
-
-      // Always include record (date filtering is handled at fetch level)
-      return true;
-    });
-  }, [attendanceLogs, searchTerm]);
-
-  // Today's statistics (for cards - only for admin attendance page)
-  const today = new Date();
-  const todayString = today.toDateString();
-  const todayRecords = isAdminAttendancePage ? attendanceLogs.filter(record =>
-    new Date(record.logDate).toDateString() === todayString
-  ) : [];
-
-  const todayPresentCount = isAdminAttendancePage ? todayRecords.filter(record => record.status === 'IN').length : 0;
-  const todayAbsentCount = isAdminAttendancePage ? todayRecords.filter(record => record.status === 'OUT').length : 0;
-
-  // Calculate late arrivals (requires schedule data which we don't have in this context)
-  // For now, we'll approximate late as IN records after 9:00 AM
-  const todayLateCount = isAdminAttendancePage ? todayRecords.filter(record => {
-    const timeIn = record.logTime;
-    if (!timeIn) return false;
-    const [hours, minutes] = timeIn.split(':').map(Number);
-    return hours > 9 || (hours === 9 && minutes > 0);
-  }).length : 0;
-
-  const mergedAttendance = React.useMemo(() => {
-    // Group filteredAttendance by userId and logDate
-    const groups = new Map();
-    filteredAttendance.forEach(record => {
-      const key = `${record.userId}-${record.logDate}`;
-      let group = groups.get(key);
-      if (!group) {
-        group = {
-          userId: record.userId,
-          logDate: record.logDate,
-          records: [],
-          name: record.name,
-          idNumber: record.idNumber || record.username || 'N/A'
-        };
-        groups.set(key, group);
-      }
-      group.records.push(record);
-    });
-
-    const result = [];
-
-    for (const group of groups.values()) {
-      const { userId, logDate, name, idNumber, records } = group;
-
-      // Sort records by logTime ascending
-      const sortedRecords = [...records].sort((a, b) => {
-        const timeA = a.logTime ? timeToMinutes(a.logTime) : -1;
-        const timeB = b.logTime ? timeToMinutes(b.logTime) : -1;
-        return timeA - timeB;
-      });
-
-      // Pair IN and OUT chronologically: each IN pairs with the next OUT after it.
-      const pendingIn = []; // store {time:string}
-      for (const rec of sortedRecords) {
-        if (rec.status === "IN") {
-          pendingIn.push({time: rec.logTime});
-        } else if (rec.status === "OUT") {
-          if (pendingIn.length > 0) {
-            // Pair earliest pending IN with this OUT
-            const inObj = pendingIn.shift();
-            const timeIn = inObj.time;
-            const timeOut = rec.logTime;
-
-            // Create a session entry
-            const inMin = timeToMinutes(timeIn);
-            const outMin = timeToMinutes(timeOut);
-            const entry = {
-              userId,
-              logDate,
-              name,
-              idNumber,
-              classes: "-",
-              timeSchedule: "-",
-              timeIn: inMin !== null ? minutesToTimeString(inMin) : "",
-              timeOut: outMin !== null ? minutesToTimeString(outMin) : "",
-              status: "Invalid",
-              reason: "No Time Scheduled",
-              rawInTime: inMin // keep raw for validation (minutes)
-            };
-
-            // If this is the admin attendance page, compute classes, timeSchedule, status, reason
-            if (isAdminAttendancePage && timeIn) {
-              const user = users.find(u => u.id === userId);
-              if (user) {
-                const parsed = parseStudentDept(user.department);
-                if (parsed) {
-                  const dayName = getManilaDayFromDate(logDate);
-                  const schedule = scheduleRows.find(
-                    s => s.yearLevel === parsed.yearLevel &&
-                         s.section === parsed.section &&
-                         Array.isArray(s.days) &&
-                         s.days.includes(dayName)
-                  );
-                  if (schedule) {
-                    entry.classes = `${schedule.subjectCode} — ${schedule.subjectName}`;
-                    entry.timeSchedule = `${formatTime(schedule.startTime)} – ${formatTime(schedule.endTime)}`;
-                    // Determine validity based on IN time
-                    const inMin = timeToMinutes(timeIn);
-                    const startMin = timeToMinutes(schedule.startTime);
-                    const endMin = timeToMinutes(schedule.endTime);
-                    if (startMin !== null && endMin !== null && inMin !== null) {
-                      const windowStart = startMin - 15;
-                      const windowEnd = endMin - 15;
-                      if (inMin >= windowStart && inMin <= windowEnd) {
-                        entry.status = "Valid";
-                        entry.reason = "Time Scheduled";
-                      } else {
-                        entry.status = "Invalid";
-                        entry.reason = "No Time Scheduled";
-                        entry.classes = "-";
-                        entry.timeSchedule = "-";
-                      }
-                    }
-                  }
-                }
-              }
-            }
-
-            result.push(entry);
-          } else {
-            // Unpaired OUT (no preceding IN)
-            const outMin = timeToMinutes(rec.logTime);
-            const entry = {
-              userId,
-              logDate,
-              name,
-              idNumber,
-              classes: "-",
-              timeSchedule: "-",
-              timeIn: "",
-              timeOut: outMin !== null ? minutesToTimeString(outMin) : "",
-              status: "Invalid",
-              reason: "No Time Scheduled",
-              rawInTime: null
-            };
-            result.push(entry);
-          }
-        }
-      }
-
-      // Any remaining INs without a matching OUT
-      while (pendingIn.length > 0) {
-        const inObj = pendingIn.shift();
-        const timeIn = inObj.time;
-
-        const inMin = timeToMinutes(timeIn);
-        const entry = {
-          userId,
-          logDate,
-          name,
-          idNumber,
-          classes: "-",
-          timeSchedule: "-",
-          timeIn: inMin !== null ? minutesToTimeString(inMin) : "",
-          timeOut: "",
-          status: "Invalid",
-          reason: "No Time Scheduled",
-          rawInTime: inMin // keep raw for validation (minutes)
-        };
-
-        // If this is the admin attendance page, compute classes, timeSchedule, status, reason
-        if (isAdminAttendancePage && timeIn) {
-          const user = users.find(u => u.id === userId);
-          if (user) {
-            const parsed = parseStudentDept(user.department);
-            if (parsed) {
-              const dayName = getManilaDayFromDate(logDate);
-              const schedule = scheduleRows.find(
-                s => s.yearLevel === parsed.yearLevel &&
-                     s.section === parsed.section &&
-                     Array.isArray(s.days) &&
-                     s.days.includes(dayName)
-              );
-              if (schedule) {
-                entry.classes = `${schedule.subjectCode} — ${schedule.subjectName}`;
-                entry.timeSchedule = `${formatTime(schedule.startTime)} – ${formatTime(schedule.endTime)}`;
-                // Determine validity based on IN time
-                const inMin = timeToMinutes(timeIn);
-                const startMin = timeToMinutes(schedule.startTime);
-                const endMin = timeToMinutes(schedule.endTime);
-                if (startMin !== null && endMin !== null && inMin !== null) {
-                  const windowStart = startMin - 15;
-                  const windowEnd = endMin - 15;
-                  if (inMin >= windowStart && inMin <= windowEnd) {
-                    entry.status = "Valid";
-                    entry.reason = "Time Scheduled";
-                  } else {
-                    entry.status = "Invalid";
-                    entry.reason = "No Time Scheduled";
-                    entry.classes = "-";
-                    entry.timeSchedule = "-";
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        result.push(entry);
-      }
-    }
-
-    return result;
-  }, [filteredAttendance, users, scheduleRows, isAdminAttendancePage]);
-
+  const mergedAttendance = React.useMemo(() => liveAttendance(attendanceLogs, users, scheduleRows, manilaToday),
+    [attendanceLogs, users, scheduleRows, manilaToday]);
   const totalAttendancePages = Math.max(1, Math.ceil(mergedAttendance.length / pageSize));
 
-  // Duplicate detection (only for admin attendance page)
-  const duplicateRecords = React.useMemo(() => {
-    if (!isAdminAttendancePage) return [];
-
-    const duplicates = [];
-    const seen = new Map();
-
-    attendanceLogs.forEach(record => {
-      const key = `${record.userId}-${record.logDate}`;
-      if (seen.has(key)) {
-        // This is a duplicate
-        const existingRecord = seen.get(key);
-        duplicates.push({
-          id: record.id,
-          userId: record.userId,
-          name: record.name,
-          logDate: record.logDate,
-          logTime: record.logTime,
-          status: record.status,
-          type: 'Same User & Date'
-        });
-        // Also mark the original as duplicate if not already marked
-        if (!seen.get(key).isMarkedDuplicate) {
-          duplicates.push({
-            id: existingRecord.id,
-            userId: existingRecord.userId,
-            name: existingRecord.name,
-            logDate: existingRecord.logDate,
-            logTime: existingRecord.logTime,
-            status: existingRecord.status,
-            type: 'Same User & Date'
-          });
-          seen.get(key).isMarkedDuplicate = true;
-        }
-      } else {
-        seen.set(key, { ...record, isMarkedDuplicate: false });
-      }
-    });
-
-    return duplicates;
-  }, [attendanceLogs, isAdminAttendancePage]);
-
-  // Fetch attendance logs for admin attendance page when filters change or viewMode changes
-  React.useEffect(() => {
-    if (!isAdminAttendancePage) return;
-
-    // Live mode is handled by the live effect, so skip here.
-    if (viewMode === 'live') {
-      return;
-    }
-
-    setAttendancePage(1);
-    fetchAttendanceLogs(selectedDate, 1, {});
-  }, [isAdminAttendancePage, viewMode, selectedDate, fetchAttendanceLogs]);
-
-  // Live attendance updates (polling every 10 seconds - only for admin attendance page)
-  React.useEffect(() => {
-    if (!isAdminAttendancePage || viewMode !== 'live') {
-      // If not in live mode, clean up and return
-      if (liveUpdateInterval !== null) {
-        clearInterval(liveUpdateInterval);
-        setLiveUpdateInterval(null);
-      }
-      return;
-    }
-
-    // We are in live mode
-
-    // Clear any existing interval
-    if (liveUpdateInterval !== null) {
-      clearInterval(liveUpdateInterval);
-    }
-
-    // Fetch initial data for today
-    const today = new Date();
-    const todayString = today.toISOString().split('T')[0];
-    fetchAttendanceLogs(todayString, 1, {});
-
-    // Set up interval to fetch every 5 seconds
-    const interval = setInterval(() => {
-      const currentDate = new Date();
-      const currentDateString = currentDate.toISOString().split('T')[0];
-      fetchAttendanceLogs(currentDateString, 1, {}); // Page 1 for latest records
-    }, 5000);
-
-    setLiveUpdateInterval(interval);
-
-    // Cleanup
-    return () => {
-      if (liveUpdateInterval !== null) {
-        clearInterval(liveUpdateInterval);
-      }
-    };
-  }, [isAdminAttendancePage, viewMode, fetchAttendanceLogs]);
-
-  // Export function (only for admin attendance page)
-  const handleExportAttendance = React.useCallback(() => {
-    if (!isAdminAttendancePage) {
-      alert('No data to export');
-      return;
-    }
-
-    let recordsToExport = [];
-    let fileNameSuffix = '';
-
-    if (viewMode === 'live') {
-      // For live mode, export mergedAttendance (today's paired records)
-      if (mergedAttendance.length === 0) {
-        alert('No data to export');
-        return;
-      }
-      recordsToExport = mergedAttendance;
-      fileNameSuffix = '-live';
-    } else {
-      // For present/late/absent modes, export the classified data
-      let records = [];
-      switch (viewMode) {
-        case 'present':
-          records = presentRecords;
-          break;
-        case 'late':
-          records = lateRecords;
-          break;
-        case 'absent':
-          records = absentRecords;
-          break;
-        default:
-          records = [];
-      }
-
-      if (records.length === 0) {
-        alert('No data to export');
-        return;
-      }
-      recordsToExport = records;
-      fileNameSuffix = `-${viewMode}`;
-    }
-
-    // Prepare CSV data
-    const csvRows = [];
-
-    // Header
-    csvRows.push(['Francis Key Attendance Export']);
-    csvRows.push([`Generated: ${new Date().toLocaleString()}`]);
-    csvRows.push([]);
-
-    // Filters applied
-    csvRows.push(['Applied Filters:']);
-    csvRows.push([`Search: ${searchTerm || 'None'}`]);
-    if (viewMode === 'live') {
-      csvRows.push(['View: Live Attendance (Today)']);
-    } else {
-      csvRows.push([`View: ${viewMode.charAt(0).toUpperCase() + viewMode.slice(1)}`]);
-      csvRows.push([`Date: ${selectedDate}`]);
-    }
-    csvRows.push([]);
-
-    // Data header
-    csvRows.push(['No.', 'Name', 'ID Number', 'Classes', 'Time Schedule', 'Date', 'Time IN', 'Time OUT', 'Status', 'Reason']);
-
-    // Data rows
-    recordsToExport.forEach((entry, index) => {
-      csvRows.push([
-        index + 1,
-        entry.name,
-        entry.idNumber,
-        entry.classes,
-        entry.timeSchedule,
-        entry.logDate,
-        entry.timeIn,
-        entry.timeOut,
-        entry.status,
-        entry.reason
-      ]);
-    });
-
-    // Generate CSV
-    const csvContent = csvRows.map(row =>
-      row.map(field =>
-        `"${String(field).replace(/"/g, '""')}"`
-      ).join(',')
-    ).join('\n');
-
-    // Create download link
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `francis-key-attendance${fileNameSuffix}-${selectedDate || new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [isAdminAttendancePage, viewMode, selectedDate, searchTerm, presentRecords, lateRecords, absentRecords, mergedAttendance]);
   const dashboardMetrics = React.useMemo(() => {
     if (!isDashboard || !attendanceLogs.length) return data.metrics;
 
@@ -2346,53 +1730,36 @@ function RolePanel({ pageKey, role }) {
     return Array.from(map.values());
   }, [isDashboard, attendanceLogs]);
 
-  // Compute table data for admin attendance page based on viewMode
   const tableData = React.useMemo(() => {
-    if (!isAdminAttendancePage) {
-      return {
-        records: [],
-        currentPage: 1,
-        pageSize: 10,
-        totalPages: 1,
-        hasData: false
-      };
-    }
+    const records = searchAttendance(viewMode === 'live' ? mergedAttendance : classified[viewMode] || [], searchTerm);
+    const totalPages = Math.max(1, Math.ceil(records.length / classifiedPageSize));
+    return { records, currentPage: Math.min(viewMode === 'live' ? attendancePage : classifiedPage, totalPages),
+      pageSize: classifiedPageSize, totalPages, hasData: records.length > 0 };
+  }, [viewMode, mergedAttendance, classified, searchTerm, attendancePage, classifiedPage]);
+  const tableError = (viewMode !== 'live' && rangeError) || attendanceError || scheduleError;
+  const tableLoading = !tableError && (attendanceLoading || scheduleLoading || loadedPeriod !== periodKey);
+  const periodLabel = viewMode === 'live' ? `Today · ${manilaToday}` : startDate === endDate ? startDate : `${startDate} – ${endDate}`;
 
-    let records = [];
-    let currentPage = 1;
-    let pageSize = 10;
-    let totalPages = 1;
-
-    if (viewMode === 'live') {
-      records = mergedAttendance;
-      currentPage = attendancePage;
-      pageSize = 10; // Same as original
-      totalPages = Math.max(1, Math.ceil(mergedAttendance.length / pageSize));
-    } else if (viewMode === 'present') {
-      records = presentRecords;
-      currentPage = classifiedPage;
-      pageSize = classifiedPageSize;
-      totalPages = Math.max(1, Math.ceil(presentRecords.length / pageSize));
-    } else if (viewMode === 'late') {
-      records = lateRecords;
-      currentPage = classifiedPage;
-      pageSize = classifiedPageSize;
-      totalPages = Math.max(1, Math.ceil(lateRecords.length / pageSize));
-    } else if (viewMode === 'absent') {
-      records = absentRecords;
-      currentPage = classifiedPage;
-      pageSize = classifiedPageSize;
-      totalPages = Math.max(1, Math.ceil(absentRecords.length / pageSize));
-    }
-
-    return {
-      records,
-      currentPage,
-      pageSize,
-      totalPages,
-      hasData: records.length > 0
-    };
-  }, [isAdminAttendancePage, viewMode, attendancePage, classifiedPage, mergedAttendance, presentRecords, lateRecords, absentRecords]);
+  function handleExportAttendance() {
+    if (tableLoading || tableError || !tableData.hasData) return;
+    const rows = [
+      ['Francis Key Attendance Export'],
+      ['View', viewMode], ['Start date', viewMode === 'live' ? manilaToday : startDate],
+      ['End date', viewMode === 'live' ? manilaToday : endDate], ['Timezone', 'Asia/Manila'], ['Search', searchTerm], [],
+      ['No.', 'Name', 'ID Number', 'Class', 'Schedule', 'Date', 'Time IN', 'Time OUT', 'Status', 'Reason'],
+      ...tableData.records.map((entry, index) => [index + 1, entry.name, entry.idNumber, entry.classes,
+        entry.timeSchedule, entry.logDate, entry.timeIn, entry.timeOut, entry.status, entry.reason]),
+    ];
+    const csv = rows.map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8;' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `attendance-${viewMode}-${viewMode === 'live' ? manilaToday : `${startDate}-to-${endDate}`}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
 
   if (mockLoading) return <DashboardSkeleton />;
 
@@ -2405,6 +1772,7 @@ function RolePanel({ pageKey, role }) {
         </div>
       </section>
 
+      {isDashboard && (
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {dashboardMetrics.map((metric) => (
           <article key={metric.label} className="card-elevated p-5">
@@ -2414,6 +1782,8 @@ function RolePanel({ pageKey, role }) {
           </article>
         ))}
       </section>
+
+      )}
 
       {isDashboard ? (
         <section>
@@ -2532,268 +1902,140 @@ function RolePanel({ pageKey, role }) {
           </article>
         </section>
       ) : (
-        <>
-          {/* Admin Attendance Management Page */}
-        <section className="space-y-6">
-          {/* Header with title and export button */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-                          </div>
-            <button
-              onClick={handleExportAttendance}
-              className="btn btn-secondary inline-flex items-center gap-2 text-sm"
-            >
-              <FileBarChart size={16} />
-              Export
-            </button>
-          </div>
-          {/* Controls Section */}
-          <section className="space-y-4">
-            {/* View Tabs */}
-            <div className="flex flex-wrap gap-2 mb-4">
-              {[{
-                label: "Present",
-                value: "present"
-              }, {
-                label: "Live Attendance",
-                value: "live"
-              }, {
-                label: "Late",
-                value: "late"
-              }, {
-                label: "Absent",
-                value: "absent"
-              }].map((tab) => (
-                <button
-                  key={tab.value}
-                  onClick={() => setViewMode(tab.value)}
-                  className={`
-                    px-4 py-2 rounded-md text-sm font-medium
-                    ${viewMode === tab.value
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }
-                  `}
-                >
-                  {tab.label}
-                </button>
-              ))}
+        <section className="card-elevated overflow-hidden">
+          <div className="border-b border-gray-100 p-5 sm:p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap gap-1 rounded-xl bg-gray-100 p-1" role="tablist" aria-label="Attendance view">
+                {[
+                  { value: 'live', label: 'Live', Icon: Activity },
+                  { value: 'present', label: 'Present', Icon: CircleCheck },
+                  { value: 'late', label: 'Late', Icon: Clock },
+                  { value: 'absent', label: 'Absent', Icon: CircleX },
+                ].map(({ value, label, Icon }) => (
+                  <button key={value} type="button" role="tab" id={`attendance-tab-${value}`}
+                    aria-selected={viewMode === value} aria-controls="attendance-results"
+                    onClick={() => setViewMode(value)}
+                    className={clsx('inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-green-600',
+                      viewMode === value ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500 hover:bg-white/60 hover:text-gray-800')}>
+                    <Icon size={16} />{label}
+                  </button>
+                ))}
+              </div>
+              <button type="button" onClick={handleExportAttendance}
+                disabled={tableLoading || Boolean(tableError) || !tableData.hasData}
+                className="btn btn-primary inline-flex items-center justify-center gap-2 text-sm disabled:cursor-not-allowed disabled:opacity-50 sm:ml-auto">
+                <FileBarChart size={16} />Export
+              </button>
             </div>
 
-            {/* Search and Filters */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {/* Search */}
-              <div className="flex flex-col">
-                <label className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-1">
-                  Search Records
-                </label>
-                <input
-                  type="text"
-                  placeholder="Search name or ID Number"
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    setAttendancePage(1); // Reset to first page when searching
-                  }}
-                  className="form-input w-full rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
-
-              
-              
-                          </div>
-          </section>
-
-          {/* Attendance Records Table */}
-          <section className="space-y-4">
-            {viewMode === 'live' && (
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-lg font-semibold text-gray-800">Live Attendance Feed</h2>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
-                    ● Live Updates Active
-                  </span>
+            <div className="mt-5 grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <label className={clsx('block', viewMode === 'live' ? 'sm:col-span-2 lg:col-span-3' : 'sm:col-span-2')}>
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">Search records</span>
+                <input type="search" value={searchTerm} placeholder="Search by student name or ID number"
+                  onChange={event => setSearchTerm(event.target.value)}
+                  className="form-input w-full rounded-lg px-3 py-2.5 text-sm" />
+              </label>
+              {viewMode !== 'live' && (
+                <>
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">From date</span>
+                    <input type="date" value={startDate} max={endDate || manilaToday}
+                      aria-invalid={Boolean(rangeError)} aria-describedby={rangeError ? 'attendance-range-error' : undefined}
+                      onChange={event => setStartDate(event.target.value)}
+                      className="form-input w-full rounded-lg px-3 py-2.5 text-sm" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-gray-500">To date</span>
+                    <input type="date" value={endDate} min={startDate} max={manilaToday}
+                      aria-invalid={Boolean(rangeError)} aria-describedby={rangeError ? 'attendance-range-error' : undefined}
+                      onChange={event => setEndDate(event.target.value)}
+                      className="form-input w-full rounded-lg px-3 py-2.5 text-sm" />
+                  </label>
+                </>
+              )}
+              {viewMode === 'live' && (
+                <div className="flex items-center gap-2 rounded-lg border border-green-100 bg-green-50 px-3 py-2.5 text-sm font-medium text-green-700">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />Today only · Manila
                 </div>
-              </div>
-            )}
-            {viewMode !== 'live' && (
-              <h2 className="text-lg font-semibold text-gray-800">Attendance Records</h2>
-            )}
-
-            {/* Table Container */}
-            <div className="mt-4">
-              {attendanceError ? (
-                <div className="alert alert-error">
-                  <p className="font-semibold">Failed to load attendance records</p>
-                  <p className="mt-1 text-xs opacity-80">{attendanceError}</p>
-                </div>
-              ) : attendanceLoading ? (
-                <div className="text-center py-8">
-                  Loading attendance records...
-                </div>
-              ) : (
-                  !tableData.hasData ? (
-                    <div className="text-center py-8 text-gray-500">
-                      {viewMode === 'live'
-                        ? 'No attendance records found for today.'
-                        : `No ${viewMode} records found for the selected date.`}
-                    </div>
-                  ) : (
-                    <>
-                      <div className="overflow-x-auto">
-                        <table className="table min-w-full">
-                          <thead>
-                            <tr className="border-b border-gray-100">
-                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                                #
-                              </th>
-                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                                Name
-                              </th>
-                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                                ID Number
-                              </th>
-                              {viewMode !== 'absent' && (
-                                <>
-                                  <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                                    Classes
-                                  </th>
-                                  <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                                    Time Schedule
-                                  </th>
-                                </>
-                              )}
-                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                                Date
-                              </th>
-                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                                Time IN
-                              </th>
-                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                                Time OUT
-                              </th>
-                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                                Status
-                              </th>
-                              <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                                Reason
-                              </th>
-                              {viewMode === 'duplicates' && (
-                                <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-gray-500">
-                                  Duplicate Type
-                                </th>
-                              )}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {tableData.records.slice((tableData.currentPage - 1) * tableData.pageSize, tableData.currentPage * tableData.pageSize).map((entry, index) => {
-                              const actualIndex = (tableData.currentPage - 1) * tableData.pageSize + index + 1;
-                              const isDuplicate = duplicateRecords.some(dup =>
-                                dup.userId === entry.userId && dup.logDate === entry.logDate
-                              );
-
-                              return (
-                                <tr
-                                  key={`${entry.userId}-${entry.logDate}`}
-                                  className={`border-b border-gray-50 ${isDuplicate ? 'bg-red-50' : ''}`}
-                                >
-                                  <td className="px-4 py-3 text-xs text-gray-500">{actualIndex}</td>
-                                  <td className="px-4 py-3 font-medium text-gray-800">{entry.name}</td>
-                                  <td className="px-4 py-3 text-sm text-gray-600">
-                                    {entry.idNumber}
-                                  </td>
-                                  {viewMode !== 'absent' && (
-                                    <>
-                                      <td className="px-4 py-3 text-sm text-gray-600 capitalize">
-                                        {entry.classes}
-                                      </td>
-                                      <td className="px-4 py-3 text-sm text-gray-600">
-                                        {entry.timeSchedule}
-                                      </td>
-                                    </>
-                                  )}
-                                  <td className="px-4 py-3 text-sm text-gray-600">
-                                    {entry.logDate}
-                                  </td>
-                                  <td className="px-4 py-3 text-sm text-gray-600">
-                                    {entry.timeIn}
-                                  </td>
-                                  <td className="px-4 py-3 text-sm text-gray-600">
-                                    {entry.timeOut}
-                                  </td>
-                                  <td className="px-4 py-3">
-                                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium
-                                      ${entry.status === 'Valid' ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50'}`}
-                                    >
-                                      {entry.status}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-3 text-sm text-gray-600">
-                                    {entry.reason}
-                                  </td>
-                                  {viewMode === 'duplicates' && (
-                                    <td className="px-4 py-3 text-sm text-gray-600">
-                                      {isDuplicate ? (
-                                        <span className="text-xs font-medium text-red-600">
-                                          Same User & Date
-                                        </span>
-                                      ) : (
-                                        <span className="text-xs font-medium text-gray-400">
-                                          -
-                                        </span>
-                                      )}
-                                  </td>
-                                )}
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      {/* Pagination Controls */}
-                      <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                        <div className="text-sm text-gray-500">
-                          Showing {((tableData.currentPage - 1) * tableData.pageSize + 1)}-{Math.min(tableData.currentPage * tableData.pageSize, tableData.records.length)} of {tableData.records.length} records
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              if (viewMode === 'live') {
-                                setAttendancePage(Math.max(1, attendancePage - 1));
-                              } else {
-                                setClassifiedPage(Math.max(1, classifiedPage - 1));
-                              }
-                            }}
-                            disabled={(viewMode === 'live' && attendancePage === 1) ||
-                                     (viewMode !== 'live' && classifiedPage === 1)}
-                            className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            Previous
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (viewMode === 'live') {
-                                setAttendancePage(Math.min(tableData.totalPages, attendancePage + 1));
-                              } else {
-                                setClassifiedPage(Math.min(tableData.totalPages, classifiedPage + 1));
-                              }
-                            }}
-                            disabled={(viewMode === 'live' && attendancePage === tableData.totalPages) ||
-                                     (viewMode !== 'live' && classifiedPage === tableData.totalPages)}
-                            className="btn btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            Next
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )
               )}
             </div>
-          </section>
+            {viewMode !== 'live' && rangeError && <p id="attendance-range-error" role="alert" className="mt-3 text-sm text-red-600">{rangeError}</p>}
+          </div>
+
+          <div id="attendance-results" role="tabpanel" aria-labelledby={`attendance-tab-${viewMode}`} aria-busy={tableLoading}>
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6">
+              <div>
+                <h2 className="text-base font-semibold text-gray-800">{viewMode === 'live' ? 'Live attendance' : `${viewMode.charAt(0).toUpperCase() + viewMode.slice(1)} attendance`}</h2>
+                <p className="mt-1 text-xs text-gray-500">{periodLabel}{viewMode !== 'live' && ' · Inclusive date range · Manila time'}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">{tableLoading || tableError ? '—' : tableData.records.length} records</span>
+                <button type="button" title="Refresh attendance" aria-label="Refresh attendance"
+                  onClick={() => setRefreshVersion(value => value + 1)} disabled={tableLoading || (viewMode !== 'live' && Boolean(rangeError))}
+                  className="rounded-lg border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-50 disabled:opacity-50">
+                  <RefreshCw size={15} className={tableLoading ? 'animate-spin' : ''} />
+                </button>
+              </div>
+            </div>
+            {tableError ? (
+              <div role="alert" className="mx-5 mb-5 rounded-xl border border-red-100 bg-red-50 p-5 text-sm text-red-700">{tableError}</div>
+            ) : (tableLoading && loadedPeriod !== periodKey) || scheduleLoading ? (
+              <div className="px-5 py-16 text-center text-sm text-gray-500">Loading attendance records…</div>
+            ) : !tableData.hasData ? (
+              <div className="flex flex-col items-center border-t border-gray-100 px-5 py-16 text-center">
+                <CalendarDays size={30} className="mb-3 text-gray-300" />
+                <p className="text-sm font-medium text-gray-700">No {viewMode === 'live' ? '' : `${viewMode} `}attendance records</p>
+                <p className="mt-1 text-sm text-gray-500">{searchTerm ? 'Try a different name or ID number.' : viewMode === 'live' ? 'Today’s check-ins will appear here automatically.' : 'No matching records for this date range.'}</p>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto border-y border-gray-100">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
+                      <tr>
+                        {['#', 'Student', 'Class / Schedule', 'Date', 'Time in', 'Time out', 'Status', 'Details'].map(label => (
+                          <th key={label} scope="col" className="whitespace-nowrap px-5 py-3.5 font-semibold">{label}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {tableData.records.slice((tableData.currentPage - 1) * tableData.pageSize, tableData.currentPage * tableData.pageSize).map((entry, index) => (
+                        <tr key={entry.key} className="transition hover:bg-gray-50/80">
+                          <td className="px-5 py-4 text-xs text-gray-400">{(tableData.currentPage - 1) * tableData.pageSize + index + 1}</td>
+                          <td className="px-5 py-4"><p className="whitespace-nowrap font-medium text-gray-800">{entry.name}</p><p className="mt-1 text-xs text-gray-500">{entry.idNumber || '—'}</p></td>
+                          <td className="px-5 py-4"><p className="min-w-40 font-medium text-gray-700">{entry.classes}</p><p className="mt-1 whitespace-nowrap text-xs text-gray-500">{entry.timeSchedule}</p></td>
+                          <td className="whitespace-nowrap px-5 py-4 text-gray-600">{entry.logDate}</td>
+                          <td className="whitespace-nowrap px-5 py-4 font-medium text-gray-700">{entry.timeIn || '—'}</td>
+                          <td className="whitespace-nowrap px-5 py-4 text-gray-600">{entry.timeOut || '—'}</td>
+                          <td className="px-5 py-4"><span className={clsx('inline-flex rounded-full px-2.5 py-1 text-xs font-medium',
+                            entry.status === 'Present' ? 'bg-green-50 text-green-700' : entry.status === 'Late' ? 'bg-amber-50 text-amber-700' : entry.status === 'Absent' ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-600')}>{entry.status}</span></td>
+                          <td className="px-5 py-4 text-xs text-gray-500">{entry.reason}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                  <p className="text-xs text-gray-500">Showing {(tableData.currentPage - 1) * tableData.pageSize + 1}–{Math.min(tableData.currentPage * tableData.pageSize, tableData.records.length)} of {tableData.records.length} records</p>
+                  <div className="flex items-center gap-3">
+                    <button type="button" disabled={tableData.currentPage === 1}
+                      onClick={() => viewMode === 'live' ? setAttendancePage(tableData.currentPage - 1) : setClassifiedPage(tableData.currentPage - 1)}
+                      className="btn btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
+                    <span className="text-xs text-gray-500">Page {tableData.currentPage} of {tableData.totalPages}</span>
+                    <button type="button" disabled={tableData.currentPage === tableData.totalPages}
+                      onClick={() => viewMode === 'live' ? setAttendancePage(tableData.currentPage + 1) : setClassifiedPage(tableData.currentPage + 1)}
+                      className="btn btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+                  </div>
+                </div>
+              </>
+            )}
+            <div className="border-t border-gray-100 bg-gray-50/50 px-5 py-3 text-xs text-gray-500 sm:px-6">
+              {viewMode === 'live'
+                ? `Refreshes every 5 seconds${lastUpdated ? ` · Updated ${lastUpdated.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila' })}` : ''}`
+                : 'Based on current class schedules and student sections. Today’s absences appear after each class check-in window closes.'}
+            </div>
+          </div>
         </section>
-        </>
       )}
     </div>
   );
