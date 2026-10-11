@@ -470,6 +470,92 @@ body,
   overflow-y: auto;
 }
 
+.view-students-modal {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 2rem);
+  overflow: hidden;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-xl);
+}
+
+.view-students-body {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.view-students-table-scroll {
+  max-height: 22rem;
+  overflow: auto;
+}
+
+.view-students-table-scroll .view-students-schedule-table {
+  min-width: 760px;
+}
+
+.view-students-table-scroll .view-students-roster-table {
+  min-width: 600px;
+}
+
+.view-students-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--gray-50);
+  box-shadow: inset 0 -1px var(--gray-200);
+}
+
+.view-students-table td {
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.view-students-table tbody tr:nth-child(even) {
+  background: #f8fafc80;
+}
+
+.view-students-table tbody tr:hover {
+  background: var(--green-50);
+}
+
+.view-students-count {
+  border-radius: var(--radius-full);
+  padding: 0.125rem 0.5rem;
+  background: var(--gray-100);
+  color: var(--gray-600);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.view-students-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border: 1px solid var(--green-200);
+  border-radius: var(--radius-full);
+  padding: 0.25rem 0.625rem;
+  background: var(--green-50);
+  color: var(--green-800);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.view-students-status > span {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: var(--green-600);
+}
+
+.view-students-table .view-students-empty {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--gray-500);
+}
+
 .modal-overlay-sm {
   padding: 1rem;
 }

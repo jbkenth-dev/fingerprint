@@ -3647,100 +3647,118 @@ function ClassSchedulingPage() {
       ) : null}
       {isViewStudentsModalOpen ? (
         <div className="modal-overlay">
-          <div className="my-auto w-full max-w-4xl">
-            <FormCard className="border-l-4 border-green-500 bg-white shadow-lg rounded-lg">
-              <div className="flex items-center justify-between mb-6 p-6 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-                  <Users className="h-5 w-5 text-green-500" />
-                  View Students
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setIsViewStudentsModalOpen(false)}
-                  className="btn btn-secondary hover:bg-gray-100 transition-colors"
-                >
-                  Close
-                  <X className="ml-2 h-4 w-4" />
-                </button>
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="view-students-title"
+            className="view-students-modal my-auto w-full max-w-6xl"
+          >
+            <header className="flex items-center justify-between gap-4 border-b border-gray-200 px-5 py-4 sm:px-6">
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-50 text-green-700">
+                  <Users className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <div>
+                  <h2 id="view-students-title" className="text-lg font-semibold text-gray-900">View Students</h2>
+                  <p className="text-sm text-gray-500">Section roster and class schedule</p>
+                </div>
               </div>
+              <button type="button" onClick={() => setIsViewStudentsModalOpen(false)} className="btn btn-secondary shrink-0">
+                <span className="hidden sm:inline">Close</span>
+                <X className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only sm:hidden">Close</span>
+              </button>
+            </header>
 
+            <div className="view-students-body space-y-6 p-5 sm:p-6">
               {viewStudentsLoading ? (
-                <div className="text-sm text-gray-500">Loading...</div>
+                <p role="status" className="py-8 text-center text-sm text-gray-500">Loading section details...</p>
               ) : viewStudentsError ? (
-                <div className="alert alert-error">{viewStudentsError}</div>
+                <div role="alert" className="alert alert-error">{viewStudentsError}</div>
               ) : viewStudentsData ? (
                 <>
-                  <div className="mb-4">
-                    <p className="font-semibold">
-                      Section {viewStudentsData.schedules[0]?.yearLevel.charAt(0)}-{viewStudentsData.schedules[0]?.section}
-                    </p>
+                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-green-100 bg-green-50 px-5 py-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-green-700">Section overview</p>
+                      <h3 className="mt-1 text-xl font-semibold text-gray-900">
+                        Section {viewStudentsData.schedules[0]?.yearLevel?.charAt(0)}-{viewStudentsData.schedules[0]?.section}
+                      </h3>
+                      <p className="mt-1 text-sm text-gray-600">
+                        {viewStudentsData.sectionHeading} &middot; {viewStudentsData.schedules[0]?.semester}
+                      </p>
+                    </div>
+                    <div className="flex gap-6 text-sm sm:gap-8">
+                      <div><p className="text-2xl font-semibold tabular-nums text-green-800">{viewStudentsData.students.length}</p><p className="text-gray-600">Active students</p></div>
+                      <div><p className="text-2xl font-semibold tabular-nums text-green-800">{viewStudentsData.schedules.length}</p><p className="text-gray-600">Class schedules</p></div>
+                    </div>
                   </div>
 
-                  {/* Class Schedule Table */}
-                  <div className="mb-6">
-                    <p className="font-semibold mb-2">Class Schedule</p>
-                    {viewStudentsData.schedules.length > 0 ? (
-                      <table className="min-w-full text-left text-sm">
-                        <thead>
-                          <tr>
-                            <th className="px-4 py-3">Code</th>
-                            <th className="px-4 py-3">Subject</th>
-                            <th className="px-4 py-3">Faculty</th>
-                            <th className="px-4 py-3">Days</th>
-                            <th className="px-4 py-3">Time</th>
-                          </tr>
-                        </thead>
+                  <section aria-labelledby="section-schedule-title">
+                    <div className="mb-3 flex items-center gap-2">
+                      <CalendarDays className="h-4 w-4 text-green-700" aria-hidden="true" />
+                      <h3 id="section-schedule-title" className="font-semibold text-gray-900">Class Schedule</h3>
+                      <span className="view-students-count">{viewStudentsData.schedules.length}</span>
+                    </div>
+                    <div className="table-container view-students-table-scroll" role="region" aria-label="Class schedule table" tabIndex={0}>
+                      <table className="table view-students-table view-students-schedule-table">
+                        <caption className="sr-only">Class schedules for {viewStudentsData.sectionHeading}</caption>
+                        <thead><tr>
+                          <th scope="col">Code</th><th scope="col">Subject</th><th scope="col">Faculty</th><th scope="col">Days</th><th scope="col">Time</th>
+                        </tr></thead>
                         <tbody>
-                          {viewStudentsData.schedules.map((schedule) => (
+                          {viewStudentsData.schedules.length ? viewStudentsData.schedules.map((schedule) => (
                             <tr key={schedule.id}>
-                              <td className="px-4 py-3 font-semibold text-gray-800">{schedule.subjectCode}</td>
-                              <td className="px-4 py-3">{schedule.subjectName}</td>
-                              <td className="px-4 py-3">{schedule.facultyName || "—"}</td>
-                              <td className="px-4 py-3">{formatScheduleDays(schedule.days)}</td>
-                              <td className="px-4 py-3">{formatTimeRange(schedule.startTime, schedule.endTime)}</td>
+                              <td className="whitespace-nowrap"><span className="font-semibold text-green-800">{schedule.subjectCode}</span></td>
+                              <td><span className="font-medium text-gray-800">{schedule.subjectName}</span></td>
+                              <td>{schedule.facultyName || "?"}</td>
+                              <td>{formatScheduleDays(schedule.days)}</td>
+                              <td className="whitespace-nowrap tabular-nums">{formatTimeRange(schedule.startTime, schedule.endTime)}</td>
                             </tr>
-                          ))}
-                      </tbody>
+                          )) : (
+                            <tr><td colSpan={5} className="view-students-empty">No class schedules found for this section.</td></tr>
+                          )}
+                        </tbody>
                       </table>
-                    ) : (
-                      <p className="text-sm text-gray-500">No class schedules found for this section.</p>
-                    )}
-                  </div>
+                    </div>
+                  </section>
 
-                  {/* Students Table */}
-                  <div className="">
-                    <p className="font-semibold mb-2">Students</p>
-                    {viewStudentsData.students.length > 0 ? (
-                      <table className="min-w-full text-left text-sm">
-                        <thead>
-                          <tr>
-                            <th className="px-4 py-3">Student ID</th>
-                            <th className="px-4 py-3">Student Name</th>
-                            <th className="px-4 py-3">Section</th>
-                            <th className="px-4 py-3">Status</th>
-                          </tr>
-                        </thead>
+                  <section aria-labelledby="section-students-title">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-green-700" aria-hidden="true" />
+                        <h3 id="section-students-title" className="font-semibold text-gray-900">Student Roster</h3>
+                        <span className="view-students-count">{viewStudentsData.students.length}</span>
+                      </div>
+                      <p className="text-xs text-gray-500">Sorted by last name</p>
+                    </div>
+                    <div className="table-container view-students-table-scroll" role="region" aria-label="Student roster table" tabIndex={0}>
+                      <table className="table view-students-table view-students-roster-table">
+                        <caption className="sr-only">Active students in {viewStudentsData.sectionHeading}</caption>
+                        <thead><tr>
+                          <th scope="col" className="w-14">#</th><th scope="col">Student ID</th><th scope="col">Student Name</th><th scope="col">Section</th><th scope="col">Status</th>
+                        </tr></thead>
                         <tbody>
-                          {viewStudentsData.students.map((student) => (
+                          {viewStudentsData.students.length ? viewStudentsData.students.map((student, index) => (
                             <tr key={student.id}>
-                              <td className="px-4 py-3">{student.idNumber}</td>
-                              <td className="px-4 py-3 font-medium text-gray-800">{student.formattedName}</td>
-                              <td className="px-4 py-3">{student.department?.split(' - ')[1] || '—'}</td>
-                              <td className="px-4 py-3">{student.status}</td>
+                              <td className="tabular-nums">{index + 1}</td>
+                              <td className="whitespace-nowrap tabular-nums"><span className="font-medium text-gray-700">{student.idNumber || "?"}</span></td>
+                              <td><span className="font-semibold text-gray-800">{student.formattedName}</span></td>
+                              <td className="whitespace-nowrap">{student.department?.split(' - ')[1] || '?'}</td>
+                              <td><span className="view-students-status"><span aria-hidden="true" />{student.status}</span></td>
                             </tr>
-                          ))}
-                      </tbody>
+                          )) : (
+                            <tr><td colSpan={5} className="view-students-empty">No active students found for this section.</td></tr>
+                          )}
+                        </tbody>
                       </table>
-                    ) : (
-                      <p className="text-sm text-gray-500">No active students found for this section.</p>
-                    )}
-                  </div>
+                    </div>
+                  </section>
                 </>
               ) : (
-                <p className="text-sm text-gray-500">No data available.</p>
+                <p className="py-8 text-center text-sm text-gray-500">No data available.</p>
               )}
-            </FormCard>
-          </div>
+            </div>
+          </section>
         </div>
       ) : null}
     </div>
