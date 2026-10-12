@@ -11,6 +11,7 @@ import { useAuth } from "./state/AuthContext";
 import { apiFetch } from "./api";
 import { manilaNow, datesInRange, fetchAttendanceRange, classifyAttendance, liveAttendance, searchAttendance, attendanceTime, attendanceWindow } from "./utils/attendance";
 import { startPolling } from "./utils/polling";
+import AdminReports from "./pages/AdminReports";
 
 const navIcons = {
   "Dashboard & Monitoring": LayoutDashboard,
@@ -101,7 +102,7 @@ export default function App() {
           <Route path="smart-card" element={<RolePanel pageKey="smartCard" role="admin" />} />
           <Route path="fingerprint-biometric" element={<RolePanel pageKey="biometric" role="admin" />} />
           <Route path="attendance" element={<RolePanel pageKey="attendance" role="admin" />} />
-          <Route path="reports" element={<RolePanel pageKey="reports" role="admin" />} />
+          <Route path="reports" element={<AdminReports />} />
           <Route path="department" element={<AdminDepartmentPage />} />
           <Route path="account" element={<AdminAccountPage />} />
           <Route path="archive" element={<AdminArchivePage />} />

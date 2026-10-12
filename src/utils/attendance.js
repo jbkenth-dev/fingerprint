@@ -82,7 +82,7 @@ export function attendanceWindow(schedule) {
   };
 }
 
-function studentSection(student) {
+export function studentSection(student) {
   const match = student.department?.match(/(\d)[^-]*-\s*([A-E])$|(\d)\s*([A-E])$/i);
   if (!match) return null;
   return { yearLevel: ['', '1st Year', '2nd Year', '3rd Year', '4th Year'][Number(match[1] || match[3])], section: (match[2] || match[4]).toUpperCase() };

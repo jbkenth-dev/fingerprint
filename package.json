@@ -9,10 +9,13 @@
     "preview": "vite preview",
     "test:api": "node scripts/testApi.mjs",
     "test:attendance": "node --test scripts/testAttendance.mjs",
+    "test:reports": "node --test scripts/testAttendanceReport.mjs",
     "test:requests": "node --test scripts/testRequestPolicy.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "^0.511.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
