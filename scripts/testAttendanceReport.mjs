@@ -34,7 +34,22 @@ test('reports preserve zero counts without class dates and exclude unresolved at
   assert.equal(closed.totals.absent, 1);
 });
 
-test('PDF exports all student summaries without a ledger, with page numbers and A4 page dimensions', () => {
+test('reports sort by last, first, and middle name and PDFs use the same name order', () => {
+  const users = [
+    { ...student, id: 1, firstName: 'Aaron', lastName: 'Zulu' },
+    { ...student, id: 2, firstName: 'Zoe', middleName: 'Grace', lastName: 'Abad' },
+    { ...student, id: 3, firstName: ' Ana ', middleName: 'Maria', lastName: ' cruz ' },
+    { ...student, id: 4, firstName: 'Ben', lastName: 'Cruz' },
+    { ...student, id: 5, firstName: 'Ana', middleName: 'Luz', lastName: 'Cruz' },
+  ];
+  const report = { ...buildAttendanceReport([], users, schedule, '2026-10-12', '2026-10-13', now), facultyName: 'Professor Cruz' };
+  assert.deepEqual(report.rows.map(row => row.userId), [2, 5, 3, 4, 1]);
+  assert.deepEqual(report.rows.map(row => row.name), ['Abad, Zoe Grace', 'Cruz, Ana Luz', 'cruz, Ana Maria', 'Cruz, Ben', 'Zulu, Aaron']);
+  const doc = createAttendancePdf(report);
+  assert.deepEqual(doc.lastAutoTable.body.map(row => row.cells[2].text.join(' ')), report.rows.map(row => row.name));
+});
+
+test('PDF exports all student summaries with A4 pages and without branding or page footers', () => {
   const users = Array.from({ length: 75 }, (_, index) => ({ ...student, id: index + 1, idNumber: `ID-${index + 1}`, firstName: `Student ${index + 1}` }));
   const report = { ...buildAttendanceReport([], users, schedule, '2026-10-12', '2026-10-13', now), facultyName: 'Professor Cruz' };
   const doc = createAttendancePdf(report);
@@ -49,11 +64,17 @@ test('PDF exports all student summaries without a ledger, with page numbers and 
   assert.ok(!pdf.includes('Manila'));
   assert.ok(!pdf.includes('TOTAL DAYS'));
   assert.equal(doc.lastAutoTable.head[0].cells[6].text.join(' '), 'Total Days');
+  assert.equal(doc.lastAutoTable.head[0].cells[1].text.join(' '), 'ID Number');
+  assert.ok(!pdf.includes('Student ID'));
   assert.ok(pdf.includes('M, T |'));
   assert.ok(pdf.includes('ID-75'));
   assert.ok(!pdf.includes('CLASS TOTALS'));
   for (let page = 1; page <= doc.getNumberOfPages(); page++) {
-    assert.ok(doc.internal.pages[page].join('\n').includes(`Page ${page} of ${doc.getNumberOfPages()}`));
+    const content = doc.internal.pages[page].join('\n');
+    assert.ok(!content.includes('FRANCIS KEY'));
+    assert.ok(!content.includes('Attendance Management'));
+    assert.ok(!content.includes('Administrative attendance report'));
+    assert.ok(!content.includes(`Page ${page} of`));
   }
 });
 

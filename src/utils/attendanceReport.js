@@ -5,6 +5,8 @@ const dayAbbreviations = {
   Friday: 'F', Saturday: 'S', Sunday: 'SU',
 };
 
+const compareNames = (left, right) => (left || '').trim().localeCompare((right || '').trim(), 'en', { sensitivity: 'base' });
+
 export function formatReportDays(days = []) {
   return days.map(day => dayAbbreviations[day] || day).join(', ');
 }
@@ -18,13 +20,14 @@ export function buildAttendanceReport(logs, users, schedule, start, end, now = n
     const section = studentSection(user);
     return user.role === 'student' && user.status === 'Active' &&
       section?.yearLevel === schedule.yearLevel && section?.section === schedule.section;
-  });
+  }).sort((a, b) => compareNames(a.lastName, b.lastName) || compareNames(a.firstName, b.firstName)
+    || compareNames(a.middleName, b.middleName) || String(a.idNumber || a.id).localeCompare(String(b.idNumber || b.id)));
   const classified = classifyAttendance(logs, roster, [schedule], start, end, now);
   const rows = roster.map(user => ({
     userId: user.id, idNumber: user.idNumber || user.username || 'N/A',
-    name: [user.firstName, user.middleName, user.lastName].filter(Boolean).join(' '),
+    name: [(user.lastName || '').trim(), [user.firstName, user.middleName].map(value => (value || '').trim()).filter(Boolean).join(' ')].filter(Boolean).join(', '),
     present: 0, late: 0, absent: 0, total: 0,
-  })).sort((a, b) => a.name.localeCompare(b.name) || String(a.idNumber).localeCompare(String(b.idNumber)));
+  }));
   const byId = new Map(rows.map(row => [String(row.userId), row]));
   for (const [status, entries] of Object.entries(classified)) {
     for (const entry of entries) {

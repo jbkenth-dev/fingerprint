@@ -190,7 +190,7 @@ export default function AdminReports() {
             <table className="w-full min-w-[680px] text-sm">
               <caption className="sr-only">Attendance counts per student for the selected date range</caption>
               <thead className="border-y border-gray-900 text-xs text-gray-900"><tr>
-                {['No.', 'Student ID', 'Student name', 'Present', 'Late', 'Absent', 'Total Days'].map((label, index) => <th scope="col" key={label} className={`px-3 py-3 font-semibold ${index > 2 ? 'text-right' : 'text-left'}`}>{label}</th>)}
+                {['No.', 'ID Number', 'Student name', 'Present', 'Late', 'Absent', 'Total Days'].map((label, index) => <th scope="col" key={label} className={`px-3 py-3 font-semibold ${index > 2 ? 'text-right' : 'text-left'}`}>{label}</th>)}
               </tr></thead>
               <tbody className="divide-y divide-gray-100">
                 {visibleRows.map((row, index) => <tr key={row.userId}>
