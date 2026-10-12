@@ -13,6 +13,7 @@ import { manilaNow, datesInRange, fetchAttendanceRange, classifyAttendance, live
 import { startPolling } from "./utils/polling";
 import AdminReports from "./pages/AdminReports";
 import FacultySchedule from "./pages/FacultySchedule";
+import FacultyManual from "./pages/FacultyManual";
 
 const navIcons = {
   "Dashboard & Monitoring": LayoutDashboard,
@@ -22,6 +23,7 @@ const navIcons = {
   "Smart Card": CreditCard,
   "Fingerprint Biometric": Fingerprint,
   Attendance: Activity,
+  Manual: Pencil,
   Reports: FileBarChart,
   Department: Building2,
   Account: UserCog,
@@ -117,6 +119,7 @@ export default function App() {
           <Route path="smart-card" element={<RolePanel pageKey="smartCard" role="faculty" />} />
           <Route path="fingerprint-biometric" element={<RolePanel pageKey="biometric" role="faculty" />} />
           <Route path="attendance" element={<RolePanel pageKey="attendance" role="faculty" />} />
+          <Route path="manual" element={<FacultyManual />} />
           <Route path="reports" element={<RolePanel pageKey="reports" role="faculty" />} />
           <Route path="account" element={<SelfAccountPage role="faculty" />} />
         </Route>

@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:api": "node scripts/testApi.mjs",
-    "test:attendance": "node --test scripts/testAttendance.mjs",
+    "test:attendance": "node --test scripts/testAttendance.mjs scripts/testManualAttendance.mjs",
     "test:reports": "node --test scripts/testAttendanceReport.mjs",
     "test:requests": "node --test scripts/testRequestPolicy.mjs"
   },
