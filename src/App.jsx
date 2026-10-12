@@ -2641,9 +2641,6 @@ function StudentAttendancePage() {
             </article>;
           })}
         </div>}
-        <div className="flex items-start gap-2 border-t border-gray-100 bg-gray-50/60 px-5 py-4 text-xs leading-relaxed text-gray-500 sm:px-6">
-          <Info size={14} className="mt-0.5 shrink-0" /><p>Check in from 15 minutes before class until 15 minutes after it starts to be marked Present. Later eligible check-ins are Late. Classes remain Pending until the check-in window closes, 15 minutes before class ends. {selectedDate === todayDate ? "Today's records refresh automatically every minute." : "Records use your current class schedule."}</p>
-        </div>
       </section>
     </div>
   );

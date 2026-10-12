@@ -19,3 +19,13 @@ scripts/
 README.md
 *.md
 .env.example
+
+# Local dependencies, generated output, and private configuration are not source uploads.
+/node_modules/
+/dist/
+/.vercel/
+/.env*
+/.attendance-build-check/
+/memory/
+/docs/
+/check_db.php
