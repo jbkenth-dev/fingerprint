@@ -12,7 +12,7 @@ export const routeConfig = {
     { label: "Class Subject", path: "/admin/class-subject" },
     { label: "Class Scheduling", path: "/admin/class-scheduling" },
     { label: "Attendance", path: "/admin/attendance", disabled: false },
-    { label: "Reports", path: "/admin/reports", disabled: true },
+    { label: "Reports", path: "/admin/reports", disabled: false },
     { label: "Department", path: "/admin/department" },
     { label: "Account", path: "/admin/account" },
     { label: "Archived", path: "/admin/archive" },
