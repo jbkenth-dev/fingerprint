@@ -2467,10 +2467,11 @@ function StudentSchedulePage() {
     return () => controller.abort();
   }, [refreshVersion]);
 
-  const mySchedules = schedules.filter(row => section && row.yearLevel === section.yearLevel && row.section === section.section);
-  const visibleDays = selectedDay === "All days" ? days : [selectedDay];
-  const groups = visibleDays.map(day => ({ day, classes: mySchedules.filter(row => Array.isArray(row.days) && row.days.includes(day))
-    .sort((a, b) => (timeMinutes(a.startTime) ?? 0) - (timeMinutes(b.startTime) ?? 0)) })).filter(group => group.classes.length);
+  const dayLabels = { Monday: "M", Tuesday: "T", Wednesday: "W", Thursday: "TH", Friday: "F", Saturday: "S", Sunday: "SU" };
+  const rows = schedules.filter(row => section && row.yearLevel === section.yearLevel && row.section === section.section &&
+    (selectedDay === "All days" || row.days?.includes(selectedDay)))
+    .sort((a, b) => (timeMinutes(a.startTime) ?? Infinity) - (timeMinutes(b.startTime) ?? Infinity) ||
+      (timeMinutes(a.endTime) ?? Infinity) - (timeMinutes(b.endTime) ?? Infinity) || String(a.subjectName).localeCompare(String(b.subjectName)));
 
   return <div className="animate-fade-up space-y-6">
     <section className="rounded-2xl border border-green-800 bg-green-900 p-5 text-white sm:p-7">
@@ -2492,16 +2493,21 @@ function StudentSchedulePage() {
       </div>
       {error ? <div role="alert" className="m-5 rounded-xl bg-red-50 p-5 text-sm text-red-700">{error}<button type="button" onClick={() => setRefreshVersion(value => value + 1)} className="ml-3 font-semibold underline">Retry</button></div>
         : loading ? <div role="status" className="p-12 text-center text-sm text-gray-500">Loading your schedule...</div>
-        : !section || !groups.length ? <div className="p-12 text-center"><CalendarDays size={28} className="mx-auto text-green-600" /><p className="mt-4 text-sm text-gray-500">{!section ? "Ask an administrator to add your year and section to your profile." : "No classes scheduled for this selection."}</p></div>
-        : <div className="space-y-6 p-5 sm:p-6">{groups.map(({ day, classes }) => <section key={day}>
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800"><CalendarDays size={16} className="text-green-700" />{day}<span className="text-xs font-normal text-gray-500">({classes.length})</span></h3>
-          <div className="grid gap-3 md:grid-cols-2">{classes.map(row => <article key={row.id} className="rounded-xl border border-gray-200 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{row.subjectCode}</p>
-            <h4 className="mt-1 font-semibold text-gray-900">{row.subjectName}</h4>
-            <p className="mt-3 flex items-center gap-2 text-sm font-medium text-green-700"><Clock size={14} />{attendanceTime(row.startTime)} &ndash; {attendanceTime(row.endTime)}</p>
-            <p className="mt-2 flex items-center gap-2 text-xs text-gray-500"><UserRound size={14} />{row.facultyName || "No instructor assigned"}</p>
-          </article>)}</div>
-        </section>)}</div>}
+        : !section || !rows.length ? <div className="p-12 text-center"><CalendarDays size={28} className="mx-auto text-green-600" /><p className="mt-4 text-sm text-gray-500">{!section ? "Ask an administrator to add your year and section to your profile." : "No classes scheduled for this selection."}</p></div>
+        : <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead className="border-b border-gray-100 bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
+              <tr>{["Subject", "Faculty", "Day", "Time"].map(label => <th key={label} scope="col" className="px-5 py-3">{label}</th>)}</tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">{rows.map(row => <tr key={row.id} className="transition hover:bg-gray-50/50">
+              <td className="px-5 py-4"><p className="font-semibold text-gray-900">{row.subjectName}</p><p className="mt-1 text-xs text-gray-500">{row.subjectCode}</p></td>
+              <td className="px-5 py-4 text-gray-600">{row.facultyName || "No instructor assigned"}</td>
+              <td className="whitespace-nowrap px-5 py-4 font-medium text-gray-600">{days.filter(day => row.days?.includes(day)).map(day => dayLabels[day]).join('-') || '--'}</td>
+              <td className="whitespace-nowrap px-5 py-4 font-medium tabular-nums text-green-700">{attendanceTime(row.startTime)} to {attendanceTime(row.endTime)}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>}
+
     </section>
   </div>;
 }

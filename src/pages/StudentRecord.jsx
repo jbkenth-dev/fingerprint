@@ -103,7 +103,6 @@ export default function StudentRecord() {
               {['present', 'late', 'absent', 'total'].map((key, index) => <td key={key} className={`px-4 py-4 font-semibold tabular-nums ${['text-green-700', 'text-amber-600', 'text-red-600', 'text-gray-900'][index]}`}>{row.totals ? row.totals[key] : '--'}</td>)}
             </tr>)}</tbody>
           </table></div>}
-        <p className="border-t border-gray-100 bg-gray-50/60 px-5 py-4 text-xs leading-relaxed text-gray-500">Total Days = Present + Late + Absent for the selected period. Future classes and open check-in windows without attendance are excluded. Totals follow your current subject schedule and include faculty corrections. All times are in Philippine Standard Time.</p>
       </section>}
   </div>;
 }
