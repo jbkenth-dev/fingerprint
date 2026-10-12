@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classReminders, mergeReminderInbox, markReminderRead } from '../src/utils/classReminders.js';
+import { classReminders, mergeReminderInbox, markReminderRead, classReminderStatus } from '../src/utils/classReminders.js';
 
 const student = { id: 1, department: 'BSIT 1-A' };
 const schedule = { id: 10, yearLevel: '1st Year', section: 'A', days: ['Monday'], subjectName: 'English', startTime: '08:00:00', endTime: '09:00:00' };
@@ -68,4 +68,26 @@ test('marking a single reminder read preserves others and prevents its recreatio
   assert.equal(allRead.notifications.length, 0);
   assert.equal(allRead.readKeys.length, 2);
   assert.strictEqual(mergeReminderInbox(JSON.parse(JSON.stringify(allRead)), due).notifications.length, 0);
+});
+
+
+test('labels unread notifications by scheduled start and end without removing them', () => {
+  const reminder = { ...schedule, classDate: '2026-10-12' };
+  for (const [time, expected] of [
+    ['07:30:00', 'Starts in 30 minutes'], ['08:00:00', 'In class / starting now'],
+    ['08:01:00', 'In class / started 1 minute ago'], ['08:10:00', 'In class / started 10 minutes ago'],
+    ['08:30:00', 'In class / started 30 minutes ago'], ['08:59:59', 'In class / started 59 minutes ago'],
+    ['09:00:00', 'Class ended just now'], ['09:01:00', 'Class ended / 1 minute ago'],
+    ['09:30:00', 'Class ended / 30 minutes ago'],
+  ]) assert.equal(classReminderStatus(reminder, monday(time)), expected, time);
+  const inbox = mergeReminderInbox({ notifications: [], readKeys: [] }, [{ ...reminder, key: 'test' }]);
+  classReminderStatus(inbox.notifications[0], monday('10:00:00'));
+  assert.equal(inbox.notifications.length, 1);
+});
+
+test('status uses Manila dates for previous-day and overnight class notifications', () => {
+  const reminder = { ...schedule, classDate: '2026-10-12', startTime: '23:30:00', endTime: '00:30:00' };
+  assert.equal(classReminderStatus(reminder, new Date('2026-10-12T16:00:00Z')), 'In class / started 30 minutes ago');
+  assert.equal(classReminderStatus(reminder, new Date('2026-10-13T00:40:00+08:00')), 'Class ended / 10 minutes ago');
+  assert.equal(classReminderStatus({ ...schedule, classDate: '2026-10-12' }, new Date('2026-10-13T09:00:00+08:00')), 'Class ended / 1440 minutes ago');
 });

@@ -4,8 +4,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { Bell, CalendarDays, CheckCheck, Clock, X } from 'lucide-react';
 import { useAuth } from '../state/AuthContext';
 import { useStudentSchedules } from '../state/StudentScheduleContext';
-import { attendanceTime, timeMinutes, manilaNow } from '../utils/attendance';
-import { classReminders } from '../utils/classReminders';
+import { attendanceTime } from '../utils/attendance';
+import { classReminders, classReminderStatus } from '../utils/classReminders';
 import { useStudentReminders } from '../state/StudentReminderContext';
 
 export default function StudentNotifications() {
@@ -44,15 +44,6 @@ export default function StudentNotifications() {
     };
   }, [open]);
 
-  function reminderLabel(reminder) {
-    const clock = manilaNow(now);
-    const dayOffset = (Date.parse(reminder.classDate) - Date.parse(clock.date)) / 86400000;
-    const minutesUntil = dayOffset * 1440 + timeMinutes(reminder.startTime) - clock.minutes;
-    if (minutesUntil === 0) return 'Starting now';
-    if (minutesUntil > 0) return `Starts in ${minutesUntil} min`;
-    return `Class reminder / ${reminder.classDate}`;
-  }
-
   return <>
     <button ref={buttonRef} type="button" onClick={() => setOpen(value => !value)}
       aria-label={`Class reminders${unread ? `, ${unread} unread` : ''}`} aria-expanded={open} aria-controls={open ? titleId : undefined}
@@ -73,7 +64,7 @@ export default function StudentNotifications() {
           : error && !reminders.length ? <div className="px-5 py-8 text-center"><p className="text-sm font-medium text-gray-700">Reminders unavailable</p><p className="mt-2 text-xs text-gray-500">Refresh your schedule to try again.</p></div>
           : reminders.length ? <ul className="divide-y divide-gray-100">{reminders.map(reminder => <li key={reminder.key} className="flex gap-3 border-l-4 border-amber-400 bg-amber-50 px-5 py-4">
             <span className="mt-0.5 h-fit rounded-lg bg-green-100 p-2 text-green-700"><Clock size={16} /></span>
-            <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-green-700">{reminderLabel(reminder)}</p><h3 className="mt-1 text-sm font-semibold text-gray-900">{reminder.subjectName}</h3><p className="mt-1 text-xs text-gray-600">{attendanceTime(reminder.startTime)} &ndash; {attendanceTime(reminder.endTime)}</p>{reminder.facultyName && <p className="mt-1 text-xs text-gray-500">{reminder.facultyName}</p>}
+            <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-green-700">{classReminderStatus(reminder, now)}</p><h3 className="mt-1 text-sm font-semibold text-gray-900">{reminder.subjectName}</h3><p className="mt-1 text-xs text-gray-600">{attendanceTime(reminder.startTime)} &ndash; {attendanceTime(reminder.endTime)}</p>{reminder.facultyName && <p className="mt-1 text-xs text-gray-500">{reminder.facultyName}</p>}
               <button type="button" onClick={() => markRead(reminder.key)} aria-label={`Mark ${reminder.subjectName} reminder as read`} className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100"><CheckCheck size={13} />Mark as read</button>
             </div>
           </li>)}</ul> : <div className="px-5 py-10 text-center"><span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-400"><Bell size={20} /></span><p className="mt-3 text-sm font-semibold text-gray-700">You're all caught up</p><p className="mt-1 text-xs leading-relaxed text-gray-500">No unread class reminders. New reminders appear 30 minutes before class.</p></div>}

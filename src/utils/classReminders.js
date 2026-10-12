@@ -36,3 +36,22 @@ export function markReminderRead(inbox, key) {
   const readKeys = [...new Set([...inbox.readKeys, ...marked.map(row => row.key)])];
   return { readKeys, notifications: inbox.notifications.filter(row => !readKeys.includes(row.key)) };
 }
+
+
+export function classReminderStatus(reminder, now = new Date()) {
+  const start = timeMinutes(reminder.startTime);
+  const end = timeMinutes(reminder.endTime);
+  const clock = manilaNow(now);
+  const dayOffset = (Date.parse(clock.date) - Date.parse(reminder.classDate)) / 86400000;
+  if (start === null || end === null || !Number.isFinite(dayOffset)) return 'Class reminder';
+  const current = dayOffset * 1440 + clock.minutes;
+  const endMinute = end <= start ? end + 1440 : end;
+  const duration = minutes => `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+  if (current < start) return `Starts in ${duration(start - current)}`;
+  if (current >= endMinute) {
+    const elapsed = current - endMinute;
+    return elapsed === 0 ? 'Class ended just now' : `Class ended / ${duration(elapsed)} ago`;
+  }
+  const elapsed = current - start;
+  return elapsed === 0 ? 'In class / starting now' : `In class / started ${duration(elapsed)} ago`;
+}
