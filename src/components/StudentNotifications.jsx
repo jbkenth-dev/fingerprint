@@ -94,6 +94,6 @@ export function StudentReminderBanner() {
         {reminders.length > 1 && <p className="mt-1 text-xs font-medium text-gray-600">{reminders.length - 1} more {reminders.length === 2 ? 'class starts' : 'classes start'} soon. Check your notification bell.</p>}
       </div>
     </div>
-    <Link to="/student/schedule" className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-bold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${urgent ? 'bg-red-700 hover:bg-red-800 focus-visible:outline-red-700' : 'bg-amber-800 hover:bg-amber-900 focus-visible:outline-amber-800'}`}><CalendarDays size={15} />View schedule</Link>
+    <Link to="/student/schedule" style={{ color: "#fff" }} className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-bold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${urgent ? 'bg-red-700 hover:bg-red-800 focus-visible:outline-red-700' : 'bg-amber-800 hover:bg-amber-900 focus-visible:outline-amber-800'}`}><CalendarDays size={15} />View schedule</Link>
   </aside>;
 }
