@@ -5,6 +5,14 @@ import { useAuth } from '../state/AuthContext';
 import { attendanceTime, studentSection } from '../utils/attendance';
 
 const fullName = student => [student.firstName, student.middleName, student.lastName].filter(Boolean).join(' ');
+const displayName = student => {
+  const lastName = (student.lastName || '').trim();
+  const firstName = (student.firstName || '').trim();
+  const middleInitial = (student.middleName || '').trim().charAt(0).toUpperCase();
+  const givenName = [firstName, middleInitial ? `${middleInitial}.` : ''].filter(Boolean).join(' ');
+  return [lastName, givenName].filter(Boolean).join(', ') || 'Unnamed student';
+};
+const compareNames = (left, right) => (left || '').trim().localeCompare((right || '').trim(), 'en', { sensitivity: 'base' });
 
 export default function FacultySchedule() {
   const { session } = useAuth();
@@ -47,9 +55,9 @@ export default function FacultySchedule() {
   const roster = React.useMemo(() => selected ? data.students.filter(student => {
     const section = studentSection(student);
     return section?.yearLevel === selected.yearLevel && section?.section === selected.section;
-  }).sort((a, b) => (a.lastName || '').localeCompare(b.lastName || '') || fullName(a).localeCompare(fullName(b))) : [], [selected, data.students]);
+  }).sort((a, b) => compareNames(a.lastName, b.lastName) || compareNames(a.firstName, b.firstName) || compareNames(a.middleName, b.middleName)) : [], [selected, data.students]);
   const term = search.trim().toLowerCase();
-  const visibleStudents = roster.filter(student => [fullName(student), student.idNumber, student.email].some(value => String(value || '').toLowerCase().includes(term)));
+  const visibleStudents = roster.filter(student => [fullName(student), displayName(student), student.idNumber, student.email].some(value => String(value || '').toLowerCase().includes(term)));
   const sectionCount = new Set(data.schedules.map(row => `${row.yearLevel}|${row.section}`)).size;
 
   return (
@@ -151,7 +159,7 @@ export default function FacultySchedule() {
                   {visibleStudents.map((student, index) => <tr key={student.id} className="transition hover:bg-gray-50/70">
                     <td className="px-6 py-4 tabular-nums text-gray-400">{String(index + 1).padStart(2, '0')}</td>
                     <th scope="row" className="px-6 py-4 font-medium text-gray-900">
-                      <div className="flex items-center gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-green-50 text-xs font-semibold text-green-700" aria-hidden="true">{student.firstName?.[0]}{student.lastName?.[0]}</span>{fullName(student) || 'Unnamed student'}</div>
+                      {displayName(student)}
                     </th>
                     <td className="whitespace-nowrap px-6 py-4 text-gray-600">{student.idNumber || '—'}</td>
                     <td className="px-6 py-4 text-gray-600">{student.email || '—'}</td>
