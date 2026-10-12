@@ -2,7 +2,7 @@ import React from 'react';
 import { Download, FileBarChart, RefreshCw } from 'lucide-react';
 import { apiFetch } from '../api';
 import { attendanceTime, attendanceWindow, datesInRange, fetchAttendanceRange, manilaNow } from '../utils/attendance';
-import { buildAttendanceReport, reportNote } from '../utils/attendanceReport';
+import { buildAttendanceReport, formatReportDays } from '../utils/attendanceReport';
 
 const generatedLabel = date => new Intl.DateTimeFormat('en-PH', {
   timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short',
@@ -140,7 +140,7 @@ export default function AdminReports() {
           <label className="text-sm font-medium text-gray-700 sm:col-span-2 lg:col-span-1">Class schedule
             <select className={inputClass} value={schedule ? scheduleId : ''} disabled={!section || scheduleLoading} onChange={event => setScheduleId(event.target.value)}>
               <option value="">Select schedule</option>{options.map(row => <option key={row.id} value={row.id}>
-                {row.subjectCode} — {row.subjectName} | {row.days?.join(', ')} | {attendanceTime(row.startTime)} – {attendanceTime(row.endTime)}
+                {row.subjectCode} — {row.subjectName}
               </option>)}
             </select>
           </label>
@@ -169,15 +169,15 @@ export default function AdminReports() {
               ['Subject', `${schedule.subjectCode} — ${schedule.subjectName}`],
               ['Class', `${year} · Section ${section}`],
               ['Faculty', currentReport.facultyName],
-              ['Schedule', `${schedule.days?.join(', ')} | ${attendanceTime(schedule.startTime)} – ${attendanceTime(schedule.endTime)}`],
+              ['Schedule', `${formatReportDays(schedule.days)} | ${attendanceTime(schedule.startTime)} – ${attendanceTime(schedule.endTime)}`],
               ['Coverage', `${currentReport.classDates.length} scheduled dates · ${currentReport.rows.length} active students`],
-              ['Computed at', `${generatedLabel(currentReport.generatedAt)} (Manila)`],
+              ['Computed at', generatedLabel(currentReport.generatedAt)],
             ].map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</dt><dd className="mt-1.5 break-words font-medium text-gray-900">{value}</dd></div>)}
           </dl>
         </div>
         <div className="grid grid-cols-2 gap-px border-b border-gray-200 bg-gray-200 sm:grid-cols-4" aria-live="polite">
           {['present', 'late', 'absent', 'total'].map(key => <div key={key} className="bg-white p-5 sm:px-8">
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">{key === 'total' ? 'Total attendance' : key}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">{key === 'total' ? 'Total Days' : key}</p>
             <p className="mt-2 text-3xl font-semibold tabular-nums text-gray-900">{currentReport.totals[key]}</p>
           </div>)}
         </div>
@@ -188,7 +188,7 @@ export default function AdminReports() {
             <table className="w-full min-w-[680px] text-sm">
               <caption className="sr-only">Attendance counts per student for the selected date range</caption>
               <thead className="border-y border-gray-900 text-xs text-gray-900"><tr>
-                {['No.', 'Student ID', 'Student name', 'Present', 'Late', 'Absent', 'Total'].map((label, index) => <th scope="col" key={label} className={`px-3 py-3 font-semibold ${index > 2 ? 'text-right' : 'text-left'}`}>{label}</th>)}
+                {['No.', 'Student ID', 'Student name', 'Present', 'Late', 'Absent', 'Total Days'].map((label, index) => <th scope="col" key={label} className={`px-3 py-3 font-semibold ${index > 2 ? 'text-right' : 'text-left'}`}>{label}</th>)}
               </tr></thead>
               <tbody className="divide-y divide-gray-100">
                 {visibleRows.map((row, index) => <tr key={row.userId}>
@@ -207,8 +207,6 @@ export default function AdminReports() {
               <button className="btn btn-secondary disabled:opacity-40" disabled={page === pageCount} onClick={() => setPage(value => value + 1)}>Next</button>
             </div>
           </div>}
-          <p className="mt-5 text-xs leading-relaxed text-gray-500">{reportNote}</p>
-          <p className="mt-2 text-xs text-gray-500">The PDF includes all students and a dated attendance ledger.</p>
         </div>
       </section>}
     </div>

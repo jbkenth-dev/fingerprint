@@ -34,17 +34,21 @@ test('reports preserve zero counts without class dates and exclude unresolved at
   assert.equal(closed.totals.absent, 1);
 });
 
-test('PDF exports all students and ledger entries with page numbers and A4 page dimensions', () => {
+test('PDF exports all student summaries without a ledger, with page numbers and A4 page dimensions', () => {
   const users = Array.from({ length: 75 }, (_, index) => ({ ...student, id: index + 1, idNumber: `ID-${index + 1}`, firstName: `Student ${index + 1}` }));
   const report = { ...buildAttendanceReport([], users, schedule, '2026-10-12', '2026-10-13', now), facultyName: 'Professor Cruz' };
   const doc = createAttendancePdf(report);
-  assert.ok(doc.getNumberOfPages() >= 5);
+  assert.ok(doc.getNumberOfPages() >= 3);
   assert.ok(Math.abs(doc.internal.pageSize.getWidth() - 210) < 0.1);
   assert.ok(Math.abs(doc.internal.pageSize.getHeight() - 297) < 0.1);
   const pdf = doc.output();
   assert.ok(pdf.startsWith('%PDF-'));
   assert.ok(pdf.includes('Class Attendance Report'));
-  assert.ok(pdf.includes('Attendance Ledger'));
+  assert.ok(!pdf.includes('Attendance Ledger'));
+  assert.ok(!pdf.includes('Counts represent'));
+  assert.ok(!pdf.includes('Manila'));
+  assert.ok(pdf.includes('TOTAL DAYS'));
+  assert.ok(pdf.includes('M, T |'));
   assert.ok(pdf.includes('ID-75'));
   assert.ok(pdf.includes('CLASS TOTALS'));
   for (let page = 1; page <= doc.getNumberOfPages(); page++) {

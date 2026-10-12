@@ -1,6 +1,13 @@
 import { classifyAttendance, datesInRange, studentSection } from './attendance.js';
 
-export const reportNote = 'Counts represent student attendance per scheduled class date, using the current schedule and active student roster. Present and Late are separate categories. Total = Present + Late + Absent. Unresolved attendance for today is excluded until the check-in window closes.';
+const dayAbbreviations = {
+  Monday: 'M', Tuesday: 'T', Wednesday: 'W', Thursday: 'TH',
+  Friday: 'F', Saturday: 'S', Sunday: 'SU',
+};
+
+export function formatReportDays(days = []) {
+  return days.map(day => dayAbbreviations[day] || day).join(', ');
+}
 
 export function buildAttendanceReport(logs, users, schedule, start, end, now = new Date()) {
   const roster = users.filter(user => {

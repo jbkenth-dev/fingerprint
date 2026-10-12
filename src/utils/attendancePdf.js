@@ -1,10 +1,10 @@
 import { jsPDF } from 'jspdf';
 import { autoTable } from 'jspdf-autotable';
 import { attendanceTime } from './attendance.js';
-import { reportNote } from './attendanceReport.js';
+import { formatReportDays } from './attendanceReport.js';
 
 export function createAttendancePdf(report) {
-  const { schedule, rows, totals, start, end, facultyName, generatedAt, classDates, details } = report;
+  const { schedule, rows, totals, start, end, facultyName, generatedAt, classDates } = report;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   doc.setProperties({ title: 'Class Attendance Report', subject: `${schedule.subjectCode} | ${start} to ${end}`, author: 'Francis Key Attendance Management' });
   const margin = 16;
@@ -62,15 +62,15 @@ export function createAttendancePdf(report) {
       ['Subject', `${schedule.subjectCode} - ${schedule.subjectName}`],
       ['Year / Section', `${schedule.yearLevel} / Section ${schedule.section}`],
       ['Faculty', facultyName],
-      ['Class schedule', `${schedule.days?.join(', ') || 'No days assigned'} | ${attendanceTime(schedule.startTime)} - ${attendanceTime(schedule.endTime)}`],
+      ['Class schedule', `${formatReportDays(schedule.days) || 'No days assigned'} | ${attendanceTime(schedule.startTime)} - ${attendanceTime(schedule.endTime)}`],
       ['Coverage', `${classDates.length} scheduled dates; ${rows.length} active students`],
-      ['Computed at', `${generated} (Asia/Manila)`],
+      ['Computed at', generated],
     ],
     willDrawPage: continuation,
   });
   autoTable(doc, {
     ...tableStyle, startY: doc.lastAutoTable.finalY + 6,
-    head: [['PRESENT', 'LATE', 'ABSENT', 'TOTAL']],
+    head: [['PRESENT', 'LATE', 'ABSENT', 'TOTAL DAYS']],
     body: [[totals.present, totals.late, totals.absent, totals.total]],
     styles: { ...tableStyle.styles, halign: 'center', cellWidth: width / 4 },
     bodyStyles: { fontSize: 16, fontStyle: 'bold', cellPadding: 4 },
@@ -78,7 +78,7 @@ export function createAttendancePdf(report) {
   });
   autoTable(doc, {
     ...tableStyle, startY: doc.lastAutoTable.finalY + 8,
-    head: [['No.', 'Student ID', 'Student name', 'Present', 'Late', 'Absent', 'Total']],
+    head: [['No.', 'Student ID', 'Student name', 'Present', 'Late', 'Absent', 'Total Days']],
     body: rows.length ? rows.map((row, index) => [index + 1, row.idNumber, row.name, row.present, row.late, row.absent, row.total])
       : [[{ content: 'No active students in the selected class.', colSpan: 7 }]],
     foot: [[{ content: 'CLASS TOTALS', colSpan: 3 }, totals.present, totals.late, totals.absent, totals.total]],
@@ -91,30 +91,6 @@ export function createAttendancePdf(report) {
     willDrawPage: continuation,
   });
 
-  let noteY = doc.lastAutoTable.finalY + 8;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  const note = doc.splitTextToSize(reportNote, width);
-  if (noteY + 8 + note.length * 4 > 275) {
-    doc.addPage(); continuation(); noteY = 32;
-  }
-  doc.setFont('helvetica', 'bold');
-  doc.text('Basis of computation', margin, noteY);
-  doc.setFont('helvetica', 'normal');
-  doc.text(note, margin, noteY + 6, { lineHeightFactor: 1.4, align: 'justify', maxWidth: width });
-
-  if (details.length) {
-    doc.addPage();
-    heading('Attendance Ledger', `${schedule.subjectCode} | ${schedule.yearLevel}, Section ${schedule.section} | ${start} to ${end}`);
-    autoTable(doc, {
-      ...tableStyle, startY: 48,
-      head: [['Date', 'Student ID', 'Student name', 'Time in', 'Time out', 'Status']],
-      body: details.map(row => [row.logDate, row.idNumber, row.name, row.timeIn || '-', row.timeOut || '-', row.status]),
-      columnStyles: { 0: { cellWidth: 25 }, 1: { cellWidth: 29 }, 2: { cellWidth: 60 }, 3: { cellWidth: 22 }, 4: { cellWidth: 22 }, 5: { cellWidth: 20 } },
-      // The ledger's first page already has its full title.
-      willDrawPage: data => { if (data.pageNumber > 1) continuation(); },
-    });
-  }
   const pages = doc.getNumberOfPages();
   for (let page = 1; page <= pages; page++) {
     doc.setPage(page);
