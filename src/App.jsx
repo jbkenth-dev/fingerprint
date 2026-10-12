@@ -1924,7 +1924,7 @@ function RolePanel({ pageKey, role }) {
           <div className="border-b border-gray-100 bg-gray-50/50 p-5 sm:p-6">
             <h2 className="text-base font-semibold text-gray-800">Select a class</h2>
             <p className="mt-1 text-sm text-gray-500">Choose a year level, section, and schedule to view student attendance.</p>
-            <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-5 grid gap-4 md:grid-cols-3">
               <label className="block text-sm font-medium text-gray-700">1. Year Level
                 <select value={attendanceYear} disabled={scheduleLoading} onChange={event => {
                   setAttendanceYear(event.target.value); setAttendanceSection(''); setAttendanceScheduleId('');
@@ -1946,17 +1946,25 @@ function RolePanel({ pageKey, role }) {
                   className="form-input mt-2 w-full rounded-lg px-3 py-2.5 text-sm disabled:opacity-50">
                   <option value="">Select schedule</option>
                   {scheduleOptions.map(schedule => <option key={schedule.id} value={schedule.id}>
-                    {schedule.subjectCode} - {schedule.subjectName} | {schedule.days.join(', ')} | {attendanceTime(schedule.startTime)} - {attendanceTime(schedule.endTime)} | {schedule.semester}
+                    {schedule.subjectCode} - {schedule.subjectName}
                   </option>)}
                 </select>
               </label>
-              <div className="text-sm font-medium text-gray-700">Assigned faculty
-                <div className="mt-2 flex min-h-11 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm">
-                  <UserRound size={16} className="shrink-0 text-gray-400" />
-                  <span>{selectedAttendanceSchedule ? assignedFacultyName : 'Select a schedule first'}</span>
-                </div>
-              </div>
             </div>
+            {selectedAttendanceSchedule && <dl aria-label="Selected schedule details" className="mt-5 grid gap-4 rounded-xl border border-gray-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="min-w-0">
+                <dt className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500"><CalendarDays size={15} aria-hidden="true" />Schedule days</dt>
+                <dd className="mt-2 text-sm font-medium text-gray-800">{selectedAttendanceSchedule.days.join(', ') || 'No days assigned'}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500"><Clock size={15} aria-hidden="true" />Schedule time</dt>
+                <dd className="mt-2 text-sm font-medium text-gray-800">{attendanceTime(selectedAttendanceSchedule.startTime)} – {attendanceTime(selectedAttendanceSchedule.endTime)}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500"><UserRound size={15} aria-hidden="true" />Assigned faculty</dt>
+                <dd className="mt-2 break-words text-sm font-medium text-gray-800">{assignedFacultyName}</dd>
+              </div>
+            </dl>}
             {selectedAttendanceWindow && <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 rounded-lg border border-green-100 bg-green-50 px-4 py-3 text-xs text-green-800">
               <span><strong>Present:</strong> {selectedAttendanceWindow.presentLabel}</span>
               <span><strong>Late:</strong> {selectedAttendanceWindow.lateLabel}</span>
