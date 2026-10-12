@@ -1,4 +1,4 @@
-import { attendanceSessions, attendanceTime, attendanceWindow, manualAttendanceStatus, manualOutRecord, manualOutStatus, manualScheduleId, studentSection } from './attendance.js';
+import { attendanceSessions, attendanceTime, attendanceWindow, manualAttendanceStatus, manualOutRecord, manualOutStatus, manualPairedSession, manualScheduleId, studentSection } from './attendance.js';
 
 export function manualAttendanceRows(logs, students, schedule, date) {
   const window = schedule && attendanceWindow(schedule);
@@ -23,10 +23,11 @@ export function manualAttendanceRows(logs, students, schedule, date) {
     const manual = manualMarks.get(String(student.id));
     const status = manual ? manualAttendanceStatus(manual, schedule) : !session ? 'Absent' : session.rawInTime <= window.presentUntil ? 'Present' : 'Late';
     const out = manualOutRecord(logs, schedule.id, student.id, date);
-    const outStatus = out ? manualOutStatus(out, status) : session?.timeOut && session.timeOut !== '—' ? status : 'Absent';
+    const paired = manual ? manualPairedSession(logs, manual) : session;
+    const outStatus = out ? manualOutStatus(out, status) : paired?.timeOut && paired.timeOut !== '—' ? status : 'Absent';
     return { ...student, attendanceStatus: status,
       outAttendanceStatus: outStatus,
       timeIn: manual ? status === 'Absent' ? '—' : attendanceTime(manual.logTime) : session?.timeIn || '—',
-      timeOut: out ? out.status === 'OUT' ? attendanceTime(out.logTime) : '—' : session?.timeOut || '—' };
+      timeOut: out ? out.status === 'OUT' ? attendanceTime(out.logTime) : '—' : paired?.timeOut || '—' };
   });
 }

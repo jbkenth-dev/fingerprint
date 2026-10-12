@@ -1,7 +1,7 @@
 import React from 'react';
 import { Download, FileBarChart, RefreshCw } from 'lucide-react';
 import { apiFetch } from '../api';
-import { attendanceTime, attendanceWindow, datesInRange, fetchAttendanceWithManualRange as fetchAttendanceRange, manilaNow } from '../utils/attendance';
+import { attendanceTime, attendanceWindow, datesInRange, fetchAttendanceRange, manilaNow } from '../utils/attendance';
 import { buildAttendanceReport, formatReportDays, formatReportSemester } from '../utils/attendanceReport';
 
 const generatedLabel = date => new Intl.DateTimeFormat('en-PH', {

@@ -29,7 +29,8 @@ function manual_attendance_current_status(array $logs, array $schedule, int $use
     foreach ($logs as $log) {
         if ((int) $log['userId'] !== $userId || $log['logDate'] !== $date) continue;
         $minutes = (int) substr($log['logTime'], 0, 2) * 60 + (int) substr($log['logTime'], 3, 2);
-        if ($log['source'] === 'faculty-manual' && ($log['localRecordId'] ?? '') === "manual:{$schedule['id']}:$userId:$date") {
+        if ($log['source'] === "faculty-manual:{$schedule['id']}:IN" ||
+            ($log['source'] === 'faculty-manual' && ($log['localRecordId'] ?? '') === "manual:{$schedule['id']}:$userId:$date")) {
             return $log['status'] === 'ABSENT' ? 'Absent' : ($minutes <= $start + 15 ? 'Present' : 'Late');
         }
         if (str_starts_with($log['source'] ?? '', 'faculty-manual') || $log['status'] !== 'IN') continue;
@@ -44,4 +45,38 @@ function manual_attendance_student_matches(array $student, array $schedule): boo
     $year = (int) ($match[1] !== '' ? $match[1] : ($match[3] ?? 0));
     $section = strtoupper($match[2] !== '' ? $match[2] : ($match[4] ?? ''));
     return (['', '1st Year', '2nd Year', '3rd Year', '4th Year'][$year] ?? '') === $schedule['yearLevel'] && $section === $schedule['sectionName'];
+}
+
+function manual_attendance_target(array $logs, array $schedule, int $userId, string $date, string $direction): ?array {
+    $marker = "manual:{$schedule['id']}:$userId:$date" . ($direction === 'OUT' ? ':out' : '');
+    $records = array_values(array_filter($logs, fn($log) => (int) $log['userId'] === $userId && $log['logDate'] === $date));
+    foreach ($records as $record) {
+        $source = $record['source'] ?? '';
+        if (($direction === 'IN' && $source === "faculty-manual:{$schedule['id']}:IN") ||
+            ($direction === 'OUT' && in_array($source, ["faculty-manual:{$schedule['id']}:OUT:P", "faculty-manual:{$schedule['id']}:OUT:L", "faculty-manual:{$schedule['id']}:OUT:A"], true))) return $record;
+        if (str_starts_with($record['source'] ?? '', 'faculty-manual') && ($record['localRecordId'] ?? '') === $marker) return $record;
+    }
+    usort($records, fn($left, $right) => strcmp($left['logTime'], $right['logTime']) ?: ((int) $left['id'] <=> (int) $right['id']));
+    $start = (int) substr($schedule['startTime'], 0, 2) * 60 + (int) substr($schedule['startTime'], 3, 2);
+    $end = (int) substr($schedule['endTime'], 0, 2) * 60 + (int) substr($schedule['endTime'], 3, 2);
+    $firstIn = null;
+    foreach ($records as $record) {
+        if (str_starts_with($record['source'] ?? '', 'faculty-manual') &&
+            ($record['localRecordId'] ?? '') !== "manual:{$schedule['id']}:$userId:$date" &&
+            $record['source'] !== "faculty-manual:{$schedule['id']}:IN") continue;
+        $minutes = (int) substr($record['logTime'], 0, 2) * 60 + (int) substr($record['logTime'], 3, 2);
+        if ($record['status'] === 'IN' && $minutes >= $start - 15 && $minutes <= $end - 15) {
+            $firstIn = $minutes;
+            if ($direction === 'IN') return $record;
+            break;
+        }
+    }
+    if ($direction === 'OUT') {
+        foreach ($records as $record) {
+            if (str_starts_with($record['source'] ?? '', 'faculty-manual') || $record['status'] !== 'OUT') continue;
+            $minutes = (int) substr($record['logTime'], 0, 2) * 60 + (int) substr($record['logTime'], 3, 2);
+            if ($minutes >= ($firstIn ?? $end - 15) && $minutes <= $end + 15) return $record;
+        }
+    }
+    return null;
 }

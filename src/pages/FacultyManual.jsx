@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { CalendarDays, CircleCheck, CircleX, ClipboardCheck, Maximize2, RefreshCw, Search, Users, X } from 'lucide-react';
 import { apiFetch } from '../api';
 import { useAuth } from '../state/AuthContext';
-import { attendanceTime, attendanceWindow, fetchAttendanceWithManualRange as fetchAttendanceRange, manilaNow } from '../utils/attendance';
+import { attendanceTime, attendanceWindow, fetchAttendanceRange, manilaNow } from '../utils/attendance';
 import { manualAttendanceRows } from '../utils/manualAttendance';
 import { startPolling } from '../utils/polling';
 
@@ -116,9 +116,8 @@ export default function FacultyManual() {
         scheduleId: selected.id, userId: student?.id, date, status, direction, ...(copy ? { action: 'copy-in' } : {}),
       }) });
       if (!result.ok || !Array.isArray(result.records) || !result.records.length) throw new Error('The attendance update could not be confirmed. Refresh and try again.');
-      const markers = new Set(result.records.map(log => log.localRecordId));
       const ids = new Set(result.records.map(log => String(log.id)));
-      setLogs(previous => [...previous.filter(log => !ids.has(String(log.id)) && !markers.has(log.localRecordId)), ...result.records]);
+      setLogs(previous => [...previous.filter(log => !ids.has(String(log.id))), ...result.records]);
       setFeedback({ success: true, title: 'Attendance updated',
         message: copy ? `OUT attendance copied from IN for ${result.count} students.` : `${nameOf(student)} is now marked ${status} for ${direction} attendance.`,
         detail: copy ? `Present and Late: OUT at ${attendanceTime(selected.endTime)}. Absent: no OUT. · ${date}`

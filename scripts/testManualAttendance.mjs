@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { manualAttendanceRows } from '../src/utils/manualAttendance.js';
-import { attendanceSessions, classifyAttendance, fetchAttendanceWithManualRange, liveAttendance } from '../src/utils/attendance.js';
+import { attendanceSessions, classifyAttendance, fetchAttendanceRange, liveAttendance } from '../src/utils/attendance.js';
 
 const date = '2026-10-12';
 const schedule = { id: 10, yearLevel: '1st Year', section: 'A', days: ['Monday'], startTime: '08:00:00', endTime: '09:00:00' };
@@ -9,26 +9,18 @@ const students = [{ id: 1, role: 'student', status: 'Active', department: 'BSIT 
 const scan = (logTime, extra = {}) => ({ id: 1, userId: 1, logDate: date, logTime, status: 'IN', ...extra });
 const rows = logs => manualAttendanceRows(logs, students, schedule, date);
 
-test('loads manual marks separately without requiring changes to the scanner attendance API', async () => {
-  const raw = scan('08:00:00');
-  const manual = scan('08:16:00', { id: 'manual-1', source: 'faculty-manual', localRecordId: `manual:10:1:${date}` });
+test('loads manual checks through the unchanged attendance API without extra records or metadata requests', async () => {
+  const manual = scan('08:16:00', { id: 1, source: 'faculty-manual:10:IN' });
   const calls = [];
   const fetcher = async path => {
     calls.push(path);
-    return path.startsWith('/manual-attendance.php') ? { ok: true, records: [manual] } : { records: [raw], total: 1 };
+    return { records: [manual], total: 1 };
   };
-  const loaded = await fetchAttendanceWithManualRange(fetcher, date, date);
-  assert.equal(calls.length, 2);
-  assert.equal(loaded.length, 2);
+  const loaded = await fetchAttendanceRange(fetcher, date, date);
+  assert.equal(calls.length, 1);
+  assert.equal(loaded.length, 1);
   assert.equal(rows(loaded)[0].attendanceStatus, 'Late');
-  assert.equal(new Set(loaded.map(log => String(log.id))).size, 2);
-});
-
-test('a failed manual read cannot silently produce a report without saved marks', async () => {
-  await assert.rejects(() => fetchAttendanceWithManualRange(async path => {
-    if (path.startsWith('/manual-attendance.php')) throw new Error('Manual attendance unavailable');
-    return { records: [], total: 0 };
-  }, date, date), /Manual attendance unavailable/);
+  assert.equal(loaded[0].id, 1);
 });
 
 test('saved checkbox changes take priority over scans and stay isolated to their class', () => {
@@ -80,6 +72,25 @@ test('IN and OUT checks persist independently even though P and L share the OUT 
     assert.equal(rows([absentIn, out])[0].outAttendanceStatus, status);
     assert.equal(attendanceSessions([inMark, out]).length, 0);
   }
+});
+
+test('updated device rows retain class checks when the API does not return local record IDs', () => {
+  const inMark = scan('08:16:00', { id: 100, source: 'faculty-manual:10:IN' });
+  const outMark = scan('09:00:00', { id: 101, status: 'OUT', source: 'faculty-manual:10:OUT:P' });
+  const logs = [inMark, outMark];
+  assert.equal(rows(logs)[0].attendanceStatus, 'Late');
+  assert.equal(rows(logs)[0].outAttendanceStatus, 'Present');
+  assert.equal(rows(logs)[0].timeOut, '9:00 AM');
+  assert.equal(liveAttendance(logs, students, [schedule], date)[0].timeOut, '9:00 AM');
+  assert.equal(classifyAttendance(logs, students, [schedule], date, date, new Date('2026-10-12T02:00:00Z')).late.length, 1);
+  assert.equal(manualAttendanceRows(logs, students, { ...schedule, id: 20 }, date)[0].attendanceStatus, 'Absent');
+});
+
+test('editing an existing IN preserves its device OUT until OUT attendance is changed', () => {
+  const logs = [scan('08:16:00', { id: 100, source: 'faculty-manual:10:IN' }), scan('09:04:00', { id: 101, status: 'OUT' })];
+  assert.equal(rows(logs)[0].timeOut, '9:04 AM');
+  assert.equal(rows(logs)[0].outAttendanceStatus, 'Late');
+  assert.equal(liveAttendance(logs, students, [schedule], date).find(row => row.scheduleId === 10).timeOut, '9:04 AM');
 });
 
 test('OUT-only manual updates override scanner timeouts without changing scanner IN', () => {
