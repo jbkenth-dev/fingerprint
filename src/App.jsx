@@ -12,11 +12,13 @@ import { apiFetch } from "./api";
 import { manilaNow, datesInRange, fetchAttendanceRange, classifyAttendance, liveAttendance, searchAttendance, attendanceTime, attendanceWindow } from "./utils/attendance";
 import { startPolling } from "./utils/polling";
 import AdminReports from "./pages/AdminReports";
+import FacultySchedule from "./pages/FacultySchedule";
 
 const navIcons = {
   "Dashboard & Monitoring": LayoutDashboard,
   "Class Subject": BookOpenText,
   "Class Scheduling": CalendarRange,
+  "My Schedule": CalendarDays,
   "Smart Card": CreditCard,
   "Fingerprint Biometric": Fingerprint,
   Attendance: Activity,
@@ -111,6 +113,7 @@ export default function App() {
         <Route path="/faculty" element={<ProtectedLayout allowedRole="faculty" />}>
           <Route index element={<Navigate to="/faculty/dashboard" replace />} />
           <Route path="dashboard" element={<FacultyDashboardPage />} />
+          <Route path="schedule" element={<FacultySchedule />} />
           <Route path="smart-card" element={<RolePanel pageKey="smartCard" role="faculty" />} />
           <Route path="fingerprint-biometric" element={<RolePanel pageKey="biometric" role="faculty" />} />
           <Route path="attendance" element={<RolePanel pageKey="attendance" role="faculty" />} />
