@@ -9,7 +9,7 @@ import { useMockLoading } from "./hooks/useMockLoading";
 import { useManilaClock } from "./hooks/useManilaClock";
 import { useAuth } from "./state/AuthContext";
 import { apiFetch } from "./api";
-import { manilaNow, datesInRange, fetchAttendanceRange, classifyAttendance, liveAttendance, searchAttendance, attendanceTime, attendanceWindow } from "./utils/attendance";
+import { manilaNow, datesInRange, fetchAttendanceRange, classifyAttendance, liveAttendance, searchAttendance, attendanceTime, attendanceWindow, studentSection, timeMinutes } from "./utils/attendance";
 import { startPolling } from "./utils/polling";
 import AdminReports from "./pages/AdminReports";
 import FacultySchedule from "./pages/FacultySchedule";
@@ -2444,59 +2444,23 @@ function StudentDashboardPage() {
 
 function StudentAttendancePage() {
   const { currentUser } = useAuth();
+  useManilaClock();
+  const { date: todayDate, minutes: currentMinutes } = manilaNow();
+  const [selectedDate, setSelectedDate] = React.useState(() => manilaNow().date);
   const [schedules, setSchedules] = React.useState([]);
   const [attendance, setAttendance] = React.useState([]);
-  const [selectedDate, setSelectedDate] = React.useState(() => {
-    const d = new Date();
-    return d.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
-  });
+  const [loadedDate, setLoadedDate] = React.useState("");
   const [scheduleLoading, setScheduleLoading] = React.useState(true);
   const [scheduleError, setScheduleError] = React.useState("");
   const [attendanceLoading, setAttendanceLoading] = React.useState(true);
   const [attendanceError, setAttendanceError] = React.useState("");
-
-  const dayNameMap = { 0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday" };
-
-  function getTodayDate() {
-    const d = new Date();
-    return d.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
-  }
-
-  function getDayName(dateStr) {
-    const d = new Date(dateStr + "T12:00:00");
-    return dayNameMap[d.getDay()] || "";
-  }
-
-  function timeToMinutes(timeStr) {
-    if (!timeStr) return null;
-    const match = String(timeStr).match(/^(\d{1,2}):(\d{2})/);
-    if (!match) return null;
-    return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
-  }
-
-  function formatTime(timeStr) {
-    if (!timeStr || !/^\d{2}:\d{2}/.test(timeStr)) return "—";
-    const [h, m] = timeStr.slice(0, 5).split(":").map(Number);
-    return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
-  }
-
-  function displayTime(value) {
-    return value ? formatTime(value) : "--:--";
-  }
-
-  function parseStudentDept(dept) {
-    if (!dept) return null;
-    const yearMap = { 1: "1st Year", 2: "2nd Year", 3: "3rd Year", 4: "4th Year" };
-    const fullMatch = dept.match(/(\d)[^-]*-\s*([A-E])$/i);
-    if (fullMatch) {
-      return { yearLevel: yearMap[parseInt(fullMatch[1], 10)] || null, section: fullMatch[2].toUpperCase() };
-    }
-    const shortMatch = dept.match(/(\d)\s*([A-E])$/i);
-    if (shortMatch) {
-      return { yearLevel: yearMap[parseInt(shortMatch[1], 10)] || null, section: shortMatch[2].toUpperCase() };
-    }
-    return null;
-  }
+  const [refreshVersion, setRefreshVersion] = React.useState(0);
+  const parsedSection = React.useMemo(() => studentSection(currentUser || {}), [currentUser]);
+  const selectedDayName = new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "Asia/Manila" })
+    .format(new Date(`${selectedDate}T12:00:00+08:00`));
+  const dateLabel = new Intl.DateTimeFormat("en-PH", {
+    month: "long", day: "numeric", year: "numeric", timeZone: "Asia/Manila",
+  }).format(new Date(`${selectedDate}T12:00:00+08:00`));
 
   const loadSchedules = React.useCallback(async () => {
     setScheduleLoading(true);
@@ -2511,180 +2475,138 @@ function StudentAttendancePage() {
     }
   }, []);
 
-  React.useEffect(() => {
-    loadSchedules();
-  }, [loadSchedules]);
+  React.useEffect(() => { loadSchedules(); }, [loadSchedules]);
 
-  const loadAttendance = React.useCallback(async (date) => {
+  React.useEffect(() => {
+    const controller = new AbortController();
+    setAttendance([]);
+    setLoadedDate("");
     setAttendanceLoading(true);
     setAttendanceError("");
-    try {
-      const result = await apiFetch(`/attendance.php?date=${date}&limit=500&offset=0`);
-      setAttendance(Array.isArray(result?.records) ? result.records : []);
-    } catch (err) {
-      setAttendance([]);
-      setAttendanceError(err.message || "Failed to load attendance.");
-    } finally {
-      setAttendanceLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    loadAttendance(selectedDate);
-  }, [selectedDate, loadAttendance]);
-
-  const parsedSection = React.useMemo(() => parseStudentDept(currentUser?.department), [currentUser?.department]);
-  const selectedDayName = React.useMemo(() => getDayName(selectedDate), [selectedDate]);
-
-  const myAttendance = React.useMemo(
-    () => attendance.filter((r) => r.userId === currentUser?.id),
-    [attendance, currentUser],
-  );
-
-  // Time In = earliest IN record on the selected date; Time Out = latest OUT record.
-  const timeIn = React.useMemo(() => {
-    const ins = myAttendance.filter((r) => r.status === "IN").map((r) => r.logTime).filter(Boolean);
-    return ins.length ? ins.sort()[0] : null;
-  }, [myAttendance]);
-
-  const timeOut = React.useMemo(() => {
-    const outs = myAttendance.filter((r) => r.status === "OUT").map((r) => r.logTime).filter(Boolean);
-    return outs.length ? outs.sort()[outs.length - 1] : null;
-  }, [myAttendance]);
-
-  // Only the student's section schedules that meet on the selected date, in time order.
-  const rows = React.useMemo(() => {
-    if (!parsedSection) return [];
-    return schedules
-      .filter((s) => {
-        const days = Array.isArray(s.days) ? s.days : [];
-        return (
-          s.yearLevel === parsedSection.yearLevel &&
-          s.section === parsedSection.section &&
-          days.includes(selectedDayName)
-        );
-      })
-      .sort((a, b) => (timeToMinutes(a.startTime) ?? 0) - (timeToMinutes(b.startTime) ?? 0))
-      .map((s) => {
-        let status = "absent";
-        if (timeIn) {
-          const inMin = timeToMinutes(timeIn);
-          const startMin = timeToMinutes(s.startTime);
-          if (inMin != null && startMin != null) status = inMin <= startMin + 15 ? "present" : "late";
+    const stop = startPolling(async () => {
+      setAttendanceLoading(true);
+      setAttendanceError("");
+      try {
+        const records = await fetchAttendanceRange(apiFetch, selectedDate, selectedDate, controller.signal);
+        if (!controller.signal.aborted) {
+          setAttendance(records);
+          setLoadedDate(selectedDate);
         }
-        return { ...s, status };
-      });
-  }, [schedules, parsedSection, selectedDayName, timeIn]);
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        setAttendance([]);
+        setAttendanceError(err.message || "Failed to load attendance.");
+        throw err;
+      } finally {
+        if (!controller.signal.aborted) setAttendanceLoading(false);
+      }
+    }, { initialDelay: 0, repeat: selectedDate === todayDate });
+    return () => { stop(); controller.abort(); };
+  }, [selectedDate, todayDate, refreshVersion]);
+
+  const daySchedules = React.useMemo(() => !parsedSection ? [] : schedules.filter(schedule =>
+    schedule.yearLevel === parsedSection.yearLevel && schedule.section === parsedSection.section &&
+    Array.isArray(schedule.days) && schedule.days.includes(selectedDayName))
+    .sort((a, b) => (timeMinutes(a.startTime) ?? 0) - (timeMinutes(b.startTime) ?? 0)),
+  [schedules, parsedSection, selectedDayName]);
+
+  // Match each subject independently; faculty corrections take priority over scans.
+  const rows = React.useMemo(() => {
+    const logs = loadedDate === selectedDate ? attendance.filter(record =>
+      String(record.userId) === String(currentUser?.id) && record.logDate === selectedDate) : [];
+    const classified = classifyAttendance(logs, currentUser ? [currentUser] : [], daySchedules, selectedDate, selectedDate);
+    const bySchedule = new Map(Object.values(classified).flat().map(record => [String(record.scheduleId), record]));
+    return daySchedules.map(schedule => ({ ...schedule, attendance: bySchedule.get(String(schedule.id)) }));
+  }, [attendance, loadedDate, selectedDate, currentUser, daySchedules, todayDate, currentMinutes]);
 
   const loading = scheduleLoading || attendanceLoading;
   const loadError = scheduleError || attendanceError;
-  const handleRetry = () => {
-    loadSchedules();
-    loadAttendance(selectedDate);
-  };
+  const ready = !loading && !loadError && loadedDate === selectedDate;
+  const counts = { Present: 0, Late: 0, Absent: 0, Pending: 0 };
+  rows.forEach(row => { counts[row.attendance?.status || "Pending"] += 1; });
+  const refresh = () => { loadSchedules(); setRefreshVersion(value => value + 1); };
+  const displayTime = value => value && value !== attendanceTime(null) ? value : "--:--";
 
   return (
-    <div className="animate-fade-up space-y-4">
-      <section>
-        <article className="card-elevated p-5 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-800">My Attendance</h2>
-              <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-gray-500">
-                <CalendarDays size={14} className="text-gray-400" />
-                {selectedDayName}
-                {parsedSection
-                  ? ` · ${parseInt(parsedSection.yearLevel, 10) || parsedSection.yearLevel}-${parsedSection.section}`
-                  : ""}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={selectedDate}
-                max={getTodayDate()}
-                onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
-                className="form-input min-w-0 flex-1 rounded-lg px-3 py-2 text-sm sm:flex-initial"
-              />
-              <button
-                type="button"
-                onClick={() => loadAttendance(selectedDate)}
-                disabled={attendanceLoading}
-                className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white p-2 text-gray-600 shadow-sm transition hover:bg-gray-50 hover:text-gray-800 disabled:opacity-50"
-                title="Refresh attendance"
-              >
-                <RefreshCw size={16} className={attendanceLoading ? "animate-spin" : ""} />
-              </button>
-            </div>
-          </div>
+    <div className="animate-fade-up space-y-6">
+      <section className="rounded-2xl border border-green-800 bg-green-900 p-5 text-white shadow-sm sm:p-7">
+        <p className="text-xs font-semibold uppercase tracking-widest text-green-200">Attendance history</p>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">My attendance</h1>
+        <p className="mt-2 text-sm leading-relaxed text-green-100">Review your daily attendance and check-in records for each class.</p>
+        {parsedSection && <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs text-green-100">
+          <Users size={13} />{parsedSection.yearLevel} &middot; Section {parsedSection.section}
+        </p>}
+      </section>
 
-          {loadError ? (
-            <div className="mt-5 alert alert-error text-center">
-              <p className="text-sm font-semibold">Failed to load attendance</p>
-              <p className="mt-2 text-xs text-gray-500">{loadError}</p>
-              <button
-                type="button"
-                onClick={handleRetry}
-                className="btn btn-secondary mt-4 inline-flex items-center px-4 py-2 text-xs font-semibold"
-              >
-                Retry
-              </button>
-            </div>
-          ) : loading ? (
-            <div className="mt-5 space-y-2">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="skeleton h-12" />
-              ))}
-            </div>
-          ) : !parsedSection ? (
-            <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
-              We couldn't detect a class section on your account. Ask an administrator to set your section (e.g. BSIT 3A)
-              on your profile.
-            </div>
-          ) : rows.length === 0 ? (
-            <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
-              No classes scheduled for {selectedDayName}. Pick another date to view its attendance.
-            </div>
-          ) : (
-            <div className="mt-5 table-container">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Subject</th>
-                    <th>Faculty</th>
-                    <th>Time In</th>
-                    <th>Time Out</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => {
-                    const statusCfg = attendanceStatusConfig[row.status];
-                    const StatusIcon = statusCfg.Icon;
-                    return (
-                      <tr key={row.id}>
-                        <td className="font-medium text-gray-800">{row.subjectName}</td>
-                        <td>{row.facultyName || "—"}</td>
-                        <td>
-                          <span className="time-in-badge whitespace-nowrap">{displayTime(timeIn)}</span>
-                        </td>
-                        <td>
-                          <span className="time-out-badge whitespace-nowrap">{displayTime(timeOut)}</span>
-                        </td>
-                        <td>
-                          <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusCfg.pill}`}>
-                            <StatusIcon size={13} className={statusCfg.iconCls} />
-                            {statusCfg.label}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </article>
+      <section className="flex flex-wrap items-end justify-between gap-4 rounded-xl border border-gray-200 bg-white p-4 sm:px-5">
+        <div><p className="text-xs font-medium text-gray-500">Selected day</p>
+          <h2 className="mt-1 text-base font-semibold text-gray-900">{selectedDayName}, {dateLabel}</h2>
+          <p className="mt-1 text-xs text-gray-500">All times are in Philippine Standard Time.</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <div><label htmlFor="student-attendance-date" className="mb-1.5 block text-xs font-medium text-gray-600">Attendance date</label>
+            <input id="student-attendance-date" type="date" value={selectedDate} max={todayDate}
+              onChange={event => { if (event.target.value && event.target.value <= todayDate) setSelectedDate(event.target.value); }}
+              className="form-input rounded-lg px-3 py-2 text-sm" />
+          </div>
+          {selectedDate !== todayDate && <button type="button" onClick={() => setSelectedDate(todayDate)} className="btn btn-secondary text-xs">Today</button>}
+          <button type="button" onClick={refresh} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 disabled:opacity-50">
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />Refresh
+          </button>
+        </div>
+      </section>
+
+      <section aria-label="Attendance summary" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[
+          { label: "Present", Icon: CircleCheck, color: "bg-green-50 text-green-700" },
+          { label: "Late", Icon: Clock, color: "bg-amber-50 text-amber-600" },
+          { label: "Absent", Icon: CircleX, color: "bg-red-50 text-red-600" },
+          { label: "Pending", Icon: CalendarDays, color: "bg-gray-100 text-gray-600" },
+        ].map(({ label, Icon, color }) => <div key={label} className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
+          <span className={`rounded-lg p-2 ${color}`}><Icon size={18} /></span>
+          <div><p className="text-xs font-medium text-gray-500">{label}</p><p className="mt-1 text-2xl font-semibold leading-none tabular-nums text-gray-900">{ready ? counts[label] : "--"}</p></div>
+        </div>)}
+      </section>
+
+      <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-5 py-5 sm:px-6">
+          <div><h2 className="text-lg font-semibold text-gray-900">Class attendance</h2><p className="mt-1 text-sm text-gray-500">Recorded times matched to each subject's schedule.</p></div>
+          {!scheduleLoading && !scheduleError && <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">{rows.length} {rows.length === 1 ? "class" : "classes"}</span>}
+        </div>
+        {loadError ? <div role="alert" className="m-5 rounded-xl border border-red-100 bg-red-50 p-6 text-center">
+          <p className="text-sm font-semibold text-red-700">Unable to load attendance</p><p className="mt-2 text-sm text-red-600">{loadError}</p>
+          <button type="button" onClick={refresh} className="btn btn-secondary mt-4 text-xs">Try again</button>
+        </div> : loading || !ready ? <div role="status" aria-label="Loading attendance" className="space-y-3 p-5">
+          {[1, 2, 3].map(index => <div key={index} className="skeleton h-24 rounded-xl" />)}
+        </div> : !parsedSection || !rows.length ? <div className="px-6 py-14 text-center">
+          <CalendarDays size={28} className="mx-auto text-green-600" />
+          <h3 className="mt-4 text-base font-semibold text-gray-800">{!parsedSection ? "Class section needed" : "No classes scheduled"}</h3>
+          <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-gray-500">{!parsedSection ? "Ask an administrator to add your year and section to your profile." : "Choose another date to review your class attendance."}</p>
+        </div> : <div className="divide-y divide-gray-100">
+          <div aria-hidden="true" className="hidden gap-4 bg-gray-50 px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 lg:grid lg:grid-cols-[minmax(0,1fr)_170px_110px_110px_100px]">
+            <span>Subject / Instructor</span><span>Class schedule</span><span>Time IN</span><span>Time OUT</span><span>Status</span>
+          </div>
+          {rows.map(row => {
+            const record = row.attendance;
+            const config = record ? attendanceStatusConfig[record.status.toLowerCase()] : {
+              label: "Pending", Icon: Clock, pill: "border-gray-200 bg-gray-50 text-gray-600", iconCls: "text-gray-400",
+            };
+            const StatusIcon = config.Icon;
+            return <article key={row.id} className="grid grid-cols-2 gap-4 p-5 transition hover:bg-gray-50/50 sm:px-6 lg:grid-cols-[minmax(0,1fr)_170px_110px_110px_100px] lg:items-center">
+              <div className="col-span-2 min-w-0 lg:col-span-1"><p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{row.subjectCode || "Class"}</p>
+                <h3 className="mt-1 text-sm font-semibold text-gray-900">{row.subjectName}</h3>
+                <p className="mt-1 flex items-center gap-1.5 text-xs text-gray-500"><UserRound size={12} />{row.facultyName || "No instructor assigned"}</p>
+              </div>
+              <div className="col-span-2 lg:col-span-1"><p className="mb-1 text-xs text-gray-500 lg:hidden">Class schedule</p><p className="text-xs font-medium tabular-nums text-gray-700">{attendanceTime(row.startTime)} &ndash; {attendanceTime(row.endTime)}</p></div>
+              <div><p className="mb-1 flex items-center gap-1 text-xs text-gray-500 lg:hidden"><LogIn size={12} />Time IN</p><span className="inline-block rounded-md bg-green-50 px-2.5 py-1.5 text-sm font-semibold tabular-nums text-green-800">{displayTime(record?.timeIn)}</span></div>
+              <div><p className="mb-1 flex items-center gap-1 text-xs text-gray-500 lg:hidden"><LogOut size={12} />Time OUT</p><span className="inline-block rounded-md bg-amber-50 px-2.5 py-1.5 text-sm font-semibold tabular-nums text-amber-800">{displayTime(record?.timeOut)}</span></div>
+              <div className="col-span-2 lg:col-span-1"><span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium ${config.pill}`}><StatusIcon size={12} className={config.iconCls} />{config.label}</span></div>
+            </article>;
+          })}
+        </div>}
+        <div className="flex items-start gap-2 border-t border-gray-100 bg-gray-50/60 px-5 py-4 text-xs leading-relaxed text-gray-500 sm:px-6">
+          <Info size={14} className="mt-0.5 shrink-0" /><p>Check in from 15 minutes before class until 15 minutes after it starts to be marked Present. Later eligible check-ins are Late. Classes remain Pending until the check-in window closes, 15 minutes before class ends. {selectedDate === todayDate ? "Today's records refresh automatically every minute." : "Records use your current class schedule."}</p>
+        </div>
       </section>
     </div>
   );
