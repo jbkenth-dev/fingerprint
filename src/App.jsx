@@ -2176,17 +2176,10 @@ function StudentDashboardPage() {
   const [attendanceLoading, setAttendanceLoading] = React.useState(true);
   const [attendanceError, setAttendanceError] = React.useState("");
 
-  const dayNameMap = { 0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday" };
-
-  function getManilaDayName() {
-    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-    return dayNameMap[now.getDay()] || "";
-  }
-
-  function getManilaDate() {
-    const d = new Date();
-    return d.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
-  }
+  const { date: todayDate, minutes: currentMinutes } = manilaNow();
+  const todayDayName = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila", weekday: "long",
+  }).format(new Date(`${todayDate}T12:00:00+08:00`));
 
   function timeToMinutes(timeStr) {
     if (!timeStr) return null;
@@ -2199,10 +2192,6 @@ function StudentDashboardPage() {
     if (!timeStr || !/^\d{2}:\d{2}/.test(timeStr)) return "—";
     const [h, m] = timeStr.slice(0, 5).split(":").map(Number);
     return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
-  }
-
-  function displayTime(value) {
-    return value ? formatTime(value) : "--:--";
   }
 
   function parseStudentDept(dept) {
@@ -2248,8 +2237,6 @@ function StudentDashboardPage() {
     );
   }, [scheduleRows, parsedSection]);
 
-  const todayDayName = React.useMemo(() => getManilaDayName(), []);
-
   // Daily view: only today's classes — never other days of the week.
   const todaysSchedule = React.useMemo(
     () =>
@@ -2260,61 +2247,47 @@ function StudentDashboardPage() {
   );
 
   // ── Attendance overview ──
-  const todayDate = React.useMemo(() => getManilaDate(), []);
-
-  const loadAttendance = React.useCallback(async () => {
+  const loadAttendance = React.useCallback(async (signal) => {
     setAttendanceLoading(true);
     setAttendanceError("");
     try {
-      const result = await apiFetch(`/attendance.php?date=${todayDate}&limit=500&offset=0`);
-      setAttendanceRecords(Array.isArray(result?.records) ? result.records : []);
+      const records = await fetchAttendanceRange(apiFetch, todayDate, todayDate, signal);
+      if (!signal?.aborted) setAttendanceRecords(records);
     } catch (err) {
+      if (signal?.aborted) return;
       setAttendanceRecords([]);
       setAttendanceError(err.message || "Failed to load attendance.");
     } finally {
-      setAttendanceLoading(false);
+      if (!signal?.aborted) setAttendanceLoading(false);
     }
   }, [todayDate]);
 
   React.useEffect(() => {
-    loadAttendance();
+    const controller = new AbortController();
+    setAttendanceRecords([]);
+    const stop = startPolling(() => loadAttendance(controller.signal), { initialDelay: 0 });
+    return () => {
+      stop();
+      controller.abort();
+    };
   }, [loadAttendance]);
 
-  // Only the signed-in student's own records for today.
-  const myAttendance = React.useMemo(
-    () => attendanceRecords.filter((r) => r.userId === currentUser?.id),
-    [attendanceRecords, currentUser],
-  );
+  // Use the same per-schedule windows, scan pairing, and faculty overrides as reports.
+  const attendanceBySchedule = React.useMemo(() => {
+    if (!currentUser) return new Map();
+    const records = attendanceRecords.filter(record =>
+      String(record.userId) === String(currentUser.id) && record.logDate === todayDate);
+    const classified = classifyAttendance(records, [currentUser], todaysSchedule, todayDate, todayDate);
+    return new Map(Object.values(classified).flat().map(record => [String(record.scheduleId), record]));
+  }, [attendanceRecords, currentUser, todaysSchedule, todayDate, currentMinutes]);
 
-  // Time In = earliest IN record today; Time Out = latest OUT record today.
-  const timeIn = React.useMemo(() => {
-    const ins = myAttendance.filter((r) => r.status === "IN").map((r) => r.logTime).filter(Boolean);
-    return ins.length ? ins.sort()[0] : null;
-  }, [myAttendance]);
-
-  const timeOut = React.useMemo(() => {
-    const outs = myAttendance.filter((r) => r.status === "OUT").map((r) => r.logTime).filter(Boolean);
-    return outs.length ? outs.sort()[outs.length - 1] : null;
-  }, [myAttendance]);
-
-  // Per-class attendance status — applied to each subject in Today's Schedule.
-  // No check-in today = Absent; check-in within or before the class window (start + 15 min) = Present;
-  // check-in after that window = Late.
-  function getClassStatus(entry) {
-    if (!timeIn) return "absent";
-    const inMin = timeToMinutes(timeIn);
-    const startMin = timeToMinutes(entry.startTime);
-    if (inMin == null || startMin == null) return "present";
-    return inMin <= startMin + 15 ? "present" : "late";
-  }
-
-  // On-time window for a class: start ± 15 minutes (mirrors getClassStatus).
+  // On-time window for a class: start ± 15 minutes.
   function getOnTimeWindow(entry) {
     const startMin = timeToMinutes(entry.startTime);
     if (startMin == null) return null;
     const toHHMM = (mins) => {
       const h = ((Math.floor(mins / 60) % 24) + 24) % 24;
-      const m = mins % 60;
+      const m = ((mins % 60) + 60) % 60;
       return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
     };
     return { start: toHHMM(startMin - 15), end: toHHMM(startMin + 15) };
@@ -2383,8 +2356,11 @@ function StudentDashboardPage() {
           ) : (
             <div className="mt-5 space-y-3">
               {todaysSchedule.map((entry) => {
-                const entryStatus = getClassStatus(entry);
-                const statusCfg = attendanceStatusConfig[entryStatus];
+                const attendance = attendanceBySchedule.get(String(entry.id));
+                const statusCfg = !attendanceError && !attendanceLoading && attendance
+                  ? attendanceStatusConfig[attendance.status.toLowerCase()]
+                  : { label: attendanceError ? "Unavailable" : attendanceLoading ? "Loading" : "Pending", Icon: Clock,
+                    pill: "border-gray-200 bg-gray-100 text-gray-600", iconCls: "text-gray-400" };
                 const StatusIcon = statusCfg.Icon;
                 const onTimeWindow = getOnTimeWindow(entry);
                 return (
@@ -2410,7 +2386,7 @@ function StudentDashboardPage() {
                     {attendanceError ? (
                       <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
                         <span className="text-xs text-red-600">Attendance unavailable</span>
-                        <button type="button" onClick={loadAttendance} className="text-xs font-semibold text-red-600 underline">
+                        <button type="button" onClick={() => loadAttendance()} className="text-xs font-semibold text-red-600 underline">
                           Retry
                         </button>
                       </div>
@@ -2426,14 +2402,14 @@ function StudentDashboardPage() {
                             <LogIn size={12} className="text-green-600" />
                             Time In
                           </div>
-                          <div className="mt-1 text-sm font-semibold tabular-nums text-gray-800">{displayTime(timeIn)}</div>
+                          <div className="mt-1 text-sm font-semibold tabular-nums text-gray-800">{attendance?.timeIn || "--:--"}</div>
                         </div>
                         <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
                           <div className="flex items-center gap-1.5 text-[0.65rem] font-semibold uppercase tracking-wider text-gray-400">
                             <LogOut size={12} className="text-amber-500" />
                             Time Out
                           </div>
-                          <div className="mt-1 text-sm font-semibold tabular-nums text-gray-800">{displayTime(timeOut)}</div>
+                          <div className="mt-1 text-sm font-semibold tabular-nums text-gray-800">{attendance?.timeOut && attendance.timeOut !== attendanceTime(null) ? attendance.timeOut : "--:--"}</div>
                         </div>
                       </div>
                     )}
