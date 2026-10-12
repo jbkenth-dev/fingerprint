@@ -20,7 +20,7 @@ export const routeConfig = {
   faculty: [
     { label: "Dashboard & Monitoring", path: "/faculty/dashboard" },
     { label: "My Schedule", path: "/faculty/schedule" },
-    { label: "Attendance", path: "/faculty/attendance", disabled: true },
+    { label: "Attendance", path: "/faculty/attendance", disabled: false },
     { label: "Reports", path: "/faculty/reports", disabled: true },
     { label: "Account", path: "/faculty/account" },
   ],

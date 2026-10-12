@@ -1566,7 +1566,7 @@ function RolePanel({ pageKey, role }) {
   const pageSize = 10;
 
 // Schedule and user data for class info
-  const { users } = useAuth();
+  const { users, session } = useAuth();
   const [scheduleRows, setScheduleRows] = React.useState([]);
   const [scheduleLoading, setScheduleLoading] = React.useState(true);
   const [scheduleError, setScheduleError] = React.useState("");
@@ -1580,7 +1580,12 @@ function RolePanel({ pageKey, role }) {
       setScheduleError("");
       try {
         const data = await apiFetch("/class-schedules.php", refreshVersion ? { cacheTtl: 0 } : {});
-        if (mounted) setScheduleRows(Array.isArray(data) ? data : []);
+        if (mounted) {
+          const rows = Array.isArray(data) ? data : [];
+          setScheduleRows(role === 'faculty'
+            ? rows.filter(row => row.facultyId != null && String(row.facultyId) === String(session?.userId))
+            : rows);
+        }
       } catch (err) {
         if (mounted) setScheduleError(err.message || "Failed to load schedule.");
       } finally {
@@ -1593,9 +1598,9 @@ function RolePanel({ pageKey, role }) {
       mounted = false;
       window.removeEventListener('api:recovered', loadSchedule);
     };
-  }, [refreshVersion]);
+  }, [refreshVersion, role, session?.userId]);
 
-// Admin attendance page state
+// Shared admin and faculty attendance page state
   const [searchTerm, setSearchTerm] = React.useState('');
   const [startDate, setStartDate] = React.useState(() => manilaNow().date);
   const [endDate, setEndDate] = React.useState(() => manilaNow().date);
@@ -1673,11 +1678,11 @@ function RolePanel({ pageKey, role }) {
     return `${normalizedHours}:${minutesText} ${suffix}`;
   }
 
-  // Check if this is the admin attendance page
-  const isAdminAttendancePage = !isDashboard && pageKey === "attendance" && role === "admin";
+  // Enable attendance data loading for both staff roles.
+  const isAttendancePage = !isDashboard && pageKey === "attendance" && (role === "admin" || role === "faculty");
 
   React.useEffect(() => {
-    if (!isAdminAttendancePage || !selectedAttendanceSchedule || (viewMode !== 'live' && rangeError)) return;
+    if (!isAttendancePage || !selectedAttendanceSchedule || (viewMode !== 'live' && rangeError)) return;
     const controller = new AbortController();
     let active = true;
     const first = viewMode === 'live' ? manilaToday : startDate;
@@ -1711,7 +1716,7 @@ function RolePanel({ pageKey, role }) {
       stopPolling();
       controller.abort();
     };
-  }, [isAdminAttendancePage, selectedAttendanceSchedule, viewMode === 'live', startDate, endDate, manilaToday, periodKey, rangeError, refreshVersion]);
+  }, [isAttendancePage, selectedAttendanceSchedule, viewMode === 'live', startDate, endDate, manilaToday, periodKey, rangeError, refreshVersion]);
 
   React.useEffect(() => {
     setAttendancePage(1);
@@ -1719,15 +1724,15 @@ function RolePanel({ pageKey, role }) {
   }, [viewMode, startDate, endDate, searchTerm, attendanceYear, attendanceSection, attendanceScheduleId]);
 
   const classified = React.useMemo(() => {
-    if (!isAdminAttendancePage || loadedPeriod !== periodKey || (viewMode !== 'live' && rangeError)) {
+    if (!isAttendancePage || loadedPeriod !== periodKey || (viewMode !== 'live' && rangeError)) {
       return { present: [], late: [], absent: [] };
     }
     return classifyAttendance(attendanceLogs, users, selectedSchedules,
       viewMode === 'live' ? manilaToday : startDate, viewMode === 'live' ? manilaToday : endDate);
-  }, [isAdminAttendancePage, viewMode === 'live', loadedPeriod, periodKey, rangeError, attendanceLogs, users, selectedSchedules, startDate, endDate, manilaToday, manilaMinutes]);
+  }, [isAttendancePage, viewMode === 'live', loadedPeriod, periodKey, rangeError, attendanceLogs, users, selectedSchedules, startDate, endDate, manilaToday, manilaMinutes]);
 
-  const mergedAttendance = React.useMemo(() => liveAttendance(attendanceLogs, users, isAdminAttendancePage ? selectedSchedules : scheduleRows, manilaToday).filter(entry => !isAdminAttendancePage || (selectedAttendanceSchedule && String(entry.scheduleId) === String(selectedAttendanceSchedule.id))),
-    [attendanceLogs, users, scheduleRows, selectedSchedules, selectedAttendanceSchedule, isAdminAttendancePage, manilaToday]);
+  const mergedAttendance = React.useMemo(() => liveAttendance(attendanceLogs, users, isAttendancePage ? selectedSchedules : scheduleRows, manilaToday).filter(entry => !isAttendancePage || (selectedAttendanceSchedule && String(entry.scheduleId) === String(selectedAttendanceSchedule.id))),
+    [attendanceLogs, users, scheduleRows, selectedSchedules, selectedAttendanceSchedule, isAttendancePage, manilaToday]);
   const totalAttendancePages = Math.max(1, Math.ceil(mergedAttendance.length / pageSize));
 
   const dashboardMetrics = React.useMemo(() => {
@@ -1944,7 +1949,7 @@ function RolePanel({ pageKey, role }) {
         <section className="card-elevated overflow-hidden">
           <div className="border-b border-gray-100 bg-gray-50/50 p-5 sm:p-6">
             <h2 className="text-base font-semibold text-gray-800">Select a class</h2>
-            <p className="mt-1 text-sm text-gray-500">Choose a year level, section, and schedule to view student attendance.</p>
+            <p className="mt-1 text-sm text-gray-500">{role === 'faculty' ? 'Choose one of your assigned classes to view student attendance.' : 'Choose a year level, section, and schedule to view student attendance.'}</p>
             <div className="mt-5 grid gap-4 md:grid-cols-3">
               <label className="block text-sm font-medium text-gray-700">1. Year Level
                 <select value={attendanceYear} disabled={scheduleLoading} onChange={event => {
@@ -1962,10 +1967,10 @@ function RolePanel({ pageKey, role }) {
                   {sectionOptions.map(section => <option key={section} value={section}>Section {section}</option>)}
                 </select>
               </label>
-              <label className="block text-sm font-medium text-gray-700">3. Schedule
+              <label className="block text-sm font-medium text-gray-700">{role === 'faculty' ? '3. Your Schedule' : '3. Schedule'}
                 <select value={selectedAttendanceSchedule ? attendanceScheduleId : ''} disabled={!attendanceSection || scheduleLoading} onChange={event => setAttendanceScheduleId(event.target.value)}
                   className="form-input mt-2 w-full rounded-lg px-3 py-2.5 text-sm disabled:opacity-50">
-                  <option value="">Select schedule</option>
+                  <option value="">{role === 'faculty' ? 'Select your assigned schedule' : 'Select schedule'}</option>
                   {scheduleOptions.map(schedule => <option key={schedule.id} value={schedule.id}>
                     {schedule.subjectCode} - {schedule.subjectName}
                   </option>)}
@@ -2137,7 +2142,7 @@ function RolePanel({ pageKey, role }) {
             {scheduleError ? <p role="alert" className="text-sm text-red-600">{scheduleError}</p>
               : <><CalendarDays size={30} className="mx-auto mb-3 text-gray-300" />
                 <p className="text-sm font-medium text-gray-700">{scheduleLoading ? 'Loading class schedules...' : yearOptions.length ? 'Select a schedule to continue' : 'No class schedules available'}</p>
-                <p className="mt-1 text-sm text-gray-500">{!scheduleLoading && !yearOptions.length ? 'Create a class schedule before viewing attendance.' : 'Attendance views will appear after you select your class.'}</p></>}
+                <p className="mt-1 text-sm text-gray-500">{!scheduleLoading && !yearOptions.length ? role === 'faculty' ? 'No classes are assigned to you yet. Contact an administrator to assign your schedules.' : 'Create a class schedule before viewing attendance.' : 'Attendance views will appear after you select your class.'}</p></>}
           </div>}
         </section>
       )}
