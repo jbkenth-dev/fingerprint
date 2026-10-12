@@ -1951,7 +1951,7 @@ function RolePanel({ pageKey, role }) {
           <div className="border-b border-gray-100 bg-gray-50/50 p-5 sm:p-6">
             <h2 className="text-base font-semibold text-gray-800">Select a class</h2>
             <p className="mt-1 text-sm text-gray-500">{role === 'faculty' ? 'Choose one of your assigned classes to view student attendance.' : 'Choose a year level, section, and schedule to view student attendance.'}</p>
-            <div className={clsx('mt-5 grid gap-4', role !== 'faculty' && 'md:grid-cols-3')}>
+            <div className={clsx('mt-5 grid gap-4', role === 'faculty' ? 'w-full max-w-sm' : 'md:grid-cols-3')}>
               {role !== 'faculty' && <>
               <label className="block text-sm font-medium text-gray-700">1. Year Level
                 <select value={attendanceYear} disabled={scheduleLoading} onChange={event => {
@@ -1976,7 +1976,6 @@ function RolePanel({ pageKey, role }) {
                   <option value="">{role === 'faculty' ? 'Select your assigned schedule' : 'Select schedule'}</option>
                   {scheduleOptions.map(schedule => <option key={schedule.id} value={schedule.id}>
                     {schedule.subjectCode} - {schedule.subjectName}
-                    {role === 'faculty' ? ` | ${schedule.yearLevel} - Section ${schedule.section} | ${attendanceTime(schedule.startTime)} - ${attendanceTime(schedule.endTime)}` : ''}
                   </option>)}
                 </select>
               </label>
