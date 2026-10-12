@@ -264,6 +264,11 @@ body,
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12);
 }
 
+.faculty-student-search:focus-within {
+  border-color: var(--green-500);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12);
+}
+
 .form-input:disabled {
   background: var(--gray-100);
   color: var(--gray-500);
