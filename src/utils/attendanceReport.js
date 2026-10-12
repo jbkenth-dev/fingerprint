@@ -9,6 +9,10 @@ export function formatReportDays(days = []) {
   return days.map(day => dayAbbreviations[day] || day).join(', ');
 }
 
+export function formatReportSemester(semester) {
+  return semester?.replace(/\bSem\b/i, 'Semester') || 'Not specified';
+}
+
 export function buildAttendanceReport(logs, users, schedule, start, end, now = new Date()) {
   const roster = users.filter(user => {
     const section = studentSection(user);

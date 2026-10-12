@@ -2,7 +2,7 @@ import React from 'react';
 import { Download, FileBarChart, RefreshCw } from 'lucide-react';
 import { apiFetch } from '../api';
 import { attendanceTime, attendanceWindow, datesInRange, fetchAttendanceRange, manilaNow } from '../utils/attendance';
-import { buildAttendanceReport, formatReportDays } from '../utils/attendanceReport';
+import { buildAttendanceReport, formatReportDays, formatReportSemester } from '../utils/attendanceReport';
 
 const generatedLabel = date => new Intl.DateTimeFormat('en-PH', {
   timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short',
@@ -168,6 +168,7 @@ export default function AdminReports() {
             {[
               ['Subject', `${schedule.subjectCode} — ${schedule.subjectName}`],
               ['Class', `${year} · Section ${section}`],
+              ['Semester', formatReportSemester(schedule.semester)],
               ['Faculty', currentReport.facultyName],
               ['Schedule', `${formatReportDays(schedule.days)} | ${attendanceTime(schedule.startTime)} – ${attendanceTime(schedule.endTime)}`],
               ['Coverage', `${currentReport.classDates.length} scheduled dates · ${currentReport.rows.length} active students`],

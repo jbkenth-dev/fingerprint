@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import { autoTable } from 'jspdf-autotable';
 import { attendanceTime } from './attendance.js';
-import { formatReportDays } from './attendanceReport.js';
+import { formatReportDays, formatReportSemester } from './attendanceReport.js';
 
 export function createAttendancePdf(report) {
   const { schedule, rows, totals, start, end, facultyName, generatedAt, classDates } = report;
@@ -61,6 +61,7 @@ export function createAttendancePdf(report) {
     body: [
       ['Subject', `${schedule.subjectCode} - ${schedule.subjectName}`],
       ['Year / Section', `${schedule.yearLevel} / Section ${schedule.section}`],
+      ['Semester', formatReportSemester(schedule.semester)],
       ['Faculty', facultyName],
       ['Class schedule', `${formatReportDays(schedule.days) || 'No days assigned'} | ${attendanceTime(schedule.startTime)} - ${attendanceTime(schedule.endTime)}`],
       ['Coverage', `${classDates.length} scheduled dates; ${rows.length} active students`],
