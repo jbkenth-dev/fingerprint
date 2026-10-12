@@ -43,6 +43,8 @@ export default function FacultyManual() {
   const roster = React.useMemo(() => validDate ? manualAttendanceRows(logs, data.students, selected, date)
     .sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'en', { sensitivity: 'base' })) : [], [logs, data.students, selected, date, validDate]);
   const marks = Object.fromEntries(roster.map(student => [student.id, direction === 'IN' ? student.attendanceStatus : student.outAttendanceStatus]));
+  const presentCount = roster.filter(student => marks[student.id] === 'Present').length;
+  const allPresent = roster.length > 0 && presentCount === roster.length;
 
   React.useEffect(() => {
     if (!isFullscreen) return;
@@ -106,20 +108,20 @@ export default function FacultyManual() {
   const error = scheduleError || attendanceError;
   const busy = loading || loadingSchedules;
 
-  async function updateAttendance(student, status, copy = false) {
+  async function updateAttendance(student, status, copy = false, bulkPresent = false) {
     if (savingRef.current || busy || error || !validDate) return;
     savingRef.current = true;
     mutationVersion.current++;
     setSaving(true);
     try {
       const result = await apiFetch('/manual-attendance.php', { method: 'POST', body: JSON.stringify({
-        scheduleId: selected.id, userId: student?.id, date, status, direction, ...(copy ? { action: 'copy-in' } : {}),
+        scheduleId: selected.id, userId: student?.id, date, status, direction, ...(copy ? { action: 'copy-in' } : bulkPresent ? { action: 'set-present' } : {}),
       }) });
       if (!result.ok || !Array.isArray(result.records) || !result.records.length) throw new Error('The attendance update could not be confirmed. Refresh and try again.');
       const ids = new Set(result.records.map(log => String(log.id)));
       setLogs(previous => [...previous.filter(log => !ids.has(String(log.id))), ...result.records]);
       setFeedback({ success: true, title: 'Attendance updated',
-        message: copy ? `OUT attendance copied from IN for ${result.count} students.` : `${nameOf(student)} is now marked ${status} for ${direction} attendance.`,
+        message: copy ? `OUT attendance copied from IN for ${result.count} students.` : bulkPresent ? `${result.count} students are now marked ${status} for ${direction} attendance.` : `${nameOf(student)} is now marked ${status} for ${direction} attendance.`,
         detail: copy ? `Present and Late: OUT at ${attendanceTime(selected.endTime)}. Absent: no OUT. · ${date}`
           : `Time ${direction === 'IN' ? 'in' : 'out'}: ${status === 'Absent' ? '00:00:00' : attendanceTime(result.records[0].logTime)} · ${date}` });
     } catch (error) {
@@ -227,13 +229,22 @@ export default function FacultyManual() {
           <caption className="sr-only">{direction} attendance for {selected?.subjectCode} on {date}. P: Present, L: Late, A: Absent.</caption>
           <thead className={`${isFullscreen ? 'sticky top-0 z-10 shadow-sm ' : ''}border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wider text-gray-500`}><tr>
             <th scope="col" className="w-14 px-5 py-4">No.</th><th scope="col" className="px-5 py-4">Student</th><th scope="col" className="px-5 py-4">ID number</th>
-            {statuses.map(status => <th key={status.code} scope="col" className={`w-20 px-3 py-4 text-center ${status.color}`} title={status.value}>{status.code}<span className="sr-only"> — {status.value}</span></th>)}
+            {statuses.map(status => <th key={status.code} scope="col" className={`w-20 px-3 py-4 text-center ${status.color}`} title={status.value}>
+              {status.code === 'P' ? <label className="inline-flex cursor-pointer flex-col items-center gap-2">
+                <span>P<span className="sr-only"> — Present</span></span>
+                <input type="checkbox" checked={allPresent} ref={input => { if (input) input.indeterminate = presentCount > 0 && !allPresent; }}
+                  disabled={busy || saving || Boolean(error) || !validDate || !roster.length}
+                  onChange={event => updateAttendance(null, event.target.checked ? 'Present' : 'Absent', false, true)}
+                  aria-label={`Select all students as Present for ${direction} attendance; uncheck to mark all Absent`}
+                  title="All students in the selected class" className="h-5 w-5 cursor-pointer rounded accent-green-700 disabled:cursor-wait disabled:opacity-50" />
+              </label> : <>{status.code}<span className="sr-only"> — {status.value}</span></>}
+            </th>)}
           </tr></thead>
           <tbody className="divide-y divide-gray-100">{visible.map(student => <tr key={student.id} className="hover:bg-gray-50/60">
             <td className="px-5 py-4 text-gray-400">{String(roster.indexOf(student) + 1).padStart(2, '0')}</td>
             <th scope="row" className="px-5 py-4 font-medium text-gray-900">{nameOf(student)}</th><td className="px-5 py-4 text-gray-500">{student.idNumber || '—'}</td>
             {statuses.map(status => <td key={status.code} className="px-3 py-3 text-center"><label className={`inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg transition ${marks[student.id] === status.value ? status.bg : 'hover:bg-gray-100'}`}>
-              <input type="checkbox" checked={marks[student.id] === status.value} disabled={saving} onChange={() => updateAttendance(student, status.value)} aria-label={`${direction} ${status.value} for ${nameOf(student)}`} className={`h-5 w-5 cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-offset-4 disabled:cursor-wait disabled:opacity-50 ${status.accent}`} />
+              <input type="checkbox" checked={marks[student.id] === status.value} disabled={saving} onChange={event => updateAttendance(student, event.target.checked ? status.value : 'Absent')} aria-label={`${direction} ${status.value} for ${nameOf(student)}`} className={`h-5 w-5 cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-offset-4 disabled:cursor-wait disabled:opacity-50 ${status.accent}`} />
             </label></td>)}
           </tr>)}</tbody>
         </table>{!visible.length && <p className="px-6 py-10 text-center text-sm text-gray-500">No students match your search.</p>}</div>}

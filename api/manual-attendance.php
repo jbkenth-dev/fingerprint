@@ -15,10 +15,12 @@ try {
     if (!is_array($input)) throw new InvalidArgumentException('Invalid attendance request.');
     $scheduleId = filter_var($input['scheduleId'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
     $copy = ($input['action'] ?? '') === 'copy-in';
+    $bulkPresent = ($input['action'] ?? '') === 'set-present';
     $direction = $copy ? 'OUT' : ($input['direction'] ?? '');
     $userId = filter_var($input['userId'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
     $status = $input['status'] ?? null;
-    if (!$scheduleId || !in_array($direction, ['IN', 'OUT'], true) || (!$copy && (!$userId || !is_string($status)))) {
+    if ($bulkPresent && !in_array($status, ['Present', 'Absent'], true)) throw new InvalidArgumentException('Select Present or Absent for the class.');
+    if (!$scheduleId || !in_array($direction, ['IN', 'OUT'], true) || (!$copy && !$bulkPresent && (!$userId || !is_string($status)))) {
         throw new InvalidArgumentException('Select a class, student, attendance direction, and status.');
     }
     $date = $input['date'] ?? '';
@@ -36,7 +38,7 @@ try {
         exit;
     }
     if (!in_array((new DateTimeImmutable($date))->format('l'), array_map('trim', explode(',', $schedule['days'])), true)) throw new InvalidArgumentException('Select a scheduled class day.');
-    if ($copy) {
+    if ($copy || $bulkPresent) {
         $students = array_values(array_filter($pdo->query("SELECT * FROM users WHERE role = 'student' AND status = 'Active' FOR UPDATE")->fetchAll(),
             fn($student) => manual_attendance_student_matches($student, $schedule)));
         if (!$students) throw new InvalidArgumentException('There are no active students in this class.');
