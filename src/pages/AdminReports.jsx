@@ -53,7 +53,7 @@ export default function AdminReports() {
 
   const years = [...new Set(schedules.map(row => row.yearLevel))].sort();
   const sections = [...new Set(schedules.filter(row => row.yearLevel === year).map(row => row.section))].sort();
-  const options = schedules.filter(row => row.yearLevel === year && row.section === section);
+  const options = isFaculty ? schedules : schedules.filter(row => row.yearLevel === year && row.section === section);
   const schedule = options.find(row => String(row.id) === scheduleId);
   const rangeError = !start || !end ? 'Select both dates.'
     : !datesInRange(start, end).length ? 'Select a valid range with the end date on or after the start date.'
@@ -133,7 +133,7 @@ export default function AdminReports() {
             className="btn btn-secondary inline-flex items-center gap-2 text-sm disabled:opacity-40"><RefreshCw size={15} aria-hidden="true" />Refresh</button>
         </div>
         <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <label className="text-sm font-medium text-gray-700">Year level
+          {!isFaculty && <><label className="text-sm font-medium text-gray-700">Year level
             <select className={inputClass} value={year} disabled={scheduleLoading} onChange={event => {
               setYear(event.target.value); setSection(''); setScheduleId('');
             }}><option value="">Select year level</option>{years.map(value => <option key={value}>{value}</option>)}</select>
@@ -143,10 +143,12 @@ export default function AdminReports() {
               setSection(event.target.value); setScheduleId('');
             }}><option value="">Select section</option>{sections.map(value => <option key={value} value={value}>Section {value}</option>)}</select>
           </label>
-          <label className="text-sm font-medium text-gray-700 sm:col-span-2 lg:col-span-1">Class schedule
-            <select className={inputClass} value={schedule ? scheduleId : ''} disabled={!section || scheduleLoading} onChange={event => setScheduleId(event.target.value)}>
+          </>}
+          <label className={`text-sm font-medium text-gray-700 ${isFaculty ? '' : 'sm:col-span-2 lg:col-span-1'}`}>Class schedule
+            <select className={inputClass} value={schedule ? scheduleId : ''} disabled={(!isFaculty && !section) || scheduleLoading} onChange={event => setScheduleId(event.target.value)}>
               <option value="">Select schedule</option>{options.map(row => <option key={row.id} value={row.id}>
                 {row.subjectCode} — {row.subjectName}
+                {isFaculty ? ` — ${row.yearLevel}, Section ${row.section} (${formatReportSemester(row.semester)})` : ''}
               </option>)}
             </select>
           </label>
@@ -164,7 +166,7 @@ export default function AdminReports() {
       {!currentReport ? <section className="card-elevated px-6 py-16 text-center" aria-live="polite">
         <FileBarChart size={30} className="mx-auto text-gray-400" aria-hidden="true" />
         <h2 className="mt-4 font-semibold text-gray-900">{loading || scheduleLoading ? 'Preparing report…' : 'Your report preview'}</h2>
-        <p className="mt-2 text-sm text-gray-500">{loading ? 'Computing attendance for the selected class and dates.' : 'Select a year level, section, schedule, and valid dates to see attendance totals.'}</p>
+        <p className="mt-2 text-sm text-gray-500">{loading ? 'Computing attendance for the selected class and dates.' : isFaculty ? 'Select a class schedule and valid dates to see attendance totals.' : 'Select a year level, section, schedule, and valid dates to see attendance totals.'}</p>
       </section> : <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm" aria-label="Attendance report preview">
         <div className="border-b border-gray-200 p-6 sm:p-8">
           <p className="text-xs font-semibold uppercase tracking-widest text-gray-500">Francis Key · Attendance Management</p>
@@ -173,7 +175,7 @@ export default function AdminReports() {
           <dl className="mt-6 grid gap-5 text-sm sm:grid-cols-2 lg:grid-cols-3">
             {[
               ['Subject', `${schedule.subjectCode} — ${schedule.subjectName}`],
-              ['Class', `${year} · Section ${section}`],
+              ['Class', `${schedule.yearLevel} · Section ${schedule.section}`],
               ['Semester', formatReportSemester(schedule.semester)],
               ['Faculty', currentReport.facultyName],
               ['Schedule', `${formatReportDays(schedule.days)} | ${attendanceTime(schedule.startTime)} – ${attendanceTime(schedule.endTime)}`],
@@ -205,7 +207,6 @@ export default function AdminReports() {
                 </tr>)}
                 {!visibleRows.length && <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-500">No active students in the selected class.</td></tr>}
               </tbody>
-              <tfoot className="border-y border-gray-900 font-semibold text-gray-900"><tr><th colSpan={3} scope="row" className="px-3 py-3 text-left">Class totals (all students)</th>{['present', 'late', 'absent', 'total'].map(key => <td key={key} className="px-3 py-3 text-right tabular-nums">{currentReport.totals[key]}</td>)}</tr></tfoot>
             </table>
           </div>
           {pageCount > 1 && <div className="mt-4 flex items-center justify-between gap-3 text-sm text-gray-600">

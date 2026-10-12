@@ -50,7 +50,7 @@ test('PDF exports all student summaries without a ledger, with page numbers and 
   assert.ok(pdf.includes('TOTAL DAYS'));
   assert.ok(pdf.includes('M, T |'));
   assert.ok(pdf.includes('ID-75'));
-  assert.ok(pdf.includes('CLASS TOTALS'));
+  assert.ok(!pdf.includes('CLASS TOTALS'));
   for (let page = 1; page <= doc.getNumberOfPages(); page++) {
     assert.ok(doc.internal.pages[page].join('\n').includes(`Page ${page} of ${doc.getNumberOfPages()}`));
   }

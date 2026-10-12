@@ -17,7 +17,6 @@ export function createAttendancePdf(report) {
     theme: 'grid', margin: { left: margin, right: margin, top: 30, bottom: 20 },
     styles: { font: 'helvetica', fontSize: 9, textColor: 0, fillColor: 255, lineColor: 0, lineWidth: 0.15, cellPadding: 2.5, overflow: 'linebreak', valign: 'middle' },
     headStyles: { fontStyle: 'bold', textColor: 0, fillColor: 255, lineColor: 0, lineWidth: 0.25 },
-    footStyles: { fontStyle: 'bold', textColor: 0, fillColor: 255 },
     alternateRowStyles: { fillColor: 255 },
     rowPageBreak: 'avoid',
   };
@@ -82,8 +81,6 @@ export function createAttendancePdf(report) {
     head: [['No.', 'Student ID', 'Student name', 'Present', 'Late', 'Absent', 'Total Days']],
     body: rows.length ? rows.map((row, index) => [index + 1, row.idNumber, row.name, row.present, row.late, row.absent, row.total])
       : [[{ content: 'No active students in the selected class.', colSpan: 7 }]],
-    foot: [[{ content: 'CLASS TOTALS', colSpan: 3 }, totals.present, totals.late, totals.absent, totals.total]],
-    showFoot: 'lastPage',
     columnStyles: {
       0: { cellWidth: 11 }, 1: { cellWidth: 30 }, 2: { cellWidth: 65 },
       3: { cellWidth: 18, halign: 'right' }, 4: { cellWidth: 18, halign: 'right' },
