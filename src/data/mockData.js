@@ -27,7 +27,9 @@ export const routeConfig = {
   ],
   student: [
     { label: "Dashboard & Monitoring", path: "/student/dashboard" },
+    { label: "My Schedule", path: "/student/schedule" },
     { label: "Attendance", path: "/student/attendance", disabled: false },
+    { label: "Record", path: "/student/record" },
     { label: "Account", path: "/student/account" },
   ],
 };
