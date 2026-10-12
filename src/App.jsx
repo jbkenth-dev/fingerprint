@@ -2310,7 +2310,7 @@ function StudentDashboardPage() {
             <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
               Welcome back{currentUser?.firstName ? `, ${currentUser.firstName}` : ""}.
             </h1>
-            <p className="mt-2 text-sm leading-relaxed text-green-100">Your classes and attendance, all in one place.</p>
+            <p className="mt-2 text-sm leading-relaxed text-green-100">Your classes and attendance.</p>
             <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-green-100">
               {parsedSection && <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1.5">
                 <Users size={13} />{parsedSection.yearLevel} &middot; Section {parsedSection.section}
