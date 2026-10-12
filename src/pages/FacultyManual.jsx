@@ -153,15 +153,15 @@ export default function FacultyManual() {
 
     {isFullscreen ? createPortal(
       <dialog ref={dialogRef} aria-labelledby="manual-roster-title" onCancel={() => setIsFullscreen(false)}
-        className="fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none overflow-y-auto border-0 bg-white p-0">
+        className="fixed inset-0 m-0 h-dvh max-h-none w-full max-w-none overflow-hidden border-0 bg-white p-0">
         {renderStudentAttendance()}
       </dialog>, document.body,
     ) : renderStudentAttendance()}
   </div>;
 
   function renderStudentAttendance() {
-    return <section className={isFullscreen ? 'min-h-dvh bg-white' : `${card} overflow-hidden`} aria-labelledby="manual-roster-title">
-      <div className="flex flex-col justify-between gap-4 border-b border-gray-100 p-5 sm:px-6 lg:flex-row lg:items-center">
+    return <section className={isFullscreen ? 'flex h-full min-h-0 flex-col overflow-hidden bg-white' : `${card} overflow-hidden`} aria-labelledby="manual-roster-title">
+      <div className="flex shrink-0 flex-col justify-between gap-4 border-b border-gray-100 bg-white p-5 sm:px-6 lg:flex-row lg:items-center">
         <div><h2 id="manual-roster-title" className="flex items-center gap-2 font-semibold text-gray-900"><Users size={18} className="text-green-700" aria-hidden="true" />Student attendance <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{roster.length}</span></h2>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -175,12 +175,16 @@ export default function FacultyManual() {
           </button>
         </div>
       </div>
+      <div className={isFullscreen ? 'min-h-0 flex-1 overflow-auto overscroll-contain' : undefined}
+        style={isFullscreen ? { scrollbarGutter: 'stable' } : undefined}
+        role={isFullscreen ? 'region' : undefined} aria-label={isFullscreen ? 'Scrollable student attendance' : undefined}
+        tabIndex={isFullscreen ? 0 : undefined}>
       {busy ? <div role="status" className="px-6 py-16 text-center text-sm text-gray-500">Loading class attendance...</div>
         : error ? <p className="px-6 py-16 text-center text-sm text-gray-500">Attendance could not be loaded. Retry to view the current checks.</p>
         : !roster.length ? <div className="px-6 py-16 text-center"><ClipboardCheck size={32} className="mx-auto mb-3 text-gray-300" aria-hidden="true" /><p className="font-medium text-gray-700">{selected && validDate ? 'No students to display' : 'Choose a class session'}</p><p className="mt-2 text-sm text-gray-500">{selected && validDate ? 'Active students assigned to this year and section will appear here.' : 'Select an assigned schedule and a valid class date to begin.'}</p></div>
-        : <div className="overflow-x-auto"><table className="w-full min-w-[580px] text-left text-sm">
+        : <div className={isFullscreen ? undefined : 'overflow-x-auto'}><table className="w-full min-w-[580px] text-left text-sm">
           <caption className="sr-only">Attendance for {selected?.subjectCode} on {date}. P: Present, L: Late, A: Absent.</caption>
-          <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wider text-gray-500"><tr>
+          <thead className={`${isFullscreen ? 'sticky top-0 z-10 shadow-sm ' : ''}border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wider text-gray-500`}><tr>
             <th scope="col" className="w-14 px-5 py-4">No.</th><th scope="col" className="px-5 py-4">Student</th><th scope="col" className="px-5 py-4">ID number</th>
             {statuses.map(status => <th key={status.code} scope="col" className={`w-20 px-3 py-4 text-center ${status.color}`} title={status.value}>{status.code}<span className="sr-only"> — {status.value}</span></th>)}
           </tr></thead>
@@ -192,6 +196,7 @@ export default function FacultyManual() {
             </label></td>)}
           </tr>)}</tbody>
         </table>{!visible.length && <p className="px-6 py-10 text-center text-sm text-gray-500">No students match your search.</p>}</div>}
+      </div>
     </section>;
   }
 }
