@@ -1,5 +1,6 @@
 import React from 'react';
-import { CalendarDays, ClipboardCheck, RefreshCw, Search, Users } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { CalendarDays, ClipboardCheck, Maximize2, RefreshCw, Search, Users, X } from 'lucide-react';
 import { apiFetch } from '../api';
 import { useAuth } from '../state/AuthContext';
 import { attendanceTime, attendanceWindow, fetchAttendanceRange, manilaNow } from '../utils/attendance';
@@ -28,6 +29,9 @@ export default function FacultyManual() {
   const [scheduleError, setScheduleError] = React.useState('');
   const [attendanceError, setAttendanceError] = React.useState('');
   const [reload, setReload] = React.useState(0);
+  const [isFullscreen, setIsFullscreen] = React.useState(false);
+  const dialogRef = React.useRef(null);
+  const maximizeRef = React.useRef(null);
   const selected = data.schedules.find(row => String(row.id) === scheduleId);
   const weekday = date ? new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }) : '';
   const validDate = Boolean(date && date <= today && selected?.days?.includes(weekday));
@@ -35,6 +39,19 @@ export default function FacultyManual() {
   const roster = React.useMemo(() => validDate ? manualAttendanceRows(logs, data.students, selected, date)
     .sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'en', { sensitivity: 'base' })) : [], [logs, data.students, selected, date, validDate]);
   const marks = Object.fromEntries(roster.map(student => [student.id, overrides[student.id] || student.attendanceStatus]));
+
+  React.useEffect(() => {
+    if (!isFullscreen) return;
+    const dialog = dialogRef.current;
+    const previousOverflow = document.body.style.overflow;
+    dialog.showModal();
+    document.body.style.overflow = 'hidden';
+    return () => {
+      dialog.close();
+      document.body.style.overflow = previousOverflow;
+      maximizeRef.current?.focus();
+    };
+  }, [isFullscreen]);
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -134,13 +151,28 @@ export default function FacultyManual() {
       </div>)}
     </div>
 
-    <section className={`${card} overflow-hidden`} aria-labelledby="manual-roster-title">
+    {isFullscreen ? createPortal(
+      <dialog ref={dialogRef} aria-labelledby="manual-roster-title" onCancel={() => setIsFullscreen(false)}
+        className="fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none overflow-y-auto border-0 bg-white p-0">
+        {renderStudentAttendance()}
+      </dialog>, document.body,
+    ) : renderStudentAttendance()}
+  </div>;
+
+  function renderStudentAttendance() {
+    return <section className={isFullscreen ? 'min-h-dvh bg-white' : `${card} overflow-hidden`} aria-labelledby="manual-roster-title">
       <div className="flex flex-col justify-between gap-4 border-b border-gray-100 p-5 sm:px-6 lg:flex-row lg:items-center">
         <div><h2 id="manual-roster-title" className="flex items-center gap-2 font-semibold text-gray-900"><Users size={18} className="text-green-700" aria-hidden="true" />Student attendance <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{roster.length}</span></h2>
         </div>
         <div className="flex flex-wrap gap-3">
           {roster.length > 0 && <label className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2.5"><Search size={16} className="text-gray-400" aria-hidden="true" /><span className="sr-only">Search students</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search name or ID" className="w-40 bg-transparent text-sm outline-none sm:w-44" /></label>}
           <button type="button" disabled={busy} onClick={() => changeContext(() => setReload(value => value + 1))} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"><RefreshCw size={16} className={busy ? 'animate-spin' : ''} aria-hidden="true" />Refresh checks</button>
+          <button ref={isFullscreen ? undefined : maximizeRef} type="button" onClick={() => setIsFullscreen(value => !value)}
+            aria-label={isFullscreen ? 'Close fullscreen student attendance' : 'Maximize student attendance'}
+            title={isFullscreen ? 'Close fullscreen' : 'Maximize'}
+            className="inline-flex items-center justify-center rounded-lg border border-gray-200 px-3 py-2.5 text-gray-700 transition hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-700">
+            {isFullscreen ? <X size={20} aria-hidden="true" /> : <Maximize2 size={20} aria-hidden="true" />}
+          </button>
         </div>
       </div>
       {busy ? <div role="status" className="px-6 py-16 text-center text-sm text-gray-500">Loading class attendance...</div>
@@ -160,6 +192,6 @@ export default function FacultyManual() {
             </label></td>)}
           </tr>)}</tbody>
         </table>{!visible.length && <p className="px-6 py-10 text-center text-sm text-gray-500">No students match your search.</p>}</div>}
-    </section>
-  </div>;
+    </section>;
+  }
 }
