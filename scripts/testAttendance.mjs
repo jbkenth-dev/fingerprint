@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { manilaNow, datesInRange, fetchAttendanceRange, classifyAttendance, liveAttendance, searchAttendance, attendanceWindow } from '../src/utils/attendance.js';
+import { manilaNow, datesInRange, fetchAttendanceRange, classifyAttendance, liveAttendance, searchAttendance, attendanceWindow, attendanceSessions } from '../src/utils/attendance.js';
 
 const users = [{ id: 1, role: 'student', status: 'Active', firstName: 'Ana', lastName: 'Cruz', idNumber: '001', department: 'BSIT 1-A' }];
 const schedules = [
@@ -137,4 +137,33 @@ test('reports remain scoped to the selected section and schedule', () => {
   assert.equal(result.absent[0].scheduleId, 10);
   assert.equal(attendanceWindow(schedules[0]).closes, 525);
   assert.equal(attendanceWindow({startTime: 'invalid', endTime: '09:00'}), null);
+});
+
+test('uses the closest following OUT even after class ends and with earlier unmatched IN scans', () => {
+  const date = '2026-10-12';
+  // API results arrive newest first. An unmatched early IN must not take the class OUT.
+  const logs = [log(5, date, '10:06:00', 'OUT'), log(4, date, '09:04:00', 'OUT'),
+    log(3, date, '07:55:00'), log(2, date, '07:54:00'), log(1, date, '07:00:00')];
+  const sessions = attendanceSessions(logs).filter(session => session.status === 'IN');
+  assert.ok(sessions.every(session => session.timeOut === '9:04 AM'));
+  const result = classifyAttendance(logs, users, [schedules[0]], date, date, new Date('2026-10-12T03:00:00Z'));
+  assert.equal(result.present[0].timeOut, '9:04 AM');
+  const live = liveAttendance(logs, users, [schedules[0]], date).filter(entry => entry.scheduleId === 10);
+  assert.ok(live.every(entry => entry.timeOut === '9:04 AM'));
+  const example = classifyAttendance(logs.filter(entry => entry.id >= 3), users, [schedules[0]], date, date, new Date('2026-10-12T03:00:00Z'));
+  assert.equal(example.present[0].timeIn, '7:55 AM');
+  assert.equal(example.present[0].timeOut, '9:04 AM');
+});
+
+test('OUT pairing stays within the student and date and never replaces the nearest OUT', () => {
+  const date = '2026-10-12';
+  const logs = [log(1, date, '07:30:00', 'OUT'), log(2, date, '07:55:00'),
+    { ...log(3, date, '08:10:00', 'OUT'), userId: 2 },
+    log(4, date, '09:04:00', 'OUT'), log(5, date, '10:06:00', 'OUT'),
+    log(6, date, '13:16:00'), log(7, date, '14:04:00', 'OUT'),
+    log(8, date, '15:00:00'), log(9, '2026-10-13', '07:00:00', 'OUT')];
+  const sessions = attendanceSessions(logs);
+  assert.equal(sessions.find(entry => entry.id === 2).timeOut, '9:04 AM');
+  assert.equal(sessions.find(entry => entry.id === 6).timeOut, '2:04 PM');
+  assert.equal(sessions.find(entry => entry.id === 8).timeOut, '—');
 });

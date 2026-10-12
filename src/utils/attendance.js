@@ -112,7 +112,12 @@ export function attendanceSessions(logs) {
         pending.push(session);
         sessions.push(session);
       } else if (record.status === 'OUT') {
-        if (pending.length) pending.shift().timeOut = attendanceTime(record.logTime);
+        // Each IN uses its nearest following OUT. Earlier or repeated IN scans
+        // must not consume the OUT needed by a scheduled class check-in.
+        if (pending.length) {
+          for (const session of pending) session.timeOut = attendanceTime(record.logTime);
+          pending.length = 0;
+        }
         else sessions.push({ ...record, key: `out-${record.id}`, rawInTime: null, timeIn: '—', timeOut: attendanceTime(record.logTime) });
       }
     }
