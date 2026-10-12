@@ -1610,7 +1610,8 @@ function RolePanel({ pageKey, role }) {
   const [attendanceScheduleId, setAttendanceScheduleId] = React.useState('');
   const yearOptions = [...new Set(scheduleRows.map(row => row.yearLevel))].sort();
   const sectionOptions = [...new Set(scheduleRows.filter(row => row.yearLevel === attendanceYear).map(row => row.section))].sort();
-  const scheduleOptions = scheduleRows.filter(row => row.yearLevel === attendanceYear && row.section === attendanceSection);
+  const scheduleOptions = role === 'faculty' ? scheduleRows
+    : scheduleRows.filter(row => row.yearLevel === attendanceYear && row.section === attendanceSection);
   const selectedAttendanceSchedule = scheduleOptions.find(row => String(row.id) === attendanceScheduleId);
   const selectedSchedules = React.useMemo(() => selectedAttendanceSchedule ? [selectedAttendanceSchedule] : [], [selectedAttendanceSchedule]);
   const selectedAttendanceWindow = selectedAttendanceSchedule && attendanceWindow(selectedAttendanceSchedule);
@@ -1788,7 +1789,7 @@ function RolePanel({ pageKey, role }) {
     const rows = [
       ['Francis Key Attendance Export'],
       ['View', viewMode], ['Start date', viewMode === 'live' ? manilaToday : startDate],
-      ['End date', viewMode === 'live' ? manilaToday : endDate], ['Year level', attendanceYear], ['Section', attendanceSection],
+      ['End date', viewMode === 'live' ? manilaToday : endDate], ['Year level', selectedAttendanceSchedule.yearLevel], ['Section', selectedAttendanceSchedule.section],
       ['Schedule', selectedAttendanceSchedule.subjectCode], ['Faculty', assignedFacultyName], ['Search', searchTerm], [],
       ['No.', 'Name', 'ID Number', 'Class', 'Schedule', 'Date', ...(viewMode === 'absent' ? [] : ['Time IN', 'Time OUT']), 'Status', 'Reason'],
       ...tableData.records.map((entry, index) => [index + 1, entry.name, entry.idNumber, entry.classes,
@@ -1950,7 +1951,8 @@ function RolePanel({ pageKey, role }) {
           <div className="border-b border-gray-100 bg-gray-50/50 p-5 sm:p-6">
             <h2 className="text-base font-semibold text-gray-800">Select a class</h2>
             <p className="mt-1 text-sm text-gray-500">{role === 'faculty' ? 'Choose one of your assigned classes to view student attendance.' : 'Choose a year level, section, and schedule to view student attendance.'}</p>
-            <div className="mt-5 grid gap-4 md:grid-cols-3">
+            <div className={clsx('mt-5 grid gap-4', role !== 'faculty' && 'md:grid-cols-3')}>
+              {role !== 'faculty' && <>
               <label className="block text-sm font-medium text-gray-700">1. Year Level
                 <select value={attendanceYear} disabled={scheduleLoading} onChange={event => {
                   setAttendanceYear(event.target.value); setAttendanceSection(''); setAttendanceScheduleId('');
@@ -1967,17 +1969,29 @@ function RolePanel({ pageKey, role }) {
                   {sectionOptions.map(section => <option key={section} value={section}>Section {section}</option>)}
                 </select>
               </label>
-              <label className="block text-sm font-medium text-gray-700">{role === 'faculty' ? '3. Your Schedule' : '3. Schedule'}
-                <select value={selectedAttendanceSchedule ? attendanceScheduleId : ''} disabled={!attendanceSection || scheduleLoading} onChange={event => setAttendanceScheduleId(event.target.value)}
+              </>}
+              <label className="block text-sm font-medium text-gray-700">{role === 'faculty' ? 'Your Schedule' : '3. Schedule'}
+                <select value={selectedAttendanceSchedule ? attendanceScheduleId : ''} disabled={scheduleLoading || (role !== 'faculty' && !attendanceSection)} onChange={event => setAttendanceScheduleId(event.target.value)}
                   className="form-input mt-2 w-full rounded-lg px-3 py-2.5 text-sm disabled:opacity-50">
                   <option value="">{role === 'faculty' ? 'Select your assigned schedule' : 'Select schedule'}</option>
                   {scheduleOptions.map(schedule => <option key={schedule.id} value={schedule.id}>
                     {schedule.subjectCode} - {schedule.subjectName}
+                    {role === 'faculty' ? ` | ${schedule.yearLevel} - Section ${schedule.section} | ${attendanceTime(schedule.startTime)} - ${attendanceTime(schedule.endTime)}` : ''}
                   </option>)}
                 </select>
               </label>
             </div>
             {selectedAttendanceSchedule && <dl aria-label="Selected schedule details" className="mt-5 grid gap-4 rounded-xl border border-gray-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-3">
+              {role === 'faculty' && <>
+                <div className="min-w-0">
+                  <dt className="text-xs font-semibold uppercase tracking-wider text-gray-500">Year level</dt>
+                  <dd className="mt-2 text-sm font-medium text-gray-800">{selectedAttendanceSchedule.yearLevel}</dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-xs font-semibold uppercase tracking-wider text-gray-500">Section</dt>
+                  <dd className="mt-2 text-sm font-medium text-gray-800">{selectedAttendanceSchedule.section}</dd>
+                </div>
+              </>}
               <div className="min-w-0">
                 <dt className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500"><CalendarDays size={15} aria-hidden="true" />Schedule days</dt>
                 <dd className="mt-2 text-sm font-medium text-gray-800">{selectedAttendanceSchedule.days.join(', ') || 'No days assigned'}</dd>
