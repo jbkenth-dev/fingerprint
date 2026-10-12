@@ -3429,7 +3429,7 @@ function ClassSchedulingPage() {
     <div className="academic-page animate-fade-up space-y-5">
       <HeaderBlock
         title="Class Scheduling"
-        description="Manage section schedules, faculty assignments, and student rosters."
+        description="Manage section schedules, faculty assignments, and student  ."
         rightContent={(
           <button
             type="button"
