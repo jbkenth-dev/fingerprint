@@ -1991,7 +1991,7 @@ function RolePanel({ pageKey, role }) {
           {selectedAttendanceSchedule && <>
           <div className="border-b border-gray-100 p-5 sm:p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap gap-1 rounded-xl bg-gray-100 p-1" role="tablist" aria-label="Attendance view">
+              <div className="flex flex-wrap gap-x-3 gap-y-4 rounded-xl bg-gray-100 p-2" role="tablist" aria-label="Attendance view">
                 {[
                   { value: 'live', label: 'Live', Icon: Activity },
                   { value: 'present', label: 'Present', Icon: CircleCheck },
@@ -2001,12 +2001,12 @@ function RolePanel({ pageKey, role }) {
                   <button key={value} type="button" role="tab" id={`attendance-tab-${value}`}
                     aria-selected={viewMode === value} aria-controls="attendance-results"
                     onClick={() => setViewMode(value)}
-                    className={clsx('inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-green-600',
+                    className={clsx('relative inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-green-600',
                       viewMode === value ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500 hover:bg-white/60 hover:text-gray-800')}>
                     <Icon size={16} />{label}
                     <span aria-label={tableLoading || tableError ? 'Student count unavailable' : `${attendanceCounts[value]} students`}
                       title={value === 'live' ? 'Students checked in today' : `Students marked ${label.toLowerCase()} for the attendance period`}
-                      className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold leading-none text-white shadow-sm tabular-nums ring-2 ring-white">
+                      className="pointer-events-none absolute -right-2 -top-2 z-10 inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full border-2 border-white bg-red-600 px-1 text-[10px] font-bold leading-none text-white shadow-[0_2px_5px_rgba(220,38,38,0.25)] tabular-nums">
                       {tableLoading || tableError ? '—' : attendanceCounts[value]}
                     </span>
                   </button>
