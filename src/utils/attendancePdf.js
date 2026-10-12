@@ -4,11 +4,10 @@ import { attendanceTime } from './attendance.js';
 import { formatReportDays, formatReportSemester } from './attendanceReport.js';
 
 export function createAttendancePdf(report) {
-  const { schedule, rows, totals, start, end, facultyName, generatedAt, classDates } = report;
+  const { schedule, rows, start, end, facultyName, generatedAt, classDates } = report;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   doc.setProperties({ title: 'Class Attendance Report', subject: `${schedule.subjectCode} | ${start} to ${end}`, author: 'Francis Key Attendance Management' });
   const margin = 16;
-  const width = 178;
   const generated = new Intl.DateTimeFormat('en-PH', {
     timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short',
   }).format(generatedAt);
@@ -66,14 +65,6 @@ export function createAttendancePdf(report) {
       ['Coverage', `${classDates.length} scheduled dates; ${rows.length} active students`],
       ['Computed at', generated],
     ],
-    willDrawPage: continuation,
-  });
-  autoTable(doc, {
-    ...tableStyle, startY: doc.lastAutoTable.finalY + 6,
-    head: [['PRESENT', 'LATE', 'ABSENT', 'TOTAL DAYS']],
-    body: [[totals.present, totals.late, totals.absent, totals.total]],
-    styles: { ...tableStyle.styles, halign: 'center', cellWidth: width / 4 },
-    bodyStyles: { fontSize: 16, fontStyle: 'bold', cellPadding: 4 },
     willDrawPage: continuation,
   });
   autoTable(doc, {

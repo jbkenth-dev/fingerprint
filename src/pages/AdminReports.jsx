@@ -148,7 +148,6 @@ export default function AdminReports() {
             <select className={inputClass} value={schedule ? scheduleId : ''} disabled={(!isFaculty && !section) || scheduleLoading} onChange={event => setScheduleId(event.target.value)}>
               <option value="">Select schedule</option>{options.map(row => <option key={row.id} value={row.id}>
                 {row.subjectCode} — {row.subjectName}
-                {isFaculty ? ` — ${row.yearLevel}, Section ${row.section} (${formatReportSemester(row.semester)})` : ''}
               </option>)}
             </select>
           </label>
@@ -184,14 +183,8 @@ export default function AdminReports() {
             ].map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</dt><dd className="mt-1.5 break-words font-medium text-gray-900">{value}</dd></div>)}
           </dl>
         </div>
-        <div className="grid grid-cols-2 gap-px border-b border-gray-200 bg-gray-200 sm:grid-cols-4" aria-live="polite">
-          {['present', 'late', 'absent', 'total'].map(key => <div key={key} className="bg-white p-5 sm:px-8">
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">{key === 'total' ? 'Total Days' : key}</p>
-            <p className="mt-2 text-3xl font-semibold tabular-nums text-gray-900">{currentReport.totals[key]}</p>
-          </div>)}
-        </div>
         <div className="p-6 sm:p-8">
-          <h3 className="font-semibold text-gray-900">Student attendance breakdown</h3>
+          <h3 className="font-semibold text-gray-900">Student attendance</h3>
           {!currentReport.classDates.length && <p className="mt-3 text-sm text-gray-600">No scheduled class dates fall within this range.</p>}
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[680px] text-sm">

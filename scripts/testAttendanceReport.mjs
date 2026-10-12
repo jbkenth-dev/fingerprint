@@ -47,7 +47,8 @@ test('PDF exports all student summaries without a ledger, with page numbers and 
   assert.ok(!pdf.includes('Attendance Ledger'));
   assert.ok(!pdf.includes('Counts represent'));
   assert.ok(!pdf.includes('Manila'));
-  assert.ok(pdf.includes('TOTAL DAYS'));
+  assert.ok(!pdf.includes('TOTAL DAYS'));
+  assert.equal(doc.lastAutoTable.head[0].cells[6].text.join(' '), 'Total Days');
   assert.ok(pdf.includes('M, T |'));
   assert.ok(pdf.includes('ID-75'));
   assert.ok(!pdf.includes('CLASS TOTALS'));
