@@ -1,4 +1,4 @@
-import { attendanceSessions, attendanceWindow, studentSection } from './attendance.js';
+import { attendanceSessions, attendanceTime, attendanceWindow, manualAttendanceStatus, manualOutRecord, manualOutStatus, manualScheduleId, studentSection } from './attendance.js';
 
 export function manualAttendanceRows(logs, students, schedule, date) {
   const window = schedule && attendanceWindow(schedule);
@@ -7,6 +7,8 @@ export function manualAttendanceRows(logs, students, schedule, date) {
   if (!schedule.days?.includes(weekday)) return [];
   const sessions = attendanceSessions(logs.filter(log => log.logDate === date));
   const firstCheckIns = new Map();
+  const manualMarks = new Map(logs.filter(log => log.logDate === date && manualScheduleId(log) === String(schedule.id))
+    .map(log => [String(log.userId), log]));
   for (const session of sessions) {
     if (session.rawInTime === null || session.rawInTime < window.opens || session.rawInTime > window.closes) continue;
     const key = String(session.userId);
@@ -18,7 +20,13 @@ export function manualAttendanceRows(logs, students, schedule, date) {
     return student.role === 'student' && student.status === 'Active' && section?.yearLevel === schedule.yearLevel && section?.section === schedule.section;
   }).map(student => {
     const session = firstCheckIns.get(String(student.id));
-    return { ...student, attendanceStatus: !session ? 'Absent' : session.rawInTime <= window.presentUntil ? 'Present' : 'Late',
-      timeIn: session?.timeIn || '—' };
+    const manual = manualMarks.get(String(student.id));
+    const status = manual ? manualAttendanceStatus(manual, schedule) : !session ? 'Absent' : session.rawInTime <= window.presentUntil ? 'Present' : 'Late';
+    const out = manualOutRecord(logs, schedule.id, student.id, date);
+    const outStatus = out ? manualOutStatus(out, status) : session?.timeOut && session.timeOut !== '—' ? status : 'Absent';
+    return { ...student, attendanceStatus: status,
+      outAttendanceStatus: outStatus,
+      timeIn: manual ? status === 'Absent' ? '—' : attendanceTime(manual.logTime) : session?.timeIn || '—',
+      timeOut: out ? out.status === 'OUT' ? attendanceTime(out.logTime) : '—' : session?.timeOut || '—' };
   });
 }

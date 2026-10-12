@@ -60,6 +60,17 @@ export function timeMinutes(value) {
   return hour * 60 + minute;
 }
 
+export async function fetchAttendanceWithManualRange(fetcher, start, end, signal, options = {}) {
+  if (!datesInRange(start, end).length) throw new Error('Select a valid attendance date range.');
+  const params = new URLSearchParams({ startDate: start, endDate: end });
+  const [scans, manual] = await Promise.all([
+    fetchAttendanceRange(fetcher, start, end, signal, options),
+    fetcher(`/manual-attendance.php?${params}`, { ...options, signal }),
+  ]);
+  if (!manual.ok || !Array.isArray(manual.records)) throw new Error('Unable to load manual attendance. Please refresh.');
+  return [...scans, ...manual.records];
+}
+
 export function attendanceTime(value) {
   const minutes = timeMinutes(value);
   if (minutes === null) return '—';
@@ -98,6 +109,7 @@ function scheduledFor(schedule, date, student) {
 export function attendanceSessions(logs) {
   const groups = new Map();
   for (const log of logs) {
+    if (isManualAttendance(log)) continue;
     const key = `${log.userId}-${log.logDate}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(log);
@@ -125,10 +137,39 @@ export function attendanceSessions(logs) {
   return sessions;
 }
 
+export function manualScheduleId(log) {
+  if (log.source !== 'faculty-manual') return null;
+  const match = /^manual:(\d+):(\d+):(\d{4}-\d{2}-\d{2})$/.exec(log.localRecordId || '');
+  return match && match[2] === String(log.userId) && match[3] === log.logDate ? match[1] : null;
+}
+
+export function isManualAttendance(log) {
+  return String(log.source || '').startsWith('faculty-manual');
+}
+
+export function manualOutRecord(logs, scheduleId, userId, date) {
+  return logs.find(log => isManualAttendance(log) && String(log.userId) === String(userId) &&
+    log.logDate === date && log.localRecordId === `manual:${scheduleId}:${userId}:${date}:out`);
+}
+
+export function manualOutStatus(log, inStatus) {
+  if (!log || log.status === 'ABSENT') return 'Absent';
+  if (log.source === 'faculty-manual-out-late') return 'Late';
+  if (log.source === 'faculty-manual-out-present') return 'Present';
+  return inStatus === 'Absent' ? 'Present' : inStatus;
+}
+
+export function manualAttendanceStatus(log, schedule) {
+  if (log.status === 'ABSENT') return 'Absent';
+  return timeMinutes(log.logTime) <= timeMinutes(schedule.startTime) + 15 ? 'Present' : 'Late';
+}
+
 export function classifyAttendance(logs, users, schedules, start, end, now = new Date()) {
   const clock = manilaNow(now);
   const results = { present: [], late: [], absent: [] };
   const sessions = attendanceSessions(logs);
+  const manualMarks = new Map(logs.filter(log => manualScheduleId(log) !== null)
+    .map(log => [`${log.userId}-${log.logDate}-${manualScheduleId(log)}`, log]));
   const byStudentDate = new Map();
   for (const session of sessions) {
     const key = `${session.userId}-${session.logDate}`;
@@ -145,9 +186,11 @@ export function classifyAttendance(logs, users, schedules, start, end, now = new
         const candidates = (byStudentDate.get(`${student.id}-${date}`) || [])
           .filter(s => s.rawInTime !== null && s.rawInTime >= window.opens && s.rawInTime <= window.closes);
         const session = candidates[0];
+        const manual = manualMarks.get(`${student.id}-${date}-${schedule.id}`);
+        const outMark = manualOutRecord(logs, schedule.id, student.id, date);
         // Do not mark an ongoing or upcoming class absent before its check-in window closes.
-        if (!session && date === clock.date && clock.minutes <= window.closes) continue;
-        const status = !session ? 'Absent' : session.rawInTime <= window.presentUntil ? 'Present' : 'Late';
+        if (!manual && !session && date === clock.date && clock.minutes <= window.closes) continue;
+        const status = manual ? manualAttendanceStatus(manual, schedule) : !session ? 'Absent' : session.rawInTime <= window.presentUntil ? 'Present' : 'Late';
         results[status.toLowerCase()].push({
           key: `${date}-${schedule.id ?? `${schedule.subjectCode}-${schedule.startTime}`}-${student.id}`,
           userId: student.id, scheduleId: schedule.id, logDate: date,
@@ -155,8 +198,9 @@ export function classifyAttendance(logs, users, schedules, start, end, now = new
           idNumber: student.idNumber || student.username || 'N/A',
           classes: `${schedule.subjectCode} — ${schedule.subjectName}`,
           timeSchedule: `${attendanceTime(schedule.startTime)} – ${attendanceTime(schedule.endTime)}`,
-          timeIn: session?.timeIn || '', timeOut: session?.timeOut || '', status,
-          reason: !session ? 'No check-in during class schedule' : status === 'Present' ? 'On time' : 'Late arrival',
+          timeIn: manual ? status === 'Absent' ? '' : attendanceTime(manual.logTime) : session?.timeIn || '',
+          timeOut: outMark ? outMark.status === 'OUT' ? attendanceTime(outMark.logTime) : '' : manual && session?.timeOut === '—' ? '' : session?.timeOut || '', status,
+          reason: manual ? 'Updated by faculty' : !session ? 'No check-in during class schedule' : status === 'Present' ? 'On time' : 'Late arrival',
         });
       }
     }
@@ -165,19 +209,38 @@ export function classifyAttendance(logs, users, schedules, start, end, now = new
 }
 
 export function liveAttendance(logs, users, schedules, date) {
-  return attendanceSessions(logs.filter(log => log.logDate === date)).map(session => {
+  const manual = logs.filter(log => log.logDate === date && manualScheduleId(log) !== null);
+  const sessions = attendanceSessions(logs.filter(log => log.logDate === date));
+  const scanned = sessions.map(session => {
     const student = users.find(u => String(u.id) === String(session.userId));
     const schedule = student && student.role === 'student' && student.status === 'Active' && schedules.find(s => {
       const window = attendanceWindow(s);
       return window && scheduledFor(s, date, student) && session.rawInTime !== null &&
         session.rawInTime >= window.opens && session.rawInTime <= window.closes;
     });
-    return { ...session, scheduleId: schedule?.id, classes: schedule ? `${schedule.subjectCode} — ${schedule.subjectName}` : '—',
+    const outMark = schedule && manualOutRecord(logs, schedule.id, session.userId, date);
+    return { ...session, timeOut: outMark ? outMark.status === 'OUT' ? attendanceTime(outMark.logTime) : '—' : session.timeOut,
+      scheduleId: schedule?.id, classes: schedule ? `${schedule.subjectCode} — ${schedule.subjectName}` : '—',
       timeSchedule: schedule ? `${attendanceTime(schedule.startTime)} – ${attendanceTime(schedule.endTime)}` : '—',
       status: schedule ? session.rawInTime <= timeMinutes(schedule.startTime) + 15 ? 'Present' : 'Late' : 'Unscheduled',
       reason: schedule ? 'Scheduled class' : 'No matching class schedule',
     };
-  }).sort((a, b) => String(b.logTime).localeCompare(String(a.logTime)) || Number(b.id) - Number(a.id));
+  }).filter(session => !manual.some(log => String(log.userId) === String(session.userId) && manualScheduleId(log) === String(session.scheduleId)));
+  const recorded = manual.flatMap(log => {
+    const schedule = schedules.find(row => String(row.id) === manualScheduleId(log));
+    if (!schedule) return [];
+    const status = manualAttendanceStatus(log, schedule);
+    const outMark = manualOutRecord(logs, schedule.id, log.userId, date);
+    const window = attendanceWindow(schedule);
+    const existing = window && sessions.find(session => String(session.userId) === String(log.userId) &&
+      session.rawInTime !== null && session.rawInTime >= window.opens && session.rawInTime <= window.closes);
+    return [{ ...log, key: `manual-${log.id}`, scheduleId: schedule.id, status,
+      timeIn: status === 'Absent' ? '—' : attendanceTime(log.logTime),
+      timeOut: outMark ? outMark.status === 'OUT' ? attendanceTime(outMark.logTime) : '—' : existing?.timeOut || '—',
+      classes: `${schedule.subjectCode} — ${schedule.subjectName}`,
+      timeSchedule: `${attendanceTime(schedule.startTime)} – ${attendanceTime(schedule.endTime)}`, reason: 'Updated by faculty' }];
+  });
+  return [...scanned, ...recorded].sort((a, b) => String(b.logTime).localeCompare(String(a.logTime)) || Number(b.id) - Number(a.id));
 }
 
 export function searchAttendance(records, term) {

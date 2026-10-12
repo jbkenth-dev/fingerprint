@@ -9,7 +9,7 @@ import { useMockLoading } from "./hooks/useMockLoading";
 import { useManilaClock } from "./hooks/useManilaClock";
 import { useAuth } from "./state/AuthContext";
 import { apiFetch } from "./api";
-import { manilaNow, datesInRange, fetchAttendanceRange, classifyAttendance, liveAttendance, searchAttendance, attendanceTime, attendanceWindow } from "./utils/attendance";
+import { manilaNow, datesInRange, fetchAttendanceWithManualRange as fetchAttendanceRange, classifyAttendance, liveAttendance, searchAttendance, attendanceTime, attendanceWindow } from "./utils/attendance";
 import { startPolling } from "./utils/polling";
 import AdminReports from "./pages/AdminReports";
 import FacultySchedule from "./pages/FacultySchedule";

@@ -1,0 +1,113 @@
+<?php
+require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/auth_middleware.php';
+require_once __DIR__ . '/attendance_filters.php';
+require_once __DIR__ . '/manual_attendance_policy.php';
+require_once __DIR__ . '/manual_attendance_store.php';
+
+$method = $_SERVER['REQUEST_METHOD'];
+$faculty = require_auth($pdo, $method === 'POST' ? 'faculty' : null);
+if (!in_array($method, ['GET', 'POST'], true)) {
+    http_response_code(405);
+    echo json_encode(['error' => 'Method not allowed']);
+    exit;
+}
+try {
+    if ($method === 'GET') {
+        $filter = attendance_filters($_GET);
+        if (!$filter['values']) throw new InvalidArgumentException('Select an attendance date or date range.');
+        ensure_manual_attendance_store($pdo);
+        $where = $filter['where'];
+        $values = $filter['values'];
+        if ($faculty['user_role'] === 'faculty') {
+            $where .= ' AND s.facultyId = ?';
+            $values[] = $faculty['user_id'];
+        } elseif ($faculty['user_role'] === 'student') {
+            $where .= ' AND a.userId = ?';
+            $values[] = $faculty['user_id'];
+        } elseif ($faculty['user_role'] !== 'admin') {
+            http_response_code(403);
+            echo json_encode(['error' => 'Attendance access denied.']);
+            exit;
+        }
+        $stmt = $pdo->prepare('SELECT a.* FROM faculty_manual_attendance a JOIN class_schedules s ON s.id = a.scheduleId' . $where . ' ORDER BY a.logDate DESC, a.logTime DESC, a.id DESC');
+        $stmt->execute($values);
+        echo json_encode(['ok' => true, 'records' => array_map('manual_public_record', $stmt->fetchAll())]);
+        exit;
+    }
+    $input = json_decode(file_get_contents('php://input'), true);
+    if (!is_array($input)) throw new InvalidArgumentException('Invalid attendance request.');
+    $scheduleId = filter_var($input['scheduleId'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    $copy = ($input['action'] ?? '') === 'copy-in';
+    $direction = $copy ? 'OUT' : ($input['direction'] ?? '');
+    $userId = filter_var($input['userId'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    $status = $input['status'] ?? null;
+    if (!$scheduleId || !in_array($direction, ['IN', 'OUT'], true) || (!$copy && (!$userId || !is_string($status)))) {
+        throw new InvalidArgumentException('Select a class, student, attendance direction, and status.');
+    }
+    $date = $input['date'] ?? '';
+    if (!is_string($date) || $date === '') throw new InvalidArgumentException('Select an attendance date.');
+    attendance_filters(['date' => $date]);
+    if ($date > (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d')) throw new InvalidArgumentException('Attendance cannot be recorded for a future date.');
+    ensure_manual_attendance_store($pdo);
+    $pdo->beginTransaction();
+    $stmt = $pdo->prepare('SELECT * FROM class_schedules WHERE id = ? AND facultyId = ? FOR UPDATE');
+    $stmt->execute([$scheduleId, $faculty['user_id']]);
+    $schedule = $stmt->fetch();
+    if (!$schedule) {
+        $pdo->rollBack();
+        http_response_code(403);
+        echo json_encode(['error' => 'You can only update your assigned classes.']);
+        exit;
+    }
+    if (!in_array((new DateTimeImmutable($date))->format('l'), array_map('trim', explode(',', $schedule['days'])), true)) throw new InvalidArgumentException('Select a scheduled class day.');
+    if ($copy) {
+        $students = array_values(array_filter($pdo->query("SELECT * FROM users WHERE role = 'student' AND status = 'Active' FOR UPDATE")->fetchAll(),
+            fn($student) => manual_attendance_student_matches($student, $schedule)));
+        if (!$students) throw new InvalidArgumentException('There are no active students in this class.');
+        $placeholders = implode(',', array_fill(0, count($students), '?'));
+        $stmt = $pdo->prepare('SELECT userId, logDate, logTime, status, source, localRecordId FROM attendance_logs WHERE logDate = ? AND userId IN (' . $placeholders . ') FOR UPDATE');
+        $stmt->execute(array_merge([$date], array_column($students, 'id')));
+        $logs = $stmt->fetchAll();
+        $stmt = $pdo->prepare('SELECT userId, logDate, logTime, status, source, localRecordId FROM faculty_manual_attendance WHERE scheduleId = ? AND logDate = ? FOR UPDATE');
+        $stmt->execute([$scheduleId, $date]);
+        $logs = array_merge($logs, $stmt->fetchAll());
+    } else {
+        $stmt = $pdo->prepare('SELECT * FROM users WHERE id = ? FOR UPDATE');
+        $stmt->execute([$userId]);
+        $student = $stmt->fetch();
+        if (!$student || !manual_attendance_student_matches($student, $schedule)) throw new InvalidArgumentException('This student is not active in the selected class section.');
+        $students = [$student];
+    }
+    $save = $pdo->prepare('INSERT INTO faculty_manual_attendance
+        (scheduleId, userId, idNumber, name, role, logDate, logTime, status, deviceId, fingerprintId, smartCardId, source, localRecordId)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE logTime = VALUES(logTime), status = VALUES(status), source = VALUES(source)');
+    $read = $pdo->prepare('SELECT * FROM faculty_manual_attendance WHERE deviceId = ? AND localRecordId = ?');
+    $records = [];
+    foreach ($students as $student) {
+        $studentId = (int) $student['id'];
+        $mark = $copy ? manual_attendance_current_status($logs, $schedule, $studentId, $date) : $status;
+        $inTime = manual_attendance_time($schedule, $mark);
+        $time = $direction === 'IN' ? $inTime : (manual_attendance_out_time($schedule, $mark) ?? '00:00:00');
+        $marker = "manual:$scheduleId:$studentId:$date" . ($direction === 'OUT' ? ':out' : '');
+        $source = $direction === 'IN' ? 'faculty-manual' : 'faculty-manual-out-' . strtolower($mark);
+        $save->execute([$scheduleId, $studentId, $student['idNumber'] ?? null,
+            trim(implode(' ', array_filter([$student['firstName'], $student['middleName'] ?? '', $student['lastName']]))),
+            'student', $date, $time, $mark === 'Absent' ? 'ABSENT' : $direction, 'FACULTY-MANUAL',
+            $student['fingerprintId'] ?? '', $student['smartCardId'] ?? '', $source, $marker]);
+        $read->execute(['FACULTY-MANUAL', $marker]);
+        $records[] = manual_public_record($read->fetch());
+    }
+    $pdo->commit();
+    echo json_encode(['ok' => true, 'records' => $records, 'direction' => $direction, 'copied' => $copy, 'count' => count($records)]);
+} catch (InvalidArgumentException $error) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
+    http_response_code(400);
+    echo json_encode(['error' => $error->getMessage()]);
+} catch (Throwable $error) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
+    error_log('Manual attendance update: ' . $error->getMessage());
+    http_response_code(500);
+    echo json_encode(['error' => 'Attendance could not be updated. Please try again.']);
+}

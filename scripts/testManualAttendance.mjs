@@ -1,12 +1,104 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { manualAttendanceRows } from '../src/utils/manualAttendance.js';
+import { attendanceSessions, classifyAttendance, fetchAttendanceWithManualRange, liveAttendance } from '../src/utils/attendance.js';
 
 const date = '2026-10-12';
 const schedule = { id: 10, yearLevel: '1st Year', section: 'A', days: ['Monday'], startTime: '08:00:00', endTime: '09:00:00' };
 const students = [{ id: 1, role: 'student', status: 'Active', department: 'BSIT 1-A' }];
 const scan = (logTime, extra = {}) => ({ id: 1, userId: 1, logDate: date, logTime, status: 'IN', ...extra });
 const rows = logs => manualAttendanceRows(logs, students, schedule, date);
+
+test('loads manual marks separately without requiring changes to the scanner attendance API', async () => {
+  const raw = scan('08:00:00');
+  const manual = scan('08:16:00', { id: 'manual-1', source: 'faculty-manual', localRecordId: `manual:10:1:${date}` });
+  const calls = [];
+  const fetcher = async path => {
+    calls.push(path);
+    return path.startsWith('/manual-attendance.php') ? { ok: true, records: [manual] } : { records: [raw], total: 1 };
+  };
+  const loaded = await fetchAttendanceWithManualRange(fetcher, date, date);
+  assert.equal(calls.length, 2);
+  assert.equal(loaded.length, 2);
+  assert.equal(rows(loaded)[0].attendanceStatus, 'Late');
+  assert.equal(new Set(loaded.map(log => String(log.id))).size, 2);
+});
+
+test('a failed manual read cannot silently produce a report without saved marks', async () => {
+  await assert.rejects(() => fetchAttendanceWithManualRange(async path => {
+    if (path.startsWith('/manual-attendance.php')) throw new Error('Manual attendance unavailable');
+    return { records: [], total: 0 };
+  }, date, date), /Manual attendance unavailable/);
+});
+
+test('saved checkbox changes take priority over scans and stay isolated to their class', () => {
+  const secondClass = { ...schedule, id: 20, subjectCode: 'SECOND' };
+  const original = scan('08:00:00');
+  // Covers P -> L -> A -> P -> A -> L -> P using the same saved record.
+  for (const status of ['Present', 'Late', 'Absent', 'Present', 'Absent', 'Late', 'Present']) {
+    const saved = scan(status === 'Present' ? '08:00:00' : status === 'Late' ? '08:16:00' : '00:00:00', {
+      id: 2, status: status === 'Absent' ? 'ABSENT' : 'IN', source: 'faculty-manual', localRecordId: `manual:10:1:${date}`,
+    });
+    const out = scan('09:00:00', { id: 3, status: 'OUT', source: 'faculty-manual', localRecordId: `manual:10:1:${date}:out` });
+    const logs = [original, saved, ...(status === 'Absent' ? [] : [out])];
+    assert.equal(rows(logs)[0].attendanceStatus, status);
+    assert.equal(rows(logs)[0].timeOut, status === 'Absent' ? '—' : '9:00 AM');
+    assert.equal(manualAttendanceRows(logs, students, secondClass, date)[0].attendanceStatus, 'Present');
+    const classified = classifyAttendance(logs, students, [schedule, secondClass], date, date, new Date('2026-10-12T00:05:00Z'));
+    assert.equal(classified[status.toLowerCase()].find(row => row.scheduleId === 10).status, status);
+    assert.equal(classified[status.toLowerCase()].find(row => row.scheduleId === 10).timeOut, status === 'Absent' ? '' : '9:00 AM');
+    assert.equal(Object.values(classified).flat().length, 2);
+    const live = liveAttendance(logs, students, [schedule], date);
+    assert.equal(live.length, 1);
+    assert.equal(live[0].status, status);
+    assert.equal(live[0].timeOut, status === 'Absent' ? '—' : '9:00 AM');
+    assert.equal(attendanceSessions(logs).length, 1);
+  }
+});
+
+test('manual OUT is tied to its class and date and is independent of IN status', () => {
+  const saved = scan('08:00:00', { id: 2, source: 'faculty-manual', localRecordId: `manual:10:1:${date}` });
+  const out = scan('09:00:00', { id: 3, status: 'OUT', source: 'faculty-manual', localRecordId: `manual:10:1:${date}:out` });
+  for (const other of [
+    { ...out, localRecordId: `manual:20:1:${date}:out` },
+    { ...out, logDate: '2026-10-13' }, { ...out, userId: 2 },
+  ]) assert.equal(rows([saved, other])[0].timeOut, '—');
+  assert.equal(rows([{ ...saved, status: 'ABSENT', logTime: '00:00:00' }, out])[0].timeOut, '9:00 AM');
+});
+
+test('IN and OUT checks persist independently even though P and L share the OUT time', () => {
+  const inMark = scan('08:00:00', { id: 2, source: 'faculty-manual', localRecordId: `manual:10:1:${date}` });
+  assert.equal(rows([inMark])[0].outAttendanceStatus, 'Absent');
+  for (const status of ['Present', 'Late', 'Absent']) {
+    const out = scan(status === 'Absent' ? '00:00:00' : '09:00:00', { id: 3, status: status === 'Absent' ? 'ABSENT' : 'OUT',
+      source: `faculty-manual-out-${status.toLowerCase()}`, localRecordId: `manual:10:1:${date}:out` });
+    const result = rows([inMark, out])[0];
+    assert.equal(result.attendanceStatus, 'Present');
+    assert.equal(result.outAttendanceStatus, status);
+    assert.equal(result.timeOut, status === 'Absent' ? '—' : '9:00 AM');
+    const absentIn = { ...inMark, logTime: '00:00:00', status: 'ABSENT' };
+    assert.equal(rows([absentIn, out])[0].outAttendanceStatus, status);
+    assert.equal(attendanceSessions([inMark, out]).length, 0);
+  }
+});
+
+test('OUT-only manual updates override scanner timeouts without changing scanner IN', () => {
+  const logs = [scan('08:00:00'), scan('08:50:00', { id: 2, status: 'OUT' })];
+  const out = scan('09:00:00', { id: 3, status: 'OUT', source: 'faculty-manual-out-late', localRecordId: `manual:10:1:${date}:out` });
+  const changed = [...logs, out];
+  assert.equal(rows(changed)[0].attendanceStatus, 'Present');
+  assert.equal(rows(changed)[0].outAttendanceStatus, 'Late');
+  assert.equal(liveAttendance(changed, students, [schedule], date)[0].timeOut, '9:00 AM');
+  assert.equal(classifyAttendance(changed, students, [schedule], date, date, new Date('2026-10-12T02:00:00Z')).present[0].timeOut, '9:00 AM');
+  const absent = [...logs, { ...out, status: 'ABSENT', logTime: '00:00:00', source: 'faculty-manual-out-absent' }];
+  assert.equal(rows(absent)[0].timeOut, '—');
+  assert.equal(liveAttendance(absent, students, [schedule], date)[0].timeOut, '—');
+});
+
+test('manual zero time is absent even for a class beginning near midnight', () => {
+  const saved = scan('00:00:00', { source: 'faculty-manual', status: 'ABSENT', localRecordId: `manual:10:1:${date}` });
+  assert.equal(manualAttendanceRows([saved], students, { ...schedule, startTime: '00:10:00', endTime: '01:10:00' }, date)[0].attendanceStatus, 'Absent');
+});
 
 test('checkbox status follows the inclusive present and late windows', () => {
   for (const [time, status] of [
