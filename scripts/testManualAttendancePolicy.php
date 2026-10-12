@@ -22,6 +22,28 @@ $savedOut = array_merge($existingOut, ['source' => 'faculty-manual-out-absent', 
 verify_manual(manual_attendance_target([$savedOut], $schedule, 1, $date, 'OUT')['id'] === 101, 'OUT changes must reuse the OUT row without changing IN.');
 $taggedIn = array_merge($existingIn, ['source' => 'faculty-manual:10:IN', 'logTime' => '08:16:00']);
 $taggedOut = array_merge($existingOut, ['source' => 'faculty-manual:10:OUT:L']);
+// One checkbox must plan both writes, including creating a missing OUT.
+foreach ([[], [$existingIn], [$existingIn, $existingOut]] as $logs) {
+    foreach (['Present' => '08:00:00', 'Late' => '08:16:00', 'Absent' => '00:00:00'] as $status => $inTime) {
+        $changes = manual_attendance_changes($logs, $schedule, 1, $date, $status);
+        verify_manual(count($changes) === 2, 'Each status must save an IN and an OUT.');
+        verify_manual($changes[0]['logTime'] === $inTime, 'Paired IN must use the selected status time.');
+        verify_manual($changes[1]['logTime'] === ($status === 'Absent' ? '00:00:00' : '09:00:00'), 'Paired OUT must use the class end or zero for Absent.');
+        verify_manual(array_column($changes, 'status') === ($status === 'Absent' ? ['ABSENT', 'ABSENT'] : ['IN', 'OUT']), 'Both saved records must match the selected status.');
+        verify_manual(($changes[0]['target']['id'] ?? null) === (count($logs) ? 100 : null), 'Existing IN must be reused.');
+        verify_manual(($changes[1]['target']['id'] ?? null) === (count($logs) === 2 ? 101 : null), 'Existing OUT must be reused; missing OUT must be created.');
+    }
+}
+$savedPair = [];
+foreach (['Present', 'Late', 'Absent', 'Present', 'Absent', 'Late'] as $status) {
+    $changes = manual_attendance_changes($savedPair, $schedule, 1, $date, $status);
+    foreach ($changes as $index => $change) {
+        verify_manual(($change['target']['id'] ?? null) === ($savedPair ? 200 + $index : null), 'Repeated changes must reuse both records, including zero-time Absent records.');
+    }
+    $savedPair = array_map(fn($index) => array_merge($scan, $changes[$index], ['id' => 200 + $index]), [0, 1]);
+}
+$isolated = manual_attendance_changes([$otherClass, $existingOut, $existingIn], $schedule, 2, $date, 'Present');
+verify_manual($isolated[0]['target'] === null && $isolated[1]['target'] === null, 'Paired updates must not change another student.');
 verify_manual(manual_attendance_target([$taggedIn, $taggedOut], $schedule, 1, $date, 'IN')['id'] === 100, 'Tagged IN must retain the original scan row ID.');
 verify_manual(manual_attendance_target([$taggedIn, $taggedOut], $schedule, 1, $date, 'OUT')['id'] === 101, 'Tagged OUT must retain the original scan row ID.');
 verify_manual(manual_attendance_current_status([$taggedIn, $taggedOut], $schedule, 1, $date) === 'Late', 'Same to IN must recognize tags without replacing device local record IDs.');

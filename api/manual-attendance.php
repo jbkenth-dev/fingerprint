@@ -14,14 +14,12 @@ try {
     $input = json_decode(file_get_contents('php://input'), true);
     if (!is_array($input)) throw new InvalidArgumentException('Invalid attendance request.');
     $scheduleId = filter_var($input['scheduleId'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-    $copy = ($input['action'] ?? '') === 'copy-in';
     $bulkPresent = ($input['action'] ?? '') === 'set-present';
-    $direction = $copy ? 'OUT' : ($input['direction'] ?? '');
     $userId = filter_var($input['userId'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
     $status = $input['status'] ?? null;
     if ($bulkPresent && !in_array($status, ['Present', 'Absent'], true)) throw new InvalidArgumentException('Select Present or Absent for the class.');
-    if (!$scheduleId || !in_array($direction, ['IN', 'OUT'], true) || (!$copy && !$bulkPresent && (!$userId || !is_string($status)))) {
-        throw new InvalidArgumentException('Select a class, student, attendance direction, and status.');
+    if (!$scheduleId || !in_array($status, ['Present', 'Late', 'Absent'], true) || (!$bulkPresent && !$userId)) {
+        throw new InvalidArgumentException('Select a class, student, and attendance status.');
     }
     $date = $input['date'] ?? '';
     if (!is_string($date) || $date === '') throw new InvalidArgumentException('Select an attendance date.');
@@ -38,7 +36,7 @@ try {
         exit;
     }
     if (!in_array((new DateTimeImmutable($date))->format('l'), array_map('trim', explode(',', $schedule['days'])), true)) throw new InvalidArgumentException('Select a scheduled class day.');
-    if ($copy || $bulkPresent) {
+    if ($bulkPresent) {
         $students = array_values(array_filter($pdo->query("SELECT * FROM users WHERE role = 'student' AND status = 'Active' FOR UPDATE")->fetchAll(),
             fn($student) => manual_attendance_student_matches($student, $schedule)));
         if (!$students) throw new InvalidArgumentException('There are no active students in this class.');
@@ -65,25 +63,23 @@ try {
     $records = [];
     foreach ($students as $student) {
         $studentId = (int) $student['id'];
-        $mark = $copy ? manual_attendance_current_status($logs, $schedule, $studentId, $date) : $status;
-        $inTime = manual_attendance_time($schedule, $mark);
-        $time = $direction === 'IN' ? $inTime : (manual_attendance_out_time($schedule, $mark) ?? '00:00:00');
-        $marker = "manual:$scheduleId:$studentId:$date" . ($direction === 'OUT' ? ':out' : '');
-        $source = "faculty-manual:$scheduleId:$direction" . ($direction === 'OUT' ? ':' . $mark[0] : '');
-        $target = manual_attendance_target($logs, $schedule, $studentId, $date, $direction);
-        if ($target !== null) {
-            $update->execute([$time, $mark === 'Absent' ? 'ABSENT' : $direction, $source, $target['id'], $studentId, $date]);
-        } else {
-        $save->execute([$studentId, $student['idNumber'] ?? null,
-            trim(implode(' ', array_filter([$student['firstName'], $student['middleName'] ?? '', $student['lastName']]))),
-            'student', $date, $time, $mark === 'Absent' ? 'ABSENT' : $direction, 'FACULTY-MANUAL',
-            $student['fingerprintId'] ?? '', $student['smartCardId'] ?? '', $source, $marker]);
+        foreach (manual_attendance_changes($logs, $schedule, $studentId, $date, $status) as $change) {
+            if ($change['target'] !== null) {
+                $update->execute([$change['logTime'], $change['status'], $change['source'], $change['target']['id'], $studentId, $date]);
+            } else {
+                $save->execute([$studentId, $student['idNumber'] ?? null,
+                    trim(implode(' ', array_filter([$student['firstName'], $student['middleName'] ?? '', $student['lastName']]))),
+                    'student', $date, $change['logTime'], $change['status'], 'FACULTY-MANUAL',
+                    $student['fingerprintId'] ?? '', $student['smartCardId'] ?? '', $change['source'], $change['localRecordId']]);
+            }
+            $read->execute([$change['source'], $studentId, $date]);
+            $record = $read->fetch();
+            if (!$record) throw new RuntimeException('The attendance update could not be confirmed.');
+            $records[] = $record;
         }
-        $read->execute([$source, $studentId, $date]);
-        $records[] = $read->fetch();
     }
     $pdo->commit();
-    echo json_encode(['ok' => true, 'records' => $records, 'direction' => $direction, 'copied' => $copy, 'count' => count($records)]);
+    echo json_encode(['ok' => true, 'records' => $records, 'count' => count($students)]);
 } catch (InvalidArgumentException $error) {
     if ($pdo->inTransaction()) $pdo->rollBack();
     http_response_code(400);

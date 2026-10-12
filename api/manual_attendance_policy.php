@@ -22,6 +22,22 @@ function manual_attendance_out_time(array $schedule, string $status): ?string {
     return strlen($schedule['endTime']) === 5 ? $schedule['endTime'] . ':00' : $schedule['endTime'];
 }
 
+function manual_attendance_changes(array $logs, array $schedule, int $userId, string $date, string $status): array {
+    $inTime = manual_attendance_time($schedule, $status);
+    $outTime = manual_attendance_out_time($schedule, $status) ?? '00:00:00';
+    $changes = [];
+    foreach (['IN' => $inTime, 'OUT' => $outTime] as $direction => $time) {
+        $changes[] = [
+            'target' => manual_attendance_target($logs, $schedule, $userId, $date, $direction),
+            'logTime' => $time,
+            'status' => $status === 'Absent' ? 'ABSENT' : $direction,
+            'source' => "faculty-manual:{$schedule['id']}:$direction" . ($direction === 'OUT' ? ':' . $status[0] : ''),
+            'localRecordId' => "manual:{$schedule['id']}:$userId:$date" . ($direction === 'OUT' ? ':out' : ''),
+        ];
+    }
+    return $changes;
+}
+
 function manual_attendance_current_status(array $logs, array $schedule, int $userId, string $date): string {
     $start = (int) substr($schedule['startTime'], 0, 2) * 60 + (int) substr($schedule['startTime'], 3, 2);
     $end = (int) substr($schedule['endTime'], 0, 2) * 60 + (int) substr($schedule['endTime'], 3, 2);

@@ -119,6 +119,28 @@ test('manual zero time is absent even for a class beginning near midnight', () =
   assert.equal(manualAttendanceRows([saved], students, { ...schedule, startTime: '00:10:00', endTime: '01:10:00' }, date)[0].attendanceStatus, 'Absent');
 });
 
+test('paired manual saves show one class attendance and matching OUT across status changes', () => {
+  for (const status of ['Present', 'Late', 'Absent', 'Present']) {
+    const inMark = scan(status === 'Absent' ? '00:00:00' : status === 'Late' ? '08:16:00' : '08:00:00', {
+      id: 100, status: status === 'Absent' ? 'ABSENT' : 'IN', source: 'faculty-manual:10:IN',
+    });
+    const outMark = scan(status === 'Absent' ? '00:00:00' : '09:00:00', {
+      id: 101, status: status === 'Absent' ? 'ABSENT' : 'OUT', source: `faculty-manual:10:OUT:${status[0]}`,
+    });
+    const logs = [scan('07:46:00'), inMark, outMark];
+    const row = rows(logs)[0];
+    assert.equal(row.attendanceStatus, status);
+    assert.equal(row.outAttendanceStatus, status);
+    assert.equal(row.timeOut, status === 'Absent' ? '—' : '9:00 AM');
+    const classified = classifyAttendance(logs, students, [schedule], date, date, new Date('2026-10-12T02:00:00Z'));
+    assert.equal(Object.values(classified).flat().length, 1);
+    assert.equal(classified[status.toLowerCase()][0].status, status);
+    const live = liveAttendance(logs, students, [schedule], date);
+    assert.equal(live.length, 1);
+    assert.equal(live[0].status, status);
+  }
+});
+
 test('checkbox status follows the inclusive present and late windows', () => {
   for (const [time, status] of [
     ['07:44:59', 'Absent'], ['07:45:00', 'Present'], ['08:15:59', 'Present'],
