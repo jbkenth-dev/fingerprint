@@ -89,7 +89,7 @@ export default function FacultySchedule() {
             <p className="mt-1 text-sm text-gray-500">Your assigned subjects, sections, and semesters.</p>
           </div>
           {data.schedules.length ? <div className="p-5 sm:p-6">
-            <div className="w-full max-w-md">
+            <div className="faculty-schedule-field">
             <label htmlFor="faculty-schedule" className="block text-sm font-medium text-gray-700">Class schedule</label>
             <select id="faculty-schedule" value={selected ? selectedId : ''} onChange={event => { setSelectedId(event.target.value); setSearch(''); }}
               className="form-input mt-2 w-full text-sm">
