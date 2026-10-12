@@ -64,7 +64,6 @@ export default function StudentRecord() {
       </select>
       {semester && <form className="mt-5 border-t border-gray-100 pt-5" onSubmit={event => { event.preventDefault(); if (validRange) { setPeriod({ start, end }); setRefresh(value => value + 1); } }}>
         <p className="text-sm font-medium text-gray-800">Attendance period</p>
-        <p className="mt-1 text-xs leading-relaxed text-gray-500">Select the semester start date and the last date to include. Semester dates are not saved in class schedules.</p>
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <div><label htmlFor="record-start" className="mb-1.5 block text-xs font-medium text-gray-600">From</label><input id="record-start" type="date" required value={start} max={end || today} onChange={event => setStart(event.target.value)} className="form-input rounded-lg px-3 py-2 text-sm" /></div>
           <div><label htmlFor="record-end" className="mb-1.5 block text-xs font-medium text-gray-600">Through</label><input id="record-end" type="date" required value={end} min={start || undefined} max={today} onChange={event => setEnd(event.target.value)} className="form-input rounded-lg px-3 py-2 text-sm" /></div>

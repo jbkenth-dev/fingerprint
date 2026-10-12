@@ -16,7 +16,7 @@ import FacultySchedule from "./pages/FacultySchedule";
 import FacultyManual from "./pages/FacultyManual";
 import StudentRecord from "./pages/StudentRecord";
 import { StudentScheduleProvider, useStudentSchedules } from "./state/StudentScheduleContext";
-import StudentNotifications from "./components/StudentNotifications";
+import StudentNotifications, { StudentReminderBanner } from "./components/StudentNotifications";
 
 const navIcons = {
   "Dashboard & Monitoring": LayoutDashboard,
@@ -729,6 +729,7 @@ function ProtectedLayoutContent({ allowedRole }) {
             <div><p className="text-sm font-semibold text-gray-800">Student portal</p><p className="mt-0.5 text-xs text-gray-500">Stay on track with your classes</p></div>
             <StudentNotifications />
           </header>}
+          {allowedRole === "student" && <StudentReminderBanner />}
           <Outlet />
         </main>
       </div>

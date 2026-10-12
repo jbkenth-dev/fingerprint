@@ -76,13 +76,14 @@ export default function StudentNotifications() {
   return <>
     <button ref={buttonRef} type="button" onClick={() => { setNow(new Date()); setOpen(value => !value); }}
       aria-label={`Class reminders${unread ? `, ${unread} unread` : ''}`} aria-expanded={open} aria-controls={open ? titleId : undefined}
-      className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-green-600 ${open ? 'border-green-200 bg-green-50 text-green-700' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>
-      <Bell size={19} />
-      {unread > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-red-500 px-1 text-[10px] font-bold text-white">{unread > 9 ? '9+' : unread}</span>}
+      className={`relative inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl border px-3 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-600 ${unread ? 'border-amber-400 bg-amber-100 text-amber-950 shadow-sm ring-2 ring-amber-200 ring-offset-2 hover:bg-amber-200' : open ? 'border-green-200 bg-green-50 text-green-700' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>
+      <Bell size={20} className={unread ? "fill-amber-300 motion-safe:animate-pulse" : ""} />
+      {unread > 0 && <span className="hidden text-xs font-bold sm:inline">Class reminder</span>}
+      {unread > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-red-600 px-1 text-[10px] font-bold text-white">{unread > 9 ? '9+' : unread}</span>}
     </button>
     {open && createPortal(<section ref={panelRef} id={titleId} tabIndex={-1} aria-label="Class reminders"
       style={position} className="fixed z-50 w-[360px] max-w-[calc(100vw-24px)] overflow-hidden rounded-2xl border border-gray-200 bg-white text-gray-800 shadow-xl outline-none">
-      <div className="flex items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
+      <div className={`flex items-start justify-between gap-3 border-b px-5 py-4 ${unread ? "border-amber-200 bg-amber-50" : "border-gray-100"}`}>
         <div><h2 className="text-sm font-semibold text-gray-900">Class reminders</h2><p className="mt-1 text-xs text-gray-500">Classes starting in the next 15 minutes</p></div>
         <button type="button" onClick={() => { setOpen(false); buttonRef.current?.focus(); }} aria-label="Close reminders" className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><X size={16} /></button>
       </div>
@@ -90,7 +91,7 @@ export default function StudentNotifications() {
       <div className="max-h-[min(360px,50dvh)] overflow-y-auto">
         {loading ? <p role="status" className="px-5 py-10 text-center text-sm text-gray-500">Loading your schedule...</p>
           : error ? <div className="px-5 py-8 text-center"><p className="text-sm font-medium text-gray-700">Reminders unavailable</p><p className="mt-2 text-xs text-gray-500">Refresh your schedule to try again.</p></div>
-          : reminders.length ? <ul className="divide-y divide-gray-100">{reminders.map(reminder => <li key={reminder.key} className={`flex gap-3 px-5 py-4 ${!seen.includes(reminder.key) ? 'bg-green-50/60' : ''}`}>
+          : reminders.length ? <ul className="divide-y divide-gray-100">{reminders.map(reminder => <li key={reminder.key} className={`flex gap-3 px-5 py-4 ${!seen.includes(reminder.key) ? 'border-l-4 border-amber-400 bg-amber-50' : ''}`}>
             <span className="mt-0.5 h-fit rounded-lg bg-green-100 p-2 text-green-700"><Clock size={16} /></span>
             <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-green-700">{reminder.minutesUntil === 0 ? 'Starting now' : `Starts in ${reminder.minutesUntil} min`}</p><h3 className="mt-1 text-sm font-semibold text-gray-900">{reminder.subjectName}</h3><p className="mt-1 text-xs text-gray-600">{attendanceTime(reminder.startTime)} &ndash; {attendanceTime(reminder.endTime)}</p>{reminder.facultyName && <p className="mt-1 text-xs text-gray-500">{reminder.facultyName}</p>}</div>
             {!seen.includes(reminder.key) && <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-green-600" aria-label="Unread" />}
@@ -99,4 +100,34 @@ export default function StudentNotifications() {
       <Link to="/student/schedule" onClick={() => setOpen(false)} className="flex items-center justify-center gap-2 border-t border-gray-100 bg-gray-50 px-5 py-3 text-xs font-semibold text-green-700 hover:bg-green-50"><CalendarDays size={14} />View my schedule</Link>
     </section>, document.body)}
   </>;
+}
+
+
+export function StudentReminderBanner() {
+  const { currentUser } = useAuth();
+  const { schedules, loading, error } = useStudentSchedules();
+  const [now, setNow] = React.useState(() => new Date());
+  React.useEffect(() => {
+    const update = () => setNow(new Date());
+    const timer = window.setInterval(update, 15000);
+    document.addEventListener('visibilitychange', update);
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', update); };
+  }, []);
+  const reminders = classReminders(schedules, currentUser, now);
+  if (loading || error || !reminders.length) return null;
+  const next = reminders[0];
+  const urgent = next.minutesUntil <= 5;
+  return <aside role="status" aria-live="polite" aria-atomic="true"
+    className={`flex flex-wrap items-center justify-between gap-4 rounded-xl border-l-4 p-4 shadow-sm sm:p-5 ${urgent ? 'border-red-600 bg-red-50 ring-1 ring-red-200' : 'border-amber-500 bg-amber-50 ring-1 ring-amber-200'}`}>
+    <div className="flex min-w-0 flex-1 items-start gap-3">
+      <span className={`mt-0.5 shrink-0 rounded-xl p-2.5 ${urgent ? 'bg-red-600 text-white' : 'bg-amber-400 text-amber-950'}`}><Bell size={22} className="motion-safe:animate-pulse" /></span>
+      <div className="min-w-0">
+        <p className={`text-xs font-bold uppercase tracking-wide ${urgent ? 'text-red-700' : 'text-amber-800'}`}>{next.minutesUntil === 0 ? 'Your class is starting now' : `Your class starts in ${next.minutesUntil} ${next.minutesUntil === 1 ? 'minute' : 'minutes'}`}</p>
+        <p className="mt-1 text-base font-bold text-gray-900">{next.subjectName}</p>
+        <p className="mt-1 text-sm text-gray-700">{attendanceTime(next.startTime)} &ndash; {attendanceTime(next.endTime)}{next.facultyName ? ` / ${next.facultyName}` : ''}</p>
+        {reminders.length > 1 && <p className="mt-1 text-xs font-medium text-gray-600">{reminders.length - 1} more {reminders.length === 2 ? 'class starts' : 'classes start'} soon. Check your notification bell.</p>}
+      </div>
+    </div>
+    <Link to="/student/schedule" className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-bold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${urgent ? 'bg-red-700 hover:bg-red-800 focus-visible:outline-red-700' : 'bg-amber-800 hover:bg-amber-900 focus-visible:outline-amber-800'}`}><CalendarDays size={15} />View schedule</Link>
+  </aside>;
 }
