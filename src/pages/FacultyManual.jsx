@@ -100,17 +100,24 @@ export default function FacultyManual() {
           <select id="manual-schedule" className="form-input mt-2 w-full text-sm" value={scheduleId} disabled={loadingSchedules}
             onChange={event => changeContext(() => setScheduleId(event.target.value))}>
             <option value="">{loadingSchedules ? 'Loading schedules...' : 'Choose your class schedule'}</option>
-            {data.schedules.map(row => <option key={row.id} value={String(row.id)}>{row.subjectCode} — {row.subjectName} · {row.yearLevel} {row.section} · {row.semester} · {(row.days || []).join(', ')} · {attendanceTime(row.startTime)}</option>)}
+            {data.schedules.map(row => <option key={row.id} value={String(row.id)}>{row.subjectCode} — {row.subjectName}</option>)}
           </select>
         </div>
         <div><label htmlFor="manual-date" className="text-sm font-medium text-gray-700">Attendance date</label>
           <input id="manual-date" type="date" max={today} value={date} onChange={event => changeContext(() => setDate(event.target.value))} className="form-input mt-2 w-full text-sm" />
         </div>
       </div>
-      {selected && <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 rounded-lg border border-green-100 bg-green-50/60 px-4 py-3 text-sm text-green-900">
-        <span className="font-semibold">{selected.yearLevel} · Section {selected.section}</span><span>{selected.semester}</span>
-        <span>{selected.days.join(', ')}</span><span>{attendanceTime(selected.startTime)} – {attendanceTime(selected.endTime)}</span>
-      </div>}
+      {selected && <dl className="mt-5 grid gap-5 rounded-lg border border-green-100 bg-green-50/60 p-5 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: 'Time Schedule', value: `${attendanceTime(selected.startTime)} – ${attendanceTime(selected.endTime)}` },
+          { label: 'Day Schedule', value: selected.days.join(', ') },
+          { label: 'Year & Section', value: `${selected.yearLevel} · Section ${selected.section}` },
+          { label: 'Semester', value: selected.semester },
+        ].map(detail => <div key={detail.label}>
+          <dt className="text-xs font-medium text-gray-500">{detail.label}</dt>
+          <dd className="mt-2 text-sm font-semibold text-green-900">{detail.value || '—'}</dd>
+        </div>)}
+      </dl>}
       {selected && !validDate && <p role="alert" className="mt-3 text-sm text-amber-700">Choose a date today or earlier on a scheduled class day: {selected.days.join(', ')}.</p>}
       {!loadingSchedules && !error && !data.schedules.length && <p className="mt-4 text-sm text-gray-500">No schedules assigned. Your classes will appear once an administrator assigns them to you.</p>}
     </section>
@@ -121,16 +128,15 @@ export default function FacultyManual() {
 
     <div className="grid grid-cols-3 gap-3">
       {statuses.map(status => <div key={status.code} className={`${card} px-4 py-4 sm:px-5`}>
-        <p className={`text-xs font-semibold sm:text-sm ${status.color}`}>{status.code} <span className="hidden sm:inline">—</span> {status.value}</p>
+        <p className={`text-xs font-semibold sm:text-sm ${status.color}`}>{status.value}</p>
         <p className="mt-2 text-2xl font-semibold tabular-nums text-gray-900">{busy || error ? '—' : roster.filter(student => marks[student.id] === status.value).length}</p>
-        {window && <p className="mt-2 text-xs text-gray-500">{status.code === 'P' ? window.presentLabel : status.code === 'L' ? window.lateLabel : 'No time-in within the class window'}</p>}
+        {window && <p className="mt-2 text-xs text-gray-500">{status.code === 'P' ? window.presentLabel : status.code === 'L' ? window.lateLabel : 'No time-in within the class schedule'}</p>}
       </div>)}
     </div>
 
     <section className={`${card} overflow-hidden`} aria-labelledby="manual-roster-title">
       <div className="flex flex-col justify-between gap-4 border-b border-gray-100 p-5 sm:px-6 lg:flex-row lg:items-center">
         <div><h2 id="manual-roster-title" className="flex items-center gap-2 font-semibold text-gray-900"><Users size={18} className="text-green-700" aria-hidden="true" />Student attendance <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{roster.length}</span></h2>
-          <p className="mt-1 text-sm text-gray-500">Checks follow existing time-ins. Checkbox changes apply to this view only.</p>
         </div>
         <div className="flex flex-wrap gap-3">
           {roster.length > 0 && <label className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2.5"><Search size={16} className="text-gray-400" aria-hidden="true" /><span className="sr-only">Search students</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search name or ID" className="w-40 bg-transparent text-sm outline-none sm:w-44" /></label>}
@@ -140,23 +146,20 @@ export default function FacultyManual() {
       {busy ? <div role="status" className="px-6 py-16 text-center text-sm text-gray-500">Loading class attendance...</div>
         : error ? <p className="px-6 py-16 text-center text-sm text-gray-500">Attendance could not be loaded. Retry to view the current checks.</p>
         : !roster.length ? <div className="px-6 py-16 text-center"><ClipboardCheck size={32} className="mx-auto mb-3 text-gray-300" aria-hidden="true" /><p className="font-medium text-gray-700">{selected && validDate ? 'No students to display' : 'Choose a class session'}</p><p className="mt-2 text-sm text-gray-500">{selected && validDate ? 'Active students assigned to this year and section will appear here.' : 'Select an assigned schedule and a valid class date to begin.'}</p></div>
-        : <div className="overflow-x-auto"><table className="w-full min-w-[660px] text-left text-sm">
+        : <div className="overflow-x-auto"><table className="w-full min-w-[580px] text-left text-sm">
           <caption className="sr-only">Attendance for {selected?.subjectCode} on {date}. P: Present, L: Late, A: Absent.</caption>
           <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wider text-gray-500"><tr>
-            <th scope="col" className="w-14 px-5 py-4">No.</th><th scope="col" className="px-5 py-4">Student</th><th scope="col" className="px-5 py-4">ID number</th><th scope="col" className="px-5 py-4">Time in</th>
+            <th scope="col" className="w-14 px-5 py-4">No.</th><th scope="col" className="px-5 py-4">Student</th><th scope="col" className="px-5 py-4">ID number</th>
             {statuses.map(status => <th key={status.code} scope="col" className={`w-20 px-3 py-4 text-center ${status.color}`} title={status.value}>{status.code}<span className="sr-only"> — {status.value}</span></th>)}
           </tr></thead>
           <tbody className="divide-y divide-gray-100">{visible.map(student => <tr key={student.id} className="hover:bg-gray-50/60">
             <td className="px-5 py-4 text-gray-400">{String(roster.indexOf(student) + 1).padStart(2, '0')}</td>
-            <th scope="row" className="px-5 py-4 font-medium text-gray-900">{nameOf(student)}</th><td className="px-5 py-4 text-gray-500">{student.idNumber || '—'}</td><td className="whitespace-nowrap px-5 py-4 text-gray-500">{student.timeIn}</td>
+            <th scope="row" className="px-5 py-4 font-medium text-gray-900">{nameOf(student)}</th><td className="px-5 py-4 text-gray-500">{student.idNumber || '—'}</td>
             {statuses.map(status => <td key={status.code} className="px-3 py-3 text-center"><label className={`inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg transition ${marks[student.id] === status.value ? status.bg : 'hover:bg-gray-100'}`}>
               <input type="checkbox" checked={marks[student.id] === status.value} onChange={() => setOverrides(previous => ({ ...previous, [student.id]: status.value }))} aria-label={`${status.value} for ${nameOf(student)}`} className={`h-5 w-5 cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-offset-4 ${status.accent}`} />
             </label></td>)}
           </tr>)}</tbody>
         </table>{!visible.length && <p className="px-6 py-10 text-center text-sm text-gray-500">No students match your search.</p>}</div>}
-      <footer className="border-t border-gray-200 bg-gray-50/70 px-5 py-4 text-xs text-gray-500 sm:px-6">
-        Refresh checks restores attendance from time-ins. No time-in defaults to Absent; checks update as new time-ins arrive.
-      </footer>
     </section>
   </div>;
 }
