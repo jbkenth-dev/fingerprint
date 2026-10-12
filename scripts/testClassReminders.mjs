@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classReminders } from '../src/utils/classReminders.js';
+import { classReminders, mergeReminderInbox, markReminderRead } from '../src/utils/classReminders.js';
 
 const student = { id: 1, department: 'BSIT 1-A' };
 const schedule = { id: 10, yearLevel: '1st Year', section: 'A', days: ['Monday'], subjectName: 'English', startTime: '08:00:00', endTime: '09:00:00' };
 const monday = time => new Date(`2026-10-12T${time}+08:00`);
 
-test('reminds at 15 minutes before class through its starting minute, then expires locally', () => {
-  for (const [time, count, remaining] of [['07:44:59', 0], ['07:45:00', 1, 15], ['07:59:00', 1, 1], ['08:00:59', 1, 0], ['08:01:00', 0]]) {
+test('reminds at 30 minutes before class through its starting minute, then expires locally', () => {
+  for (const [time, count, remaining] of [['07:29:59', 0], ['07:30:00', 1, 30], ['07:59:00', 1, 1], ['08:00:59', 1, 0], ['08:01:00', 0]]) {
     const reminders = classReminders([schedule], student, monday(time));
     assert.equal(reminders.length, count, time);
     if (count) assert.equal(reminders[0].minutesUntil, remaining, time);
@@ -36,4 +36,36 @@ test('uses Manila Monday across UTC Sunday and expires previous-day reminders', 
   assert.equal(result[0].minutesUntil, 10);
   assert.equal(result[0].key, '2026-10-12:10:00:10:00');
   assert.deepEqual(classReminders([midnight], student, new Date('2026-10-12T16:00:00Z')), []);
+});
+
+
+test('reminds about next-day classes within 30 minutes across Manila midnight', () => {
+  const midnight = { ...schedule, startTime: '00:10:00', endTime: '01:10:00' };
+  const result = classReminders([midnight], student, new Date('2026-10-11T23:40:00+08:00'));
+  assert.equal(result.length, 1);
+  assert.equal(result[0].minutesUntil, 30);
+  assert.equal(result[0].classDate, '2026-10-12');
+  assert.deepEqual(classReminders([midnight], student, new Date('2026-10-11T23:39:00+08:00')), []);
+});
+
+test('unread reminders survive class start, day changes and browser storage round trips', () => {
+  const due = classReminders([schedule], student, monday('07:30:00'));
+  const inbox = mergeReminderInbox({ notifications: [], readKeys: [] }, due);
+  const restored = JSON.parse(JSON.stringify(inbox));
+  assert.equal(mergeReminderInbox(restored, classReminders([schedule], student, monday('10:00:00'))).notifications.length, 1);
+  assert.equal(mergeReminderInbox(restored, classReminders([schedule], student, new Date('2026-10-13T12:00:00+08:00'))).notifications.length, 1);
+  assert.strictEqual(mergeReminderInbox(inbox, due), inbox);
+});
+
+test('marking a single reminder read preserves others and prevents its recreation', () => {
+  const due = classReminders([schedule, { ...schedule, id: 11, startTime: '08:05:00' }], student, monday('07:50:00'));
+  const inbox = mergeReminderInbox({ notifications: [], readKeys: [] }, due);
+  const read = markReminderRead(inbox, due[0].key);
+  assert.deepEqual(read.notifications.map(row => row.id), [11]);
+  assert.deepEqual(read.readKeys, [due[0].key]);
+  assert.strictEqual(mergeReminderInbox(read, due), read);
+  const allRead = markReminderRead(read);
+  assert.equal(allRead.notifications.length, 0);
+  assert.equal(allRead.readKeys.length, 2);
+  assert.strictEqual(mergeReminderInbox(JSON.parse(JSON.stringify(allRead)), due).notifications.length, 0);
 });

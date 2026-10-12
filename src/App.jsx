@@ -16,6 +16,7 @@ import FacultySchedule from "./pages/FacultySchedule";
 import FacultyManual from "./pages/FacultyManual";
 import StudentRecord from "./pages/StudentRecord";
 import { StudentScheduleProvider, useStudentSchedules } from "./state/StudentScheduleContext";
+import { StudentReminderProvider } from "./state/StudentReminderContext";
 import StudentNotifications, { StudentReminderBanner } from "./components/StudentNotifications";
 
 const navIcons = {
@@ -510,7 +511,7 @@ function ProtectedLayout({ allowedRole }) {
   if (!session) return <Navigate to="/signin" replace />;
   if (session.role !== allowedRole) return <Navigate to={`/${session.role}`} replace />;
   return allowedRole === "student"
-    ? <StudentScheduleProvider key={session.userId}><ProtectedLayoutContent allowedRole={allowedRole} /></StudentScheduleProvider>
+    ? <StudentScheduleProvider key={session.userId}><StudentReminderProvider><ProtectedLayoutContent allowedRole={allowedRole} /></StudentReminderProvider></StudentScheduleProvider>
     : <ProtectedLayoutContent allowedRole={allowedRole} />;
 }
 
