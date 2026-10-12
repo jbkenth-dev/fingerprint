@@ -153,7 +153,7 @@ export default function FacultySchedule() {
               <table className="w-full text-left text-sm">
                 <caption className="sr-only">Students for {selected.subjectCode}, {selected.yearLevel}, Section {selected.section}</caption>
                 <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
-                  <tr><th scope="col" className="w-16 px-6 py-3.5">No.</th><th scope="col" className="px-6 py-3.5">Student</th><th scope="col" className="px-6 py-3.5">Student ID</th><th scope="col" className="px-6 py-3.5">Email address</th></tr>
+                  <tr><th scope="col" className="w-16 px-6 py-3.5">No.</th><th scope="col" className="px-6 py-3.5">Student</th><th scope="col" className="px-6 py-3.5">ID NUMBER</th><th scope="col" className="px-6 py-3.5">Email address</th></tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {visibleStudents.map((student, index) => <tr key={student.id} className="transition hover:bg-gray-50/70">
