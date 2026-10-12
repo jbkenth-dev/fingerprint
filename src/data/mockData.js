@@ -22,7 +22,7 @@ export const routeConfig = {
     { label: "My Schedule", path: "/faculty/schedule" },
     { label: "Attendance", path: "/faculty/attendance", disabled: false },
     { label: "Manual", path: "/faculty/manual" },
-    { label: "Reports", path: "/faculty/reports", disabled: true },
+    { label: "Reports", path: "/faculty/reports", disabled: false },
     { label: "Account", path: "/faculty/account" },
   ],
   student: [

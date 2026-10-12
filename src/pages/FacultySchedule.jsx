@@ -98,7 +98,7 @@ export default function FacultySchedule() {
         <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm" aria-labelledby="schedule-overview-title">
           <div className="border-b border-gray-100 px-5 py-4 sm:px-6">
             <h2 id="schedule-overview-title" className="font-semibold text-gray-900">My class schedule</h2>
-            <p className="mt-1 text-sm text-gray-500">Your assigned classes, ordered by start time.</p>
+            <p className="mt-1 text-sm text-gray-500">Your assigned classes.</p>
           </div>
           {data.schedules.length ? <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">

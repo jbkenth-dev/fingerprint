@@ -24,7 +24,7 @@ export function manualAttendanceRows(logs, students, schedule, date) {
     const status = manual ? manualAttendanceStatus(manual, schedule) : !session ? 'Absent' : session.rawInTime <= window.presentUntil ? 'Present' : 'Late';
     const out = manualOutRecord(logs, schedule.id, student.id, date);
     const paired = manual ? manualPairedSession(logs, manual) : session;
-    const outStatus = out ? manualOutStatus(out, status) : paired?.timeOut && paired.timeOut !== '—' ? status : 'Absent';
+    const outStatus = out ? manualOutStatus(out, status) : paired?.timeOut && paired.timeOut !== '—' ? status : null;
     return { ...student, attendanceStatus: status,
       outAttendanceStatus: outStatus,
       timeIn: manual ? status === 'Absent' ? '—' : attendanceTime(manual.logTime) : session?.timeIn || '—',

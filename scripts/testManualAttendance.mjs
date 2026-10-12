@@ -60,7 +60,7 @@ test('manual OUT is tied to its class and date and is independent of IN status',
 
 test('IN and OUT checks persist independently even though P and L share the OUT time', () => {
   const inMark = scan('08:00:00', { id: 2, source: 'faculty-manual', localRecordId: `manual:10:1:${date}` });
-  assert.equal(rows([inMark])[0].outAttendanceStatus, 'Absent');
+  assert.equal(rows([inMark])[0].outAttendanceStatus, null);
   for (const status of ['Present', 'Late', 'Absent']) {
     const out = scan(status === 'Absent' ? '00:00:00' : '09:00:00', { id: 3, status: status === 'Absent' ? 'ABSENT' : 'OUT',
       source: `faculty-manual-out-${status.toLowerCase()}`, localRecordId: `manual:10:1:${date}:out` });
@@ -72,6 +72,14 @@ test('IN and OUT checks persist independently even though P and L share the OUT 
     assert.equal(rows([absentIn, out])[0].outAttendanceStatus, status);
     assert.equal(attendanceSessions([inMark, out]).length, 0);
   }
+});
+
+test('OUT checks remain unset until an OUT record exists', () => {
+  for (const logs of [[], [scan('08:00:00')], [scan('08:16:00')]]) {
+    assert.equal(rows(logs)[0].outAttendanceStatus, null);
+  }
+  const absentOut = scan('00:00:00', { status: 'ABSENT', source: 'faculty-manual:10:OUT:A' });
+  assert.equal(rows([absentOut])[0].outAttendanceStatus, 'Absent');
 });
 
 test('updated device rows retain class checks when the API does not return local record IDs', () => {

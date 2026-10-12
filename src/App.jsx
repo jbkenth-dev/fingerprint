@@ -120,7 +120,7 @@ export default function App() {
           <Route path="fingerprint-biometric" element={<RolePanel pageKey="biometric" role="faculty" />} />
           <Route path="attendance" element={<RolePanel pageKey="attendance" role="faculty" />} />
           <Route path="manual" element={<FacultyManual />} />
-          <Route path="reports" element={<RolePanel pageKey="reports" role="faculty" />} />
+          <Route path="reports" element={<AdminReports />} />
           <Route path="account" element={<SelfAccountPage role="faculty" />} />
         </Route>
         <Route path="/student" element={<ProtectedLayout allowedRole="student" />}>

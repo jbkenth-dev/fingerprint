@@ -1,6 +1,7 @@
 import React from 'react';
 import { Download, FileBarChart, RefreshCw } from 'lucide-react';
 import { apiFetch } from '../api';
+import { useAuth } from '../state/AuthContext';
 import { attendanceTime, attendanceWindow, datesInRange, fetchAttendanceRange, manilaNow } from '../utils/attendance';
 import { buildAttendanceReport, formatReportDays, formatReportSemester } from '../utils/attendanceReport';
 
@@ -10,6 +11,8 @@ const generatedLabel = date => new Intl.DateTimeFormat('en-PH', {
 const inputClass = 'form-input mt-2 w-full rounded-lg px-3 py-2.5 text-sm disabled:opacity-50';
 
 export default function AdminReports() {
+  const { session } = useAuth();
+  const isFaculty = session?.role === 'faculty';
   const [schedules, setSchedules] = React.useState([]);
   const [scheduleLoading, setScheduleLoading] = React.useState(true);
   const [scheduleError, setScheduleError] = React.useState('');
@@ -33,7 +36,10 @@ export default function AdminReports() {
       try {
         const data = await apiFetch('/class-schedules.php', { signal: controller.signal });
         if (!Array.isArray(data)) throw new Error('Unable to read class schedules.');
-        setSchedules(data);
+        if (controller.signal.aborted) return;
+        setSchedules(isFaculty
+          ? data.filter(row => row.facultyId != null && String(row.facultyId) === String(session?.userId))
+          : data);
       } catch (err) {
         if (!controller.signal.aborted) setScheduleError(err.message || 'Unable to load class schedules.');
       } finally {
@@ -43,7 +49,7 @@ export default function AdminReports() {
     load();
     window.addEventListener('api:recovered', load);
     return () => { controller.abort(); window.removeEventListener('api:recovered', load); };
-  }, [revision]);
+  }, [revision, isFaculty, session?.userId]);
 
   const years = [...new Set(schedules.map(row => row.yearLevel))].sort();
   const sections = [...new Set(schedules.filter(row => row.yearLevel === year).map(row => row.section))].sort();
@@ -110,7 +116,7 @@ export default function AdminReports() {
     <div className="animate-fade-up space-y-5">
       <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-gray-500">Administration / Reports</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-gray-500">{isFaculty ? 'Faculty' : 'Administration'} / Reports</p>
           <h1 className="mt-2 text-2xl font-semibold text-gray-900 sm:text-3xl">Attendance reports</h1>
           <p className="mt-2 text-sm text-gray-500">Review class attendance for a selected period and download a formal PDF report.</p>
         </div>
@@ -152,7 +158,7 @@ export default function AdminReports() {
           </label>
         </div>
         {(rangeError || scheduleError || error) && <p role="alert" className="mt-4 text-sm text-red-700">{rangeError || scheduleError || error}</p>}
-        {!scheduleLoading && !scheduleError && !schedules.length && <p className="mt-4 text-sm text-gray-500">Create a class schedule to prepare an attendance report.</p>}
+        {!scheduleLoading && !scheduleError && !schedules.length && <p className="mt-4 text-sm text-gray-500">{isFaculty ? 'No classes are assigned to you yet. Contact an administrator to assign your schedules.' : 'Create a class schedule to prepare an attendance report.'}</p>}
       </section>
 
       {!currentReport ? <section className="card-elevated px-6 py-16 text-center" aria-live="polite">
