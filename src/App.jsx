@@ -1612,6 +1612,7 @@ function RolePanel({ pageKey, role }) {
 
   const [loadedPeriod, setLoadedPeriod] = React.useState('');
   const [lastUpdated, setLastUpdated] = React.useState(null);
+  const [liveCountLogs, setLiveCountLogs] = React.useState([]);
   useManilaClock(); // Keep today's date and class windows current, including Manila midnight.
   const { date: manilaToday, minutes: manilaMinutes } = manilaNow();
   const rangeError = !startDate || !endDate ? 'Select both a start date and an end date.'
@@ -1681,9 +1682,15 @@ function RolePanel({ pageKey, role }) {
       setAttendanceLoading(true);
       setAttendanceError('');
       try {
-        const records = await fetchAttendanceRange(apiFetch, first, last, controller.signal, refreshVersion ? { cacheTtl: 0 } : {});
+        const options = refreshVersion ? { cacheTtl: 0 } : {};
+        const [records, todayRecords] = await Promise.all([
+          fetchAttendanceRange(apiFetch, first, last, controller.signal, options),
+          first <= manilaToday && last >= manilaToday ? Promise.resolve(null)
+            : fetchAttendanceRange(apiFetch, manilaToday, manilaToday, controller.signal, options),
+        ]);
         if (!active) return;
         setAttendanceLogs(records);
+        setLiveCountLogs(todayRecords ?? records);
         setLoadedPeriod(periodKey);
         setLastUpdated(new Date());
       } catch (error) {
@@ -1708,11 +1715,12 @@ function RolePanel({ pageKey, role }) {
   }, [viewMode, startDate, endDate, searchTerm, attendanceYear, attendanceSection, attendanceScheduleId]);
 
   const classified = React.useMemo(() => {
-    if (!isAdminAttendancePage || viewMode === 'live' || loadedPeriod !== periodKey || rangeError) {
+    if (!isAdminAttendancePage || loadedPeriod !== periodKey || (viewMode !== 'live' && rangeError)) {
       return { present: [], late: [], absent: [] };
     }
-    return classifyAttendance(attendanceLogs, users, selectedSchedules, startDate, endDate);
-  }, [isAdminAttendancePage, viewMode === 'live', loadedPeriod, periodKey, rangeError, attendanceLogs, users, selectedSchedules, startDate, endDate, manilaMinutes]);
+    return classifyAttendance(attendanceLogs, users, selectedSchedules,
+      viewMode === 'live' ? manilaToday : startDate, viewMode === 'live' ? manilaToday : endDate);
+  }, [isAdminAttendancePage, viewMode === 'live', loadedPeriod, periodKey, rangeError, attendanceLogs, users, selectedSchedules, startDate, endDate, manilaToday, manilaMinutes]);
 
   const mergedAttendance = React.useMemo(() => liveAttendance(attendanceLogs, users, isAdminAttendancePage ? selectedSchedules : scheduleRows, manilaToday).filter(entry => !isAdminAttendancePage || (selectedAttendanceSchedule && String(entry.scheduleId) === String(selectedAttendanceSchedule.id))),
     [attendanceLogs, users, scheduleRows, selectedSchedules, selectedAttendanceSchedule, isAdminAttendancePage, manilaToday]);
@@ -1755,6 +1763,15 @@ function RolePanel({ pageKey, role }) {
   }, [viewMode, mergedAttendance, classified, searchTerm, attendancePage, classifiedPage]);
   const tableError = (viewMode !== 'live' && rangeError) || attendanceError || scheduleError;
   const tableLoading = !tableError && (attendanceLoading || scheduleLoading || loadedPeriod !== periodKey);
+  const attendanceCounts = React.useMemo(() => {
+    const studentCount = records => new Set(records.map(entry => String(entry.userId))).size;
+    const liveRecords = liveAttendance(liveCountLogs, users, selectedSchedules, manilaToday)
+      .filter(entry => entry.scheduleId != null);
+    return {
+      live: studentCount(liveRecords), present: studentCount(classified.present),
+      late: studentCount(classified.late), absent: studentCount(classified.absent),
+    };
+  }, [liveCountLogs, users, selectedSchedules, manilaToday, classified]);
   const periodLabel = viewMode === 'live' ? `Today · ${manilaToday}` : startDate === endDate ? startDate : `${startDate} – ${endDate}`;
 
   function handleExportAttendance() {
@@ -1987,6 +2004,11 @@ function RolePanel({ pageKey, role }) {
                     className={clsx('inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-green-600',
                       viewMode === value ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500 hover:bg-white/60 hover:text-gray-800')}>
                     <Icon size={16} />{label}
+                    <span aria-label={tableLoading || tableError ? 'Student count unavailable' : `${attendanceCounts[value]} students`}
+                      title={value === 'live' ? 'Students checked in today' : `Students marked ${label.toLowerCase()} for the attendance period`}
+                      className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold leading-none text-white shadow-sm tabular-nums ring-2 ring-white">
+                      {tableLoading || tableError ? '—' : attendanceCounts[value]}
+                    </span>
                   </button>
                 ))}
               </div>
