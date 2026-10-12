@@ -2147,11 +2147,11 @@ function RolePanel({ pageKey, role }) {
                 </div>
               </>
             )}
-            <div className="border-t border-gray-100 bg-gray-50/50 px-5 py-3 text-xs text-gray-500 sm:px-6">
+            {(viewMode === 'live' || role !== 'faculty') && <div className="border-t border-gray-100 bg-gray-50/50 px-5 py-3 text-xs text-gray-500 sm:px-6">
               {viewMode === 'live'
                 ? `Refreshes every 60 seconds while this tab is visible and online${lastUpdated ? ` · Updated ${lastUpdated.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila' })}` : ''}`
                 : 'Based on current class schedules and student sections. Today’s absences appear after the check-in cutoff for each class schedule.'}
-            </div>
+            </div>}
           </div>
           </>}
           {!selectedAttendanceSchedule && <div className="px-6 py-14 text-center">

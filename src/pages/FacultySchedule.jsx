@@ -2,7 +2,9 @@ import React from 'react';
 import { BookOpenText, CalendarDays, Clock, GraduationCap, RefreshCw, Search, Users } from 'lucide-react';
 import { apiFetch } from '../api';
 import { useAuth } from '../state/AuthContext';
-import { attendanceTime, studentSection } from '../utils/attendance';
+import { attendanceTime, studentSection, timeMinutes } from '../utils/attendance';
+
+const scheduleDays = { Monday: 'M', Tuesday: 'T', Wednesday: 'W', Thursday: 'TH', Friday: 'F', Saturday: 'S', Sunday: 'SU' };
 
 const fullName = student => [student.firstName, student.middleName, student.lastName].filter(Boolean).join(' ');
 const displayName = student => {
@@ -38,7 +40,9 @@ export default function FacultySchedule() {
         if (!Array.isArray(schedules) || !Array.isArray(users)) throw new Error('Unable to read class information. Please try again.');
         setData({
           schedules: schedules.filter(row => row.facultyId != null && String(row.facultyId) === String(session?.userId))
-            .sort((a, b) => a.subjectCode.localeCompare(b.subjectCode) || a.yearLevel.localeCompare(b.yearLevel) || a.section.localeCompare(b.section)),
+            .sort((a, b) => (timeMinutes(a.startTime) ?? Infinity) - (timeMinutes(b.startTime) ?? Infinity)
+              || (timeMinutes(a.endTime) ?? Infinity) - (timeMinutes(b.endTime) ?? Infinity)
+              || a.subjectCode.localeCompare(b.subjectCode) || a.yearLevel.localeCompare(b.yearLevel) || a.section.localeCompare(b.section)),
           students: users.filter(user => user.role === 'student' && user.status === 'Active'),
         });
       } catch (err) {
@@ -90,6 +94,34 @@ export default function FacultySchedule() {
             <div><p className="text-sm text-gray-500">{label}</p><p className="mt-1 text-2xl font-semibold text-gray-900">{value}</p></div>
           </div>)}
         </div>
+
+        <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm" aria-labelledby="schedule-overview-title">
+          <div className="border-b border-gray-100 px-5 py-4 sm:px-6">
+            <h2 id="schedule-overview-title" className="font-semibold text-gray-900">My class schedule</h2>
+            <p className="mt-1 text-sm text-gray-500">Your assigned classes, ordered by start time.</p>
+          </div>
+          {data.schedules.length ? <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <caption className="sr-only">Your assigned class schedules, from earliest to latest start time</caption>
+              <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
+                <tr>
+                  <th scope="col" className="px-6 py-3.5">Subject</th>
+                  <th scope="col" className="px-6 py-3.5">Day</th>
+                  <th scope="col" className="px-6 py-3.5">Time</th>
+                  <th scope="col" className="whitespace-nowrap px-6 py-3.5">Year &amp; Section</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {data.schedules.map(row => <tr key={row.id} className="transition hover:bg-gray-50/70">
+                  <th scope="row" className="px-6 py-4 font-medium text-gray-900">{row.subjectName}</th>
+                  <td className="whitespace-nowrap px-6 py-4 text-gray-600">{Object.keys(scheduleDays).filter(day => (row.days || []).includes(day)).map(day => scheduleDays[day]).join('-') || 'No days assigned'}</td>
+                  <td className="whitespace-nowrap px-6 py-4 text-gray-600">{attendanceTime(row.startTime)} - {attendanceTime(row.endTime)}</td>
+                  <td className="whitespace-nowrap px-6 py-4 text-gray-600">{row.yearLevel} - Section {row.section}</td>
+                </tr>)}
+              </tbody>
+            </table>
+          </div> : <p className="px-6 py-10 text-center text-sm text-gray-500">No schedules assigned yet.</p>}
+        </section>
 
         <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm" aria-labelledby="schedule-selection-title">
           <div className="border-b border-gray-100 px-5 py-4 sm:px-6">
