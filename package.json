@@ -10,7 +10,8 @@
     "test:api": "node scripts/testApi.mjs",
     "test:attendance": "node --test scripts/testAttendance.mjs scripts/testManualAttendance.mjs",
     "test:reports": "node --test scripts/testAttendanceReport.mjs",
-    "test:requests": "node --test scripts/testRequestPolicy.mjs"
+    "test:requests": "node --test scripts/testRequestPolicy.mjs",
+    "test:reminders": "node --test scripts/testClassReminders.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

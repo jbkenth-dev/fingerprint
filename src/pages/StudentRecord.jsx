@@ -3,6 +3,7 @@ import { BookOpenText, CalendarDays, RefreshCw } from 'lucide-react';
 import { useAuth } from '../state/AuthContext';
 import { useManilaClock } from '../hooks/useManilaClock';
 import { apiFetch } from '../api';
+import { useStudentSchedules } from '../state/StudentScheduleContext';
 import { attendanceTime, datesInRange, fetchAttendanceRange, manilaNow, studentSection, timeMinutes } from '../utils/attendance';
 import { buildAttendanceReport } from '../utils/attendanceReport';
 
@@ -11,9 +12,7 @@ export default function StudentRecord() {
   useManilaClock();
   const { date: today, minutes } = manilaNow();
   const [semester, setSemester] = React.useState('');
-  const [schedules, setSchedules] = React.useState([]);
-  const [scheduleLoading, setScheduleLoading] = React.useState(true);
-  const [scheduleError, setScheduleError] = React.useState('');
+  const { schedules, loading: scheduleLoading, error: scheduleError, refresh: refreshSchedules } = useStudentSchedules();
   const [start, setStart] = React.useState('');
   const [end, setEnd] = React.useState('');
   const [period, setPeriod] = React.useState(null);
@@ -26,17 +25,6 @@ export default function StudentRecord() {
   const periodKey = period ? `${semester}:${period.start}:${period.end}:${refresh}` : '';
   const validRange = Boolean(start && end && start <= end && end <= today && datesInRange(start, end).length);
   const editingRange = period && (start !== period.start || end !== period.end);
-
-  React.useEffect(() => {
-    const controller = new AbortController();
-    setScheduleLoading(true);
-    setScheduleError('');
-    apiFetch('/class-schedules.php', { signal: controller.signal, ...(refresh ? { cacheTtl: 0 } : {}) })
-      .then(data => { if (!controller.signal.aborted) setSchedules(Array.isArray(data) ? data : []); })
-      .catch(err => { if (!controller.signal.aborted) setScheduleError(err.message || 'Unable to load schedules.'); })
-      .finally(() => { if (!controller.signal.aborted) setScheduleLoading(false); });
-    return () => controller.abort();
-  }, [refresh]);
 
   React.useEffect(() => {
     if (!period || !semester) return;
@@ -88,7 +76,7 @@ export default function StudentRecord() {
       : <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 p-5">
           <div><h2 className="font-semibold text-gray-900">{semester === '1st Sem' ? '1st' : '2nd'} Semester subjects</h2><p className="mt-1 text-xs text-gray-500">{ready ? `Attendance totals: ${period.start} to ${period.end}` : 'Select an attendance period to calculate totals.'}</p></div>
-          <button type="button" onClick={() => setRefresh(value => value + 1)} disabled={loading || scheduleLoading} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 disabled:opacity-50"><RefreshCw size={14} className={loading || scheduleLoading ? 'animate-spin' : ''} />Refresh</button>
+          <button type="button" onClick={() => { refreshSchedules(); setRefresh(value => value + 1); }} disabled={loading || scheduleLoading} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 disabled:opacity-50"><RefreshCw size={14} className={loading || scheduleLoading ? 'animate-spin' : ''} />Refresh</button>
         </div>
         {(scheduleError || error) && <div role="alert" className="m-5 rounded-lg bg-red-50 p-4 text-sm text-red-700">{scheduleError || error}</div>}
         {scheduleLoading ? <p role="status" className="p-10 text-center text-sm text-gray-500">Loading subjects...</p>

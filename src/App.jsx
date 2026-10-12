@@ -15,6 +15,8 @@ import AdminReports from "./pages/AdminReports";
 import FacultySchedule from "./pages/FacultySchedule";
 import FacultyManual from "./pages/FacultyManual";
 import StudentRecord from "./pages/StudentRecord";
+import { StudentScheduleProvider, useStudentSchedules } from "./state/StudentScheduleContext";
+import StudentNotifications from "./components/StudentNotifications";
 
 const navIcons = {
   "Dashboard & Monitoring": LayoutDashboard,
@@ -504,6 +506,15 @@ function AdminCreateAccountPage() {
 }
 
 function ProtectedLayout({ allowedRole }) {
+  const { session } = useAuth();
+  if (!session) return <Navigate to="/signin" replace />;
+  if (session.role !== allowedRole) return <Navigate to={`/${session.role}`} replace />;
+  return allowedRole === "student"
+    ? <StudentScheduleProvider key={session.userId}><ProtectedLayoutContent allowedRole={allowedRole} /></StudentScheduleProvider>
+    : <ProtectedLayoutContent allowedRole={allowedRole} />;
+}
+
+function ProtectedLayoutContent({ allowedRole }) {
   const { session, currentUser, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -532,6 +543,7 @@ function ProtectedLayout({ allowedRole }) {
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-gray-800">Francis Key</span>
           <BrandMark compact />
+          {allowedRole === "student" && <StudentNotifications />}
         </div>
       </div>
 
@@ -713,6 +725,10 @@ function ProtectedLayout({ allowedRole }) {
         </aside>
 
         <main className="min-w-0 space-y-4 overflow-x-hidden px-3 py-4 sm:px-5 sm:py-5 lg:min-h-0 lg:overflow-y-auto">
+          {allowedRole === "student" && <header className="hidden items-center justify-between rounded-xl border border-gray-200 bg-white px-5 py-3 lg:flex">
+            <div><p className="text-sm font-semibold text-gray-800">Student portal</p><p className="mt-0.5 text-xs text-gray-500">Stay on track with your classes</p></div>
+            <StudentNotifications />
+          </header>}
           <Outlet />
         </main>
       </div>
@@ -2173,9 +2189,7 @@ function RolePanel({ pageKey, role }) {
 function StudentDashboardPage() {
   const { currentUser } = useAuth();
   const clock = useManilaClock();
-  const [scheduleRows, setScheduleRows] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState("");
+  const { schedules: scheduleRows, loading, error, refresh: loadSchedule } = useStudentSchedules();
   const [attendanceRecords, setAttendanceRecords] = React.useState([]);
   const [attendanceLoading, setAttendanceLoading] = React.useState(true);
   const [attendanceError, setAttendanceError] = React.useState("");
@@ -2215,23 +2229,6 @@ function StudentDashboardPage() {
   }
 
   const parsedSection = React.useMemo(() => parseStudentDept(currentUser?.department), [currentUser?.department]);
-
-  const loadSchedule = React.useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const data = await apiFetch("/class-schedules.php");
-      setScheduleRows(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setError(err.message || "Failed to load schedule.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    loadSchedule();
-  }, [loadSchedule]);
 
   // Only show schedules that belong to the student's detected section + year level.
   const mySchedule = React.useMemo(() => {
@@ -2448,24 +2445,10 @@ function StudentDashboardPage() {
 
 function StudentSchedulePage() {
   const { currentUser } = useAuth();
-  const [schedules, setSchedules] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState("");
-  const [refreshVersion, setRefreshVersion] = React.useState(0);
+  const { schedules, loading, error, refresh } = useStudentSchedules();
   const section = React.useMemo(() => studentSection(currentUser || {}), [currentUser]);
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const [selectedDay, setSelectedDay] = React.useState("All days");
-
-  React.useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    setError("");
-    apiFetch("/class-schedules.php", { signal: controller.signal, ...(refreshVersion ? { cacheTtl: 0 } : {}) })
-      .then(data => { if (!controller.signal.aborted) setSchedules(Array.isArray(data) ? data : []); })
-      .catch(err => { if (!controller.signal.aborted) setError(err.message || "Unable to load your schedule."); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [refreshVersion]);
 
   const dayLabels = { Monday: "M", Tuesday: "T", Wednesday: "W", Thursday: "TH", Friday: "F", Saturday: "S", Sunday: "SU" };
   const rows = schedules.filter(row => section && row.yearLevel === section.yearLevel && row.section === section.section &&
@@ -2482,16 +2465,16 @@ function StudentSchedulePage() {
     </section>
     <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 p-5">
-        <div><h2 className="font-semibold text-gray-900">Class schedule</h2><p className="mt-1 text-xs text-gray-500">All times are in Philippine Standard Time.</p></div>
+        <div><h2 className="font-semibold text-gray-900">Class schedule</h2></div>
         <div className="flex flex-wrap items-center gap-2">
           <label htmlFor="student-schedule-day" className="text-xs font-medium text-gray-600">Day</label>
           <select id="student-schedule-day" value={selectedDay} onChange={event => setSelectedDay(event.target.value)} className="form-input rounded-lg px-3 py-2 text-sm">
             {["All days", ...days].map(day => <option key={day}>{day}</option>)}
           </select>
-          <button type="button" onClick={() => setRefreshVersion(value => value + 1)} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 disabled:opacity-50"><RefreshCw size={14} className={loading ? "animate-spin" : ""} />Refresh</button>
+          <button type="button" onClick={refresh} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 disabled:opacity-50"><RefreshCw size={14} className={loading ? "animate-spin" : ""} />Refresh</button>
         </div>
       </div>
-      {error ? <div role="alert" className="m-5 rounded-xl bg-red-50 p-5 text-sm text-red-700">{error}<button type="button" onClick={() => setRefreshVersion(value => value + 1)} className="ml-3 font-semibold underline">Retry</button></div>
+      {error ? <div role="alert" className="m-5 rounded-xl bg-red-50 p-5 text-sm text-red-700">{error}<button type="button" onClick={refresh} className="ml-3 font-semibold underline">Retry</button></div>
         : loading ? <div role="status" className="p-12 text-center text-sm text-gray-500">Loading your schedule...</div>
         : !section || !rows.length ? <div className="p-12 text-center"><CalendarDays size={28} className="mx-auto text-green-600" /><p className="mt-4 text-sm text-gray-500">{!section ? "Ask an administrator to add your year and section to your profile." : "No classes scheduled for this selection."}</p></div>
         : <div className="overflow-x-auto">
@@ -2517,11 +2500,9 @@ function StudentAttendancePage() {
   useManilaClock();
   const { date: todayDate, minutes: currentMinutes } = manilaNow();
   const [selectedDate, setSelectedDate] = React.useState(() => manilaNow().date);
-  const [schedules, setSchedules] = React.useState([]);
+  const { schedules, loading: scheduleLoading, error: scheduleError, refresh: loadSchedules } = useStudentSchedules();
   const [attendance, setAttendance] = React.useState([]);
   const [loadedDate, setLoadedDate] = React.useState("");
-  const [scheduleLoading, setScheduleLoading] = React.useState(true);
-  const [scheduleError, setScheduleError] = React.useState("");
   const [attendanceLoading, setAttendanceLoading] = React.useState(true);
   const [attendanceError, setAttendanceError] = React.useState("");
   const [refreshVersion, setRefreshVersion] = React.useState(0);
@@ -2531,21 +2512,6 @@ function StudentAttendancePage() {
   const dateLabel = new Intl.DateTimeFormat("en-PH", {
     month: "long", day: "numeric", year: "numeric", timeZone: "Asia/Manila",
   }).format(new Date(`${selectedDate}T12:00:00+08:00`));
-
-  const loadSchedules = React.useCallback(async () => {
-    setScheduleLoading(true);
-    setScheduleError("");
-    try {
-      const data = await apiFetch("/class-schedules.php");
-      setSchedules(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setScheduleError(err.message || "Failed to load schedules.");
-    } finally {
-      setScheduleLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => { loadSchedules(); }, [loadSchedules]);
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -2611,7 +2577,6 @@ function StudentAttendancePage() {
       <section className="flex flex-wrap items-end justify-between gap-4 rounded-xl border border-gray-200 bg-white p-4 sm:px-5">
         <div><p className="text-xs font-medium text-gray-500">Selected day</p>
           <h2 className="mt-1 text-base font-semibold text-gray-900">{selectedDayName}, {dateLabel}</h2>
-          <p className="mt-1 text-xs text-gray-500">All times are in Philippine Standard Time.</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <div><label htmlFor="student-attendance-date" className="mb-1.5 block text-xs font-medium text-gray-600">Attendance date</label>

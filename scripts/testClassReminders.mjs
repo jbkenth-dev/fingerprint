@@ -1,0 +1,39 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { classReminders } from '../src/utils/classReminders.js';
+
+const student = { id: 1, department: 'BSIT 1-A' };
+const schedule = { id: 10, yearLevel: '1st Year', section: 'A', days: ['Monday'], subjectName: 'English', startTime: '08:00:00', endTime: '09:00:00' };
+const monday = time => new Date(`2026-10-12T${time}+08:00`);
+
+test('reminds at 15 minutes before class through its starting minute, then expires locally', () => {
+  for (const [time, count, remaining] of [['07:44:59', 0], ['07:45:00', 1, 15], ['07:59:00', 1, 1], ['08:00:59', 1, 0], ['08:01:00', 0]]) {
+    const reminders = classReminders([schedule], student, monday(time));
+    assert.equal(reminders.length, count, time);
+    if (count) assert.equal(reminders[0].minutesUntil, remaining, time);
+  }
+});
+
+test('only reminds for the student section and the Manila weekday', () => {
+  const rows = [schedule, { ...schedule, id: 11, section: 'B' }, { ...schedule, id: 12, yearLevel: '2nd Year' },
+    { ...schedule, id: 13, days: ['Tuesday'] }, { ...schedule, id: 14, startTime: 'invalid' }];
+  assert.deepEqual(classReminders(rows, student, monday('07:50:00')).map(row => row.id), [10]);
+  assert.deepEqual(classReminders(rows, {}, monday('07:50:00')), []);
+});
+
+test('sorts by start time and gives each daily reminder a stable independent key', () => {
+  const rows = [{ ...schedule, id: 11, startTime: '08:05:00' }, schedule];
+  const first = classReminders(rows, student, monday('07:50:00'));
+  const next = classReminders(rows, student, monday('07:51:00'));
+  assert.deepEqual(first.map(row => row.id), [10, 11]);
+  assert.deepEqual(first.map(row => row.key), next.map(row => row.key));
+  assert.equal(new Set(first.map(row => row.key)).size, 2);
+});
+
+test('uses Manila Monday across UTC Sunday and expires previous-day reminders', () => {
+  const midnight = { ...schedule, startTime: '00:10:00', endTime: '01:10:00' };
+  const result = classReminders([midnight], student, new Date('2026-10-11T16:00:00Z'));
+  assert.equal(result[0].minutesUntil, 10);
+  assert.equal(result[0].key, '2026-10-12:10:00:10:00');
+  assert.deepEqual(classReminders([midnight], student, new Date('2026-10-12T16:00:00Z')), []);
+});
