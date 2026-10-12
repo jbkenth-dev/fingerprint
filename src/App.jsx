@@ -9,7 +9,7 @@ import { useMockLoading } from "./hooks/useMockLoading";
 import { useManilaClock } from "./hooks/useManilaClock";
 import { useAuth } from "./state/AuthContext";
 import { apiFetch } from "./api";
-import { manilaNow, datesInRange, fetchAttendanceRange, classifyAttendance, liveAttendance, searchAttendance } from "./utils/attendance";
+import { manilaNow, datesInRange, fetchAttendanceRange, classifyAttendance, liveAttendance, searchAttendance, attendanceTime, attendanceWindow } from "./utils/attendance";
 import { startPolling } from "./utils/polling";
 
 const navIcons = {
@@ -1596,6 +1596,20 @@ function RolePanel({ pageKey, role }) {
   const [startDate, setStartDate] = React.useState(() => manilaNow().date);
   const [endDate, setEndDate] = React.useState(() => manilaNow().date);
   const [viewMode, setViewMode] = React.useState('live');
+  const [attendanceYear, setAttendanceYear] = React.useState('');
+  const [attendanceSection, setAttendanceSection] = React.useState('');
+  const [attendanceScheduleId, setAttendanceScheduleId] = React.useState('');
+  const yearOptions = [...new Set(scheduleRows.map(row => row.yearLevel))].sort();
+  const sectionOptions = [...new Set(scheduleRows.filter(row => row.yearLevel === attendanceYear).map(row => row.section))].sort();
+  const scheduleOptions = scheduleRows.filter(row => row.yearLevel === attendanceYear && row.section === attendanceSection);
+  const selectedAttendanceSchedule = scheduleOptions.find(row => String(row.id) === attendanceScheduleId);
+  const selectedSchedules = React.useMemo(() => selectedAttendanceSchedule ? [selectedAttendanceSchedule] : [], [selectedAttendanceSchedule]);
+  const selectedAttendanceWindow = selectedAttendanceSchedule && attendanceWindow(selectedAttendanceSchedule);
+  const assignedFaculty = selectedAttendanceSchedule && users.find(user => String(user.id) === String(selectedAttendanceSchedule.facultyId));
+  const assignedFacultyName = assignedFaculty
+    ? [assignedFaculty.firstName, assignedFaculty.middleName, assignedFaculty.lastName].filter(Boolean).join(' ')
+    : selectedAttendanceSchedule?.facultyName || 'No faculty assigned';
+
   const [loadedPeriod, setLoadedPeriod] = React.useState('');
   const [lastUpdated, setLastUpdated] = React.useState(null);
   useManilaClock(); // Keep today's date and class windows current, including Manila midnight.
@@ -1658,7 +1672,7 @@ function RolePanel({ pageKey, role }) {
   const isAdminAttendancePage = !isDashboard && pageKey === "attendance" && role === "admin";
 
   React.useEffect(() => {
-    if (!isAdminAttendancePage || (viewMode !== 'live' && rangeError)) return;
+    if (!isAdminAttendancePage || !selectedAttendanceSchedule || (viewMode !== 'live' && rangeError)) return;
     const controller = new AbortController();
     let active = true;
     const first = viewMode === 'live' ? manilaToday : startDate;
@@ -1686,22 +1700,22 @@ function RolePanel({ pageKey, role }) {
       stopPolling();
       controller.abort();
     };
-  }, [isAdminAttendancePage, viewMode === 'live', startDate, endDate, manilaToday, periodKey, rangeError, refreshVersion]);
+  }, [isAdminAttendancePage, selectedAttendanceSchedule, viewMode === 'live', startDate, endDate, manilaToday, periodKey, rangeError, refreshVersion]);
 
   React.useEffect(() => {
     setAttendancePage(1);
     setClassifiedPage(1);
-  }, [viewMode, startDate, endDate, searchTerm]);
+  }, [viewMode, startDate, endDate, searchTerm, attendanceYear, attendanceSection, attendanceScheduleId]);
 
   const classified = React.useMemo(() => {
     if (!isAdminAttendancePage || viewMode === 'live' || loadedPeriod !== periodKey || rangeError) {
       return { present: [], late: [], absent: [] };
     }
-    return classifyAttendance(attendanceLogs, users, scheduleRows, startDate, endDate);
-  }, [isAdminAttendancePage, viewMode === 'live', loadedPeriod, periodKey, rangeError, attendanceLogs, users, scheduleRows, startDate, endDate, manilaMinutes]);
+    return classifyAttendance(attendanceLogs, users, selectedSchedules, startDate, endDate);
+  }, [isAdminAttendancePage, viewMode === 'live', loadedPeriod, periodKey, rangeError, attendanceLogs, users, selectedSchedules, startDate, endDate, manilaMinutes]);
 
-  const mergedAttendance = React.useMemo(() => liveAttendance(attendanceLogs, users, scheduleRows, manilaToday),
-    [attendanceLogs, users, scheduleRows, manilaToday]);
+  const mergedAttendance = React.useMemo(() => liveAttendance(attendanceLogs, users, isAdminAttendancePage ? selectedSchedules : scheduleRows, manilaToday).filter(entry => !isAdminAttendancePage || (selectedAttendanceSchedule && String(entry.scheduleId) === String(selectedAttendanceSchedule.id))),
+    [attendanceLogs, users, scheduleRows, selectedSchedules, selectedAttendanceSchedule, isAdminAttendancePage, manilaToday]);
   const totalAttendancePages = Math.max(1, Math.ceil(mergedAttendance.length / pageSize));
 
   const dashboardMetrics = React.useMemo(() => {
@@ -1744,14 +1758,15 @@ function RolePanel({ pageKey, role }) {
   const periodLabel = viewMode === 'live' ? `Today · ${manilaToday}` : startDate === endDate ? startDate : `${startDate} – ${endDate}`;
 
   function handleExportAttendance() {
-    if (tableLoading || tableError || !tableData.hasData) return;
+    if (!selectedAttendanceSchedule || tableLoading || tableError || !tableData.hasData) return;
     const rows = [
       ['Francis Key Attendance Export'],
       ['View', viewMode], ['Start date', viewMode === 'live' ? manilaToday : startDate],
-      ['End date', viewMode === 'live' ? manilaToday : endDate], ['Timezone', 'Asia/Manila'], ['Search', searchTerm], [],
-      ['No.', 'Name', 'ID Number', 'Class', 'Schedule', 'Date', 'Time IN', 'Time OUT', 'Status', 'Reason'],
+      ['End date', viewMode === 'live' ? manilaToday : endDate], ['Year level', attendanceYear], ['Section', attendanceSection],
+      ['Schedule', selectedAttendanceSchedule.subjectCode], ['Faculty', assignedFacultyName], ['Search', searchTerm], [],
+      ['No.', 'Name', 'ID Number', 'Class', 'Schedule', 'Date', ...(viewMode === 'absent' ? [] : ['Time IN', 'Time OUT']), 'Status', 'Reason'],
       ...tableData.records.map((entry, index) => [index + 1, entry.name, entry.idNumber, entry.classes,
-        entry.timeSchedule, entry.logDate, entry.timeIn, entry.timeOut, entry.status, entry.reason]),
+        entry.timeSchedule, entry.logDate, ...(viewMode === 'absent' ? [] : [entry.timeIn, entry.timeOut]), entry.status, entry.reason]),
     ];
     const csv = rows.map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8;' }));
@@ -1906,6 +1921,49 @@ function RolePanel({ pageKey, role }) {
         </section>
       ) : (
         <section className="card-elevated overflow-hidden">
+          <div className="border-b border-gray-100 bg-gray-50/50 p-5 sm:p-6">
+            <h2 className="text-base font-semibold text-gray-800">Select a class</h2>
+            <p className="mt-1 text-sm text-gray-500">Choose a year level, section, and schedule to view student attendance.</p>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <label className="block text-sm font-medium text-gray-700">1. Year Level
+                <select value={attendanceYear} disabled={scheduleLoading} onChange={event => {
+                  setAttendanceYear(event.target.value); setAttendanceSection(''); setAttendanceScheduleId('');
+                }} className="form-input mt-2 w-full rounded-lg px-3 py-2.5 text-sm disabled:opacity-50">
+                  <option value="">Select year level</option>
+                  {yearOptions.map(year => <option key={year} value={year}>{year}</option>)}
+                </select>
+              </label>
+              <label className="block text-sm font-medium text-gray-700">2. Section
+                <select value={attendanceSection} disabled={!attendanceYear || scheduleLoading} onChange={event => {
+                  setAttendanceSection(event.target.value); setAttendanceScheduleId('');
+                }} className="form-input mt-2 w-full rounded-lg px-3 py-2.5 text-sm disabled:opacity-50">
+                  <option value="">Select section</option>
+                  {sectionOptions.map(section => <option key={section} value={section}>Section {section}</option>)}
+                </select>
+              </label>
+              <label className="block text-sm font-medium text-gray-700">3. Schedule
+                <select value={selectedAttendanceSchedule ? attendanceScheduleId : ''} disabled={!attendanceSection || scheduleLoading} onChange={event => setAttendanceScheduleId(event.target.value)}
+                  className="form-input mt-2 w-full rounded-lg px-3 py-2.5 text-sm disabled:opacity-50">
+                  <option value="">Select schedule</option>
+                  {scheduleOptions.map(schedule => <option key={schedule.id} value={schedule.id}>
+                    {schedule.subjectCode} - {schedule.subjectName} | {schedule.days.join(', ')} | {attendanceTime(schedule.startTime)} - {attendanceTime(schedule.endTime)} | {schedule.semester}
+                  </option>)}
+                </select>
+              </label>
+              <div className="text-sm font-medium text-gray-700">Assigned faculty
+                <div className="mt-2 flex min-h-11 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm">
+                  <UserRound size={16} className="shrink-0 text-gray-400" />
+                  <span>{selectedAttendanceSchedule ? assignedFacultyName : 'Select a schedule first'}</span>
+                </div>
+              </div>
+            </div>
+            {selectedAttendanceWindow && <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 rounded-lg border border-green-100 bg-green-50 px-4 py-3 text-xs text-green-800">
+              <span><strong>Present:</strong> {selectedAttendanceWindow.presentLabel}</span>
+              <span><strong>Late:</strong> {selectedAttendanceWindow.lateLabel}</span>
+              <span><strong>Absent:</strong> No check-in by the late cutoff.</span>
+            </div>}
+          </div>
+          {selectedAttendanceSchedule && <>
           <div className="border-b border-gray-100 p-5 sm:p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap gap-1 rounded-xl bg-gray-100 p-1" role="tablist" aria-label="Attendance view">
@@ -1958,7 +2016,7 @@ function RolePanel({ pageKey, role }) {
               )}
               {viewMode === 'live' && (
                 <div className="flex items-center gap-2 rounded-lg border border-green-100 bg-green-50 px-3 py-2.5 text-sm font-medium text-green-700">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />Today only · Manila
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />Today only
                 </div>
               )}
             </div>
@@ -1969,7 +2027,7 @@ function RolePanel({ pageKey, role }) {
             <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6">
               <div>
                 <h2 className="text-base font-semibold text-gray-800">{viewMode === 'live' ? 'Live attendance' : `${viewMode.charAt(0).toUpperCase() + viewMode.slice(1)} attendance`}</h2>
-                <p className="mt-1 text-xs text-gray-500">{periodLabel}{viewMode !== 'live' && ' · Inclusive date range · Manila time'}</p>
+                <p className="mt-1 text-xs text-gray-500">{periodLabel}{viewMode !== 'live' && ' · Inclusive date range'}</p>
               </div>
               <div className="flex items-center gap-3">
                 <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">{tableLoading || tableError ? '—' : tableData.records.length} records</span>
@@ -1996,7 +2054,7 @@ function RolePanel({ pageKey, role }) {
                   <table className="min-w-full text-left text-sm">
                     <thead className="bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
                       <tr>
-                        {['#', 'Student', 'Class / Schedule', 'Date', 'Time in', 'Time out', 'Status', 'Details'].map(label => (
+                        {['#', 'Student', 'Class / Schedule', 'Date', ...(viewMode === 'absent' ? [] : ['Time in', 'Time out']), 'Status', 'Details'].map(label => (
                           <th key={label} scope="col" className="whitespace-nowrap px-5 py-3.5 font-semibold">{label}</th>
                         ))}
                       </tr>
@@ -2008,8 +2066,10 @@ function RolePanel({ pageKey, role }) {
                           <td className="px-5 py-4"><p className="whitespace-nowrap font-medium text-gray-800">{entry.name}</p><p className="mt-1 text-xs text-gray-500">{entry.idNumber || '—'}</p></td>
                           <td className="px-5 py-4"><p className="min-w-40 font-medium text-gray-700">{entry.classes}</p><p className="mt-1 whitespace-nowrap text-xs text-gray-500">{entry.timeSchedule}</p></td>
                           <td className="whitespace-nowrap px-5 py-4 text-gray-600">{entry.logDate}</td>
+                          {viewMode !== 'absent' && <>
                           <td className="whitespace-nowrap px-5 py-4 font-medium text-gray-700">{entry.timeIn || '—'}</td>
                           <td className="whitespace-nowrap px-5 py-4 text-gray-600">{entry.timeOut || '—'}</td>
+                          </>}
                           <td className="px-5 py-4"><span className={clsx('inline-flex rounded-full px-2.5 py-1 text-xs font-medium',
                             entry.status === 'Present' ? 'bg-green-50 text-green-700' : entry.status === 'Late' ? 'bg-amber-50 text-amber-700' : entry.status === 'Absent' ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-600')}>{entry.status}</span></td>
                           <td className="px-5 py-4 text-xs text-gray-500">{entry.reason}</td>
@@ -2035,9 +2095,16 @@ function RolePanel({ pageKey, role }) {
             <div className="border-t border-gray-100 bg-gray-50/50 px-5 py-3 text-xs text-gray-500 sm:px-6">
               {viewMode === 'live'
                 ? `Refreshes every 60 seconds while this tab is visible and online${lastUpdated ? ` · Updated ${lastUpdated.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila' })}` : ''}`
-                : 'Based on current class schedules and student sections. Today’s absences appear after each class check-in window closes.'}
+                : 'Based on current class schedules and student sections. Today’s absences appear after the check-in cutoff for each class schedule.'}
             </div>
           </div>
+          </>}
+          {!selectedAttendanceSchedule && <div className="px-6 py-14 text-center">
+            {scheduleError ? <p role="alert" className="text-sm text-red-600">{scheduleError}</p>
+              : <><CalendarDays size={30} className="mx-auto mb-3 text-gray-300" />
+                <p className="text-sm font-medium text-gray-700">{scheduleLoading ? 'Loading class schedules...' : yearOptions.length ? 'Select a schedule to continue' : 'No class schedules available'}</p>
+                <p className="mt-1 text-sm text-gray-500">{!scheduleLoading && !yearOptions.length ? 'Create a class schedule before viewing attendance.' : 'Attendance views will appear after you select your class.'}</p></>}
+          </div>}
         </section>
       )}
     </div>
@@ -5809,8 +5876,7 @@ function HeroClockCard({ time, date, timezone }) {
     <div className="card-elevated p-5 sm:p-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-gray-500">Live Manila Time</p>
-          <p className="mt-2 text-sm text-gray-500">{timezone}</p>
+          <p className="text-xs font-medium uppercase tracking-wider text-gray-500">Live Time</p>
         </div>
         <div className="online-dot">
           Online

@@ -67,6 +67,21 @@ export function attendanceTime(value) {
   return `${hour % 12 || 12}:${String(minutes % 60).padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`;
 }
 
+export function attendanceWindow(schedule) {
+  const start = timeMinutes(schedule.startTime);
+  const end = timeMinutes(schedule.endTime);
+  if (start === null || end === null || end <= start) return null;
+  const label = minutes => {
+    const normalized = (minutes + 1440) % 1440;
+    return attendanceTime(`${Math.floor(normalized / 60)}:${String(normalized % 60).padStart(2, '0')}`);
+  };
+  return {
+    opens: start - 15, presentUntil: start + 15, closes: end - 15,
+    presentLabel: `${label(start - 15)} – ${label(start + 15)}`,
+    lateLabel: `${label(start + 16)} – ${label(end - 15)}`,
+  };
+}
+
 function studentSection(student) {
   const match = student.department?.match(/(\d)[^-]*-\s*([A-E])$|(\d)\s*([A-E])$/i);
   if (!match) return null;
@@ -118,26 +133,25 @@ export function classifyAttendance(logs, users, schedules, start, end, now = new
   for (const date of datesInRange(start, end).reverse()) {
     if (date > clock.date) continue;
     for (const schedule of schedules) {
-      const startMin = timeMinutes(schedule.startTime);
-      const endMin = timeMinutes(schedule.endTime);
-      if (startMin === null || endMin === null) continue;
+      const window = attendanceWindow(schedule);
+      if (!window) continue;
       for (const student of users.filter(u => u.role === 'student' && u.status === 'Active')) {
         if (!scheduledFor(schedule, date, student)) continue;
         const candidates = (byStudentDate.get(`${student.id}-${date}`) || [])
-          .filter(s => s.rawInTime !== null && s.rawInTime >= startMin - 15 && s.rawInTime <= endMin + 15);
+          .filter(s => s.rawInTime !== null && s.rawInTime >= window.opens && s.rawInTime <= window.closes);
         const session = candidates[0];
         // Do not mark an ongoing or upcoming class absent before its check-in window closes.
-        if (!session && date === clock.date && clock.minutes <= endMin + 15) continue;
-        const status = !session ? 'Absent' : session.rawInTime <= startMin + 15 ? 'Present' : 'Late';
+        if (!session && date === clock.date && clock.minutes <= window.closes) continue;
+        const status = !session ? 'Absent' : session.rawInTime <= window.presentUntil ? 'Present' : 'Late';
         results[status.toLowerCase()].push({
           key: `${date}-${schedule.id ?? `${schedule.subjectCode}-${schedule.startTime}`}-${student.id}`,
-          userId: student.id, logDate: date,
+          userId: student.id, scheduleId: schedule.id, logDate: date,
           name: [student.firstName, student.middleName, student.lastName].filter(Boolean).join(' '),
           idNumber: student.idNumber || student.username || 'N/A',
           classes: `${schedule.subjectCode} — ${schedule.subjectName}`,
           timeSchedule: `${attendanceTime(schedule.startTime)} – ${attendanceTime(schedule.endTime)}`,
-          timeIn: session?.timeIn || '—', timeOut: session?.timeOut || '—', status,
-          reason: !session ? 'No check-in during class window' : status === 'Present' ? 'On time' : 'Late arrival',
+          timeIn: session?.timeIn || '', timeOut: session?.timeOut || '', status,
+          reason: !session ? 'No check-in during class schedule' : status === 'Present' ? 'On time' : 'Late arrival',
         });
       }
     }
@@ -148,9 +162,12 @@ export function classifyAttendance(logs, users, schedules, start, end, now = new
 export function liveAttendance(logs, users, schedules, date) {
   return attendanceSessions(logs.filter(log => log.logDate === date)).map(session => {
     const student = users.find(u => String(u.id) === String(session.userId));
-    const schedule = student && schedules.find(s => scheduledFor(s, date, student) &&
-      session.rawInTime !== null && session.rawInTime >= timeMinutes(s.startTime) - 15 && session.rawInTime <= timeMinutes(s.endTime) + 15);
-    return { ...session, classes: schedule ? `${schedule.subjectCode} — ${schedule.subjectName}` : '—',
+    const schedule = student && student.role === 'student' && student.status === 'Active' && schedules.find(s => {
+      const window = attendanceWindow(s);
+      return window && scheduledFor(s, date, student) && session.rawInTime !== null &&
+        session.rawInTime >= window.opens && session.rawInTime <= window.closes;
+    });
+    return { ...session, scheduleId: schedule?.id, classes: schedule ? `${schedule.subjectCode} — ${schedule.subjectName}` : '—',
       timeSchedule: schedule ? `${attendanceTime(schedule.startTime)} – ${attendanceTime(schedule.endTime)}` : '—',
       status: schedule ? session.rawInTime <= timeMinutes(schedule.startTime) + 15 ? 'Present' : 'Late' : 'Unscheduled',
       reason: schedule ? 'Scheduled class' : 'No matching class schedule',

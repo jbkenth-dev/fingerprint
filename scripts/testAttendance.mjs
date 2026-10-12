@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { manilaNow, datesInRange, fetchAttendanceRange, classifyAttendance, liveAttendance, searchAttendance } from '../src/utils/attendance.js';
+import { manilaNow, datesInRange, fetchAttendanceRange, classifyAttendance, liveAttendance, searchAttendance, attendanceWindow } from '../src/utils/attendance.js';
 
 const users = [{ id: 1, role: 'student', status: 'Active', firstName: 'Ana', lastName: 'Cruz', idNumber: '001', department: 'BSIT 1-A' }];
 const schedules = [
@@ -39,10 +39,10 @@ test('classifies each date and class separately, with paired times and unique ro
 });
 
 test('does not create absences for future dates, ongoing windows, inactive students, or days without classes', () => {
-  const now = new Date('2026-10-12T01:00:00Z'); // Monday 09:00 Manila.
+  const now = new Date('2026-10-12T00:45:00Z'); // Monday, final minute of the check-in window.
   const result = classifyAttendance([], users, schedules, '2026-10-11', '2026-10-13', now);
   assert.equal(result.absent.length, 0);
-  const later = classifyAttendance([], users, schedules, '2026-10-12', '2026-10-12', new Date('2026-10-12T01:16:00Z'));
+  const later = classifyAttendance([], users, schedules, '2026-10-12', '2026-10-12', new Date('2026-10-12T00:46:00Z'));
   assert.equal(later.absent.length, 1);
   assert.equal(classifyAttendance([], [{ ...users[0], status: 'Inactive' }], schedules, '2026-10-12', '2026-10-12', new Date('2026-10-14T00:00:00Z')).absent.length, 0);
 });
@@ -91,4 +91,50 @@ test('aborted or incomplete API requests cannot produce a partial report', async
   controller.abort();
   await assert.rejects(fetchAttendanceRange(() => assert.fail('Aborted fetch should not run'), '2026-10-12', '2026-10-12', controller.signal), { name: 'AbortError' });
   await assert.rejects(fetchAttendanceRange(async () => ({ records: [], total: 10 }), '2026-10-12', '2026-10-12'), /changed while loading/);
+});
+
+
+test('check-in boundaries match the selected schedule in classified and live attendance', () => {
+  const date = '2026-10-12';
+  const now = new Date('2026-10-12T02:00:00Z');
+  const schedule = [schedules[0]];
+  for (const [time, expected] of [
+    ['07:44:59', 'absent'], ['07:45:00', 'present'],
+    ['08:15:00', 'present'], ['08:15:59', 'present'],
+    ['08:16:00', 'late'], ['08:45:00', 'late'], ['08:45:59', 'late'],
+    ['08:46:00', 'absent'], ['09:00:00', 'absent'],
+  ]) {
+    const logs = [log(1, date, time)];
+    const result = classifyAttendance(logs, users, schedule, date, date, now);
+    assert.equal(result[expected].length, 1, time);
+    assert.equal(Object.values(result).flat().length, 1, time);
+    const live = liveAttendance(logs, users, schedule, date)[0];
+    assert.equal(live.status.toLowerCase(), expected === 'absent' ? 'unscheduled' : expected, time);
+    if (expected === 'absent') {
+      assert.equal(result.absent[0].timeIn, '');
+      assert.equal(result.absent[0].timeOut, '');
+    } else assert.equal(live.scheduleId, schedules[0].id);
+  }
+});
+
+test('early and post-cutoff scans do not override an eligible check-in', () => {
+  const date = '2026-10-12';
+  const logs = [log(1, date, '07:44:00'), log(2, date, '07:44:30', 'OUT'),
+    log(3, date, '08:16:00'), log(4, date, '09:00:00', 'OUT')];
+  const result = classifyAttendance(logs, users, [schedules[0]], date, date, new Date('2026-10-12T02:00:00Z'));
+  assert.equal(result.late.length, 1);
+  assert.equal(result.late[0].timeIn, '8:16 AM');
+  assert.equal(result.late[0].timeOut, '9:00 AM');
+  assert.equal(result.absent.length, 0);
+});
+
+test('reports remain scoped to the selected section and schedule', () => {
+  const date = '2026-10-12';
+  const otherStudent = { ...users[0], id: 2, department: 'BSIT 2-B' };
+  const result = classifyAttendance([], [...users, otherStudent], [schedules[0]], date, date, new Date('2026-10-12T02:00:00Z'));
+  assert.equal(result.absent.length, 1);
+  assert.equal(result.absent[0].userId, 1);
+  assert.equal(result.absent[0].scheduleId, 10);
+  assert.equal(attendanceWindow(schedules[0]).closes, 525);
+  assert.equal(attendanceWindow({startTime: 'invalid', endTime: '09:00'}), null);
 });
