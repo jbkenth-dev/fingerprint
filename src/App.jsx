@@ -2,6 +2,8 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import clsx from "clsx";
+import { jsPDF } from "jspdf";
+import { autoTable } from "jspdf-autotable";
 import { Activity, Archive, Asterisk, BadgeCheck, BookOpenText, Building2, CalendarDays, CalendarRange, ChevronDown, CircleCheck, CircleX, Clock, CreditCard, EllipsisVertical, Eye, EyeOff, FileBarChart, Fingerprint, Info, LayoutDashboard, LockKeyhole, LogIn, LogOut, Menu, Pencil, Plus, RefreshCw, Search, Trash2, TriangleAlert, UserCog, UserRound, Users, X } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { panelContent, roleLabels, roles, routeConfig, sampleAttendance } from "./data/mockData";
@@ -1099,90 +1101,51 @@ function DashboardCore({ scope }) {
 
   /* ── Export ── */
   const handleExport = React.useCallback(() => {
-    const csvRows = [];
     const now = new Date();
     const dateStr = getManilaDate(0);
     const ts = now.toLocaleString("en-PH", { timeZone: "Asia/Manila" });
-    csvRows.push(["Francis Key Dashboard Export"]);
-    csvRows.push(["Generated", ts]);
-    csvRows.push([]);
-    csvRows.push(["=== SYSTEM SUMMARY ==="]);
-    csvRows.push(["Metric", "Value"]);
-    csvRows.push(["Total Users", totalUsers]);
-    csvRows.push(["Faculty", totalFaculty]);
-    csvRows.push(["Students", totalStudents]);
-    csvRows.push([]);
-    csvRows.push(["=== ATTENDANCE STATISTICS ==="]);
-    csvRows.push(["Present", presentUsers.length]);
-    csvRows.push(["Late", lateUsers.length]);
-    csvRows.push(["Absent", absentUsers.length]);
-    csvRows.push(["Total IN", totalIn]);
-    csvRows.push(["Total OUT", totalOut]);
-    csvRows.push([]);
-    csvRows.push(["=== DETAILED STUDENT ATTENDANCE ==="]);
-    csvRows.push(["Subject", "Section", "Student Name", "Time IN", "Time OUT", "Status"]);
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    doc.setProperties({ title: "Francis Key Dashboard Export", subject: `Attendance summary for ${dateStr}` });
+    const margin = 12;
+    const tableOptions = {
+      theme: "grid",
+      margin: { left: margin, right: margin, top: 16, bottom: 14 },
+      styles: { font: "helvetica", fontSize: 8, textColor: 0, fillColor: 255, lineColor: 0, lineWidth: 0.15, cellPadding: 2, overflow: "linebreak", valign: "middle" },
+      headStyles: { fontStyle: "bold", textColor: 0, fillColor: 255, lineColor: 0, lineWidth: 0.25 },
+      alternateRowStyles: { fillColor: 255 },
+      rowPageBreak: "avoid",
+    };
+    const section = (title, head, body) => {
+      const startY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 8 : 40;
+      if (startY > 175) doc.addPage();
+      const y = startY > 175 ? 20 : startY;
+      doc.setTextColor(0);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text(title, margin, y - 2);
+      autoTable(doc, { ...tableOptions, startY: y, head: [head], body: body.length ? body : [[{ content: "No records", colSpan: head.length }]] });
+    };
 
-    // Export detailed student attendance for each subject
-    subjectStats.forEach((subject) => {
-      // Present students
-      subject.presentList.forEach((student) => {
-        csvRows.push([
-          `${subject.subjectCode} - ${subject.subjectName}`,
-          `${subject.yearLevel} (${subject.section})`,
-          student.name,
-          student.timeIn ? formatTime(student.timeIn) : "",
-          student.timeOut ? formatTime(student.timeOut) : "",
-          "Present"
-        ]);
-      });
+    doc.setTextColor(0);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("Francis Key Dashboard Export", margin, 18);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text(`Generated ${ts}`, margin, 25);
+    section("System Summary", ["Metric", "Value"], [["Total Users", totalUsers], ["Faculty", totalFaculty], ["Students", totalStudents]]);
+    section("Attendance Statistics", ["Metric", "Count"], [["Present", presentUsers.length], ["Late", lateUsers.length], ["Absent", absentUsers.length], ["Total IN", totalIn], ["Total OUT", totalOut]]);
 
-      // Late students
-      subject.lateList.forEach((student) => {
-        csvRows.push([
-          `${subject.subjectCode} - ${subject.subjectName}`,
-          `${subject.yearLevel} (${subject.section})`,
-          student.name,
-          student.timeIn ? formatTime(student.timeIn) : "",
-          student.timeOut ? formatTime(student.timeOut) : "",
-          "Late"
-        ]);
-      });
-
-      // Absent students
-      subject.absentList.forEach((student) => {
-        csvRows.push([
-          `${subject.subjectCode} - ${subject.subjectName}`,
-          `${subject.yearLevel} (${subject.section})`,
-          student.name,
-          "", // No time IN for absent
-          "", // No time OUT for absent
-          "Absent"
-        ]);
-      });
-    });
-
-    csvRows.push([]);
-    csvRows.push(["=== PRESENT USERS ==="]);
-    csvRows.push(["Name", "Department", "Time In", "Time Out"]);
-    presentUsers.forEach((u) => csvRows.push([u.name, u.department, formatTime(u.timeIn), formatTime(u.timeOut)]));
-    csvRows.push([]);
-    csvRows.push(["=== LATE USERS ==="]);
-    csvRows.push(["Name", "Department", "Time In", "Time Out"]);
-    lateUsers.forEach((u) => csvRows.push([u.name, u.department, formatTime(u.timeIn), formatTime(u.timeOut)]));
-    csvRows.push([]);
-    csvRows.push(["=== ABSENT USERS ==="]);
-    csvRows.push(["Name", "Department"]);
-    absentUsers.forEach((u) => csvRows.push([u.name, u.department]));
-    const csv = csvRows.map((row) => row.map((c) => { const s = String(c ?? ""); return s.includes(",") || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s; }).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `francis-key-dashboard-${dateStr}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const detailRows = subjectStats.flatMap((subject) => [
+      ...subject.presentList.map((student) => [subject.subjectCode + " - " + subject.subjectName, `${subject.yearLevel} (${subject.section})`, student.name, student.timeIn ? formatTime(student.timeIn) : "", student.timeOut ? formatTime(student.timeOut) : "", "Present"]),
+      ...subject.lateList.map((student) => [subject.subjectCode + " - " + subject.subjectName, `${subject.yearLevel} (${subject.section})`, student.name, student.timeIn ? formatTime(student.timeIn) : "", student.timeOut ? formatTime(student.timeOut) : "", "Late"]),
+      ...subject.absentList.map((student) => [subject.subjectCode + " - " + subject.subjectName, `${subject.yearLevel} (${subject.section})`, student.name, "", "", "Absent"]),
+    ]);
+    section("Detailed Student Attendance", ["Subject", "Section", "Student Name", "Time IN", "Time OUT", "Status"], detailRows);
+    section("Present Users", ["Name", "Department", "Time In", "Time Out"], presentUsers.map((u) => [u.name, u.department, formatTime(u.timeIn), formatTime(u.timeOut)]));
+    section("Late Users", ["Name", "Department", "Time In", "Time Out"], lateUsers.map((u) => [u.name, u.department, formatTime(u.timeIn), formatTime(u.timeOut)]));
+    section("Absent Users", ["Name", "Department"], absentUsers.map((u) => [u.name, u.department]));
+    doc.save(`francis-key-dashboard-${dateStr}.pdf`);
   }, [totalUsers, totalFaculty, totalStudents, presentUsers, lateUsers, absentUsers, totalIn, totalOut, subjectStats]);
 
   const [expandedSubject, setExpandedSubject] = React.useState(null);
@@ -1197,7 +1160,7 @@ function DashboardCore({ scope }) {
         rightContent={
           <button onClick={handleExport} className="btn btn-secondary inline-flex items-center gap-2 text-sm">
             <FileBarChart size={16} />
-            Export CSV
+            Export PDF
           </button>
         }
       />
