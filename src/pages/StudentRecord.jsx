@@ -65,39 +65,39 @@ export default function StudentRecord() {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);
     doc.text('Student Attendance Record', margin, 18);
-    doc.setFontSize(10);
-    doc.text('Student', margin, 28);
+    doc.setFontSize(9);
+    doc.text('Student', margin, 30);
     doc.setFont('helvetica', 'normal');
-    doc.text(String(currentUser?.name || [currentUser?.firstName, currentUser?.middleName, currentUser?.lastName].filter(Boolean).join(' ') || 'Student'), margin + 20, 28);
+    doc.text(String(currentUser?.name || [currentUser?.firstName, currentUser?.middleName, currentUser?.lastName].filter(Boolean).join(' ') || 'Student'), 36, 30, { maxWidth: 92 });
     doc.setFont('helvetica', 'bold');
-    doc.text('ID Number', 112, 28);
+    doc.text('ID Number', 150, 30);
     doc.setFont('helvetica', 'normal');
-    doc.text(String(currentUser?.idNumber || '—'), 134, 28);
+    doc.text(String(currentUser?.idNumber || 'N/A'), 172, 30, { maxWidth: 105 });
     doc.setFont('helvetica', 'bold');
-    doc.text('Class', 190, 28);
+    doc.text('Class', margin, 38);
     doc.setFont('helvetica', 'normal');
-    doc.text(section ? `${section.yearLevel} · Section ${section.section}` : '—', 204, 28);
+    doc.text(section ? `${section.yearLevel} - Section ${section.section}` : 'N/A', 36, 38, { maxWidth: 92 });
     doc.setFont('helvetica', 'bold');
-    doc.text('Semester', margin, 36);
+    doc.text('Semester', 150, 38);
     doc.setFont('helvetica', 'normal');
-    doc.text(semester, margin + 20, 36);
+    doc.text(semester, 172, 38, { maxWidth: 105 });
     doc.setFont('helvetica', 'bold');
-    doc.text('Attendance period', 112, 36);
+    doc.text('Attendance period', margin, 46);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${period.start} to ${period.end}`, 145, 36);
+    doc.text(`${period.start} to ${period.end}`, 48, 46, { maxWidth: 90 });
     doc.setFont('helvetica', 'bold');
-    doc.text('Generated', 220, 36);
+    doc.text('Generated', 150, 46);
     doc.setFont('helvetica', 'normal');
-    doc.text(generated, 241, 36);
+    doc.text(generated, 172, 46, { maxWidth: 105 });
 
     autoTable(doc, {
-      startY: 44,
-      margin: { left: margin, right: margin, top: 14, bottom: 14 },
+      startY: 54,
+      margin: { left: margin, right: margin, top: 14, bottom: 18 },
       head: [['Subject', 'Day', 'Time', 'Faculty', 'Present', 'Late', 'Absent', 'Total Days']],
       body: rows.map(row => [
-        `${row.subjectCode || ''}${row.subjectCode ? ' — ' : ''}${row.subjectName || ''}`,
-        row.days?.join(', ') || '—',
-        `${attendanceTime(row.startTime)} – ${attendanceTime(row.endTime)}`,
+        `${row.subjectCode || ''}${row.subjectCode ? ' - ' : ''}${row.subjectName || ''}`,
+        row.days?.join(', ') || 'N/A',
+        `${attendanceTime(row.startTime)} - ${attendanceTime(row.endTime)}`,
         row.facultyName || 'No instructor assigned',
         row.totals?.present ?? 0,
         row.totals?.late ?? 0,
@@ -105,15 +105,26 @@ export default function StudentRecord() {
         row.totals?.total ?? 0,
       ]),
       theme: 'grid',
-      styles: { font: 'helvetica', fontSize: 9, textColor: 0, fillColor: 255, lineColor: 0, lineWidth: 0.2, cellPadding: 3, overflow: 'linebreak', valign: 'middle' },
-      headStyles: { fontStyle: 'bold', textColor: 0, fillColor: 255, lineColor: 0, lineWidth: 0.3 },
+      tableWidth: 269,
+      styles: { font: 'helvetica', fontSize: 9, textColor: 0, fillColor: 255, lineColor: 0, lineWidth: 0.2, cellPadding: 2.5, overflow: 'linebreak', valign: 'middle', minCellHeight: 10 },
+      headStyles: { fontStyle: 'bold', textColor: 0, fillColor: 255, lineColor: 0, lineWidth: 0.3, halign: 'center', minCellHeight: 12 },
       alternateRowStyles: { fillColor: 255 },
       columnStyles: {
-        0: { cellWidth: 59 }, 1: { cellWidth: 39 }, 2: { cellWidth: 43 }, 3: { cellWidth: 63 },
+        0: { cellWidth: 57 }, 1: { cellWidth: 33 }, 2: { cellWidth: 41 }, 3: { cellWidth: 55 },
         4: { cellWidth: 19, halign: 'center', fontStyle: 'bold' }, 5: { cellWidth: 19, halign: 'center', fontStyle: 'bold' },
-        6: { cellWidth: 19, halign: 'center', fontStyle: 'bold' }, 7: { cellWidth: 22, halign: 'center', fontStyle: 'bold' },
+        6: { cellWidth: 19, halign: 'center', fontStyle: 'bold' }, 7: { cellWidth: 26, halign: 'center', fontStyle: 'bold' },
       },
       rowPageBreak: 'avoid',
+      didDrawPage: ({ pageNumber, pageCount }) => {
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.2);
+        doc.line(margin, 195, 297 - margin, 195);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(0);
+        doc.text('Student Attendance Record', margin, 201);
+        doc.text(`Page ${pageNumber} of ${pageCount}`, 297 - margin, 201, { align: 'right' });
+      },
     });
     doc.save(`student-attendance-record-${period.start}-to-${period.end}.pdf`);
   };
